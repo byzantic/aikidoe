@@ -79,7 +79,7 @@ A **study** is one JSON document holding everything needed to reproduce the plan
 
 ### 4.1 Runs
 
-Each run carries: `run` (planned id), `order` (randomised execution order), `wholePlot` (id, split-plot only), `block`, factor settings in natural units, and `kind` (`factorial` / `axial` / `centre` / `confirm` / `augment`).
+Each run carries: `run` (planned id, positive integer), `order` (randomised execution order), `wholePlot` (id, split-plot only), `block`, `settings` (factor id → value in natural units; level name for categorical factors), and `kind` (`factorial`, `fraction`, `axial`, `centre`, `confirm`, `augment`, `optimal`, `space-filling`, `other`). The design also records `randomisation` (`complete`, `restricted`, `blocked` or `none`) so the analysis can match it. Runs in one whole plot must share their hard-to-change settings.
 
 ### 4.2 Observations
 
@@ -87,7 +87,11 @@ Long format, one row per measured value: `run`, optional `lot`, `wafer`, `site`,
 
 ### 4.3 Coding
 
-Continuous factors are coded to [−1, +1] after the optional transform (`log` → log10). Categorical factors use effect (sum-to-zero) coding by default, so main effects stay orthogonal to the intercept in balanced designs. All design generators work in coded units; reports show both.
+Continuous factors are coded to [−1, +1] after the optional transform (`log` → log10); axial points may lie beyond ±1. Categorical factors use effect (sum-to-zero) coding by default, so main effects stay orthogonal to the intercept in balanced designs: the first level is the row of all −1 and level i ≥ 1 is the unit vector e_(i−1), so a 2-level categorical codes −1 / +1 like a continuous low / high (R's `contr.sum` uses the last level instead). All design generators work in coded units; reports show both.
+
+### 4.4 File format
+
+Study files are JSON; comments (`//`, `/* */`) and trailing commas are accepted so files can be written by hand. Unknown fields are errors (with a "did you mean" hint), and every problem in a file is reported at once. `aikidoe` is the format version; older versions are upgraded on load by a chain of upgrade functions, and files from a newer version are refused. Constraints are linear expressions in factor ids, as strings (natural units) or `{ "expr": …, "units": "coded" }`; a run that violates one gives a warning, not an error.
 
 ## 5. Design generators
 

@@ -1,0 +1,47 @@
+// Example study from spec §4: a furnace anneal with two hard-to-change factors (temperature,
+// ambient) set per furnace run (whole plot) and two easy ones varied per wafer.
+// Comments and trailing commas are allowed in study files.
+{
+  "aikidoe": 1,
+  "name": "Gate oxide anneal",
+  "seed": 12345,
+  "factors": [
+    { "id": "T",    "name": "Anneal temperature", "units": "°C", "type": "continuous",
+      "low": 900, "high": 1000, "htc": true },
+    { "id": "t",    "name": "Anneal time", "units": "min", "type": "continuous",
+      "low": 10, "high": 30, "transform": "log" },
+    { "id": "amb",  "name": "Ambient", "type": "categorical", "levels": ["N2", "Ar"], "htc": true },
+    { "id": "dose", "name": "Implant dose", "units": "cm-2", "type": "continuous",
+      "low": 1e15, "high": 5e15, "transform": "log" },
+  ],
+  "constraints": [ "T + 2*t <= 1050" ],
+  "responses": [
+    { "id": "Rs", "name": "Sheet resistance", "units": "Ω/sq",
+      "goal": "target", "target": 60, "lower": 55, "upper": 65,
+      "levels": ["run", "wafer", "site"] }
+  ],
+  "design": {
+    "kind": "split-plot",
+    "params": { "wholePlots": 2, "runsPerWholePlot": 2 },
+    "randomisation": "restricted",
+    "runs": [
+      { "run": 1, "order": 3, "wholePlot": 2, "kind": "factorial", "settings": { "T": 900,  "t": 10, "amb": "N2", "dose": 1e15 } },
+      { "run": 2, "order": 4, "wholePlot": 2, "kind": "factorial", "settings": { "T": 900,  "t": 30, "amb": "N2", "dose": 5e15 } },
+      { "run": 3, "order": 2, "wholePlot": 1, "kind": "factorial", "settings": { "T": 1000, "t": 10, "amb": "Ar", "dose": 5e15 } },
+      { "run": 4, "order": 1, "wholePlot": 1, "kind": "factorial", "settings": { "T": 1000, "t": 25, "amb": "Ar", "dose": 1e15 } },
+    ]
+  },
+  "observations": [
+    { "run": 3, "wafer": "W07", "site": "C", "slot": 12, "response": "Rs", "value": 58.2 },
+    { "run": 3, "wafer": "W07", "site": "N", "slot": 12, "response": "Rs", "value": 59.1 },
+    { "run": 4, "wafer": "W08", "site": "C", "slot": 13, "response": "Rs", "value": null },
+  ],
+  "sites": {
+    "scheme": "dropin-5",
+    "positions": [
+      { "id": "C", "x": 0, "y": 0 },  { "id": "N", "x": 0, "y": 40 },  { "id": "S", "x": 0, "y": -40 },
+      { "id": "E", "x": 40, "y": 0 }, { "id": "W", "x": -40, "y": 0 }
+    ]
+  },
+  "history": [ { "stage": "screen", "runs": [1, 2, 3, 4], "note": "first furnace pair" } ]
+}
