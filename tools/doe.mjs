@@ -8,8 +8,10 @@
 //        SPEC for a factor: id:low:high[:units][:log]  or  id=level1,level2,…  (categorical)
 //                           append ! to mark it hard to change, e.g. T:900:1000:°C!
 //        SPEC for a response: id[:units]
-//   design STUDY  (--full | --runs N | --generators "E=ABCD,…" | --pb [--runs N])
-//        [--centre n] [--replicates n] [--blocks n] [--seed S] [--force]
+//   design STUDY  (--full | --runs N | --generators "E=ABCD,…" | --pb [--runs N]
+//                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
+//                  | --bbd)
+//        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
 //        [--sheet FILE.csv] [--html FILE.html]
 //   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
 //   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
@@ -22,6 +24,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createStudy, parseStudy, serializeStudy, StudyError } from '../js/study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
+import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import * as T from '../js/design/twolevel.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import { runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
@@ -83,15 +86,22 @@ function cmdDesign({ pos, opt }) {
   const study = load(file);
   if (study.design && !opt.force) fail(`${file} already has a design (use --force to replace it${study.observations.length ? ' — its observations will be removed' : ''})`);
   const k = study.factors.length;
-  const common = { centre: opt.centre ? int(opt.centre, 'centre') : 0, replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1,
-    ...(opt.blocks ? { blocks: int(opt.blocks, 'blocks') } : {}),
+  const rsmDesign = !!(opt.ccd || opt.bbd);
+  const common = { centre: opt.centre && !rsmDesign ? int(opt.centre, 'centre') : 0, replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1,
+    ...(opt.blocks && !rsmDesign ? { blocks: int(opt.blocks, 'blocks') } : {}),
     continuous: study.factors.map(f => f.type === 'continuous') };
   let d;
-  if (opt.pb) d = plackettBurman(k, opt.runs ? { runs: int(opt.runs, 'runs') } : {});
+  const centreOpt = opt.centre === undefined ? undefined : String(opt.centre).includes(',') ? String(opt.centre).split(',').map(v => int(v, 'centre')) : int(opt.centre, 'centre');
+  if (opt.ccd) {
+    const a = opt.alpha === undefined ? undefined : Number.isFinite(Number(opt.alpha)) ? Number(opt.alpha) : String(opt.alpha);
+    d = ccd(k, { alpha: a, inscribed: !!opt.inscribed, ...(opt['cube-runs'] ? { cubeRuns: int(opt['cube-runs'], 'cube-runs') } : {}),
+      ...(centreOpt !== undefined ? { centre: centreOpt } : {}), ...(opt.blocks ? { blocks: opt.blocks === true ? true : int(opt.blocks, 'blocks') } : {}) });
+  } else if (opt.bbd) d = boxBehnken(k, { ...(centreOpt !== undefined ? { centre: centreOpt } : {}), blocks: !!opt.blocks });
+  else if (opt.pb) d = plackettBurman(k, opt.runs ? { runs: int(opt.runs, 'runs') } : {});
   else if (opt.generators) d = fractionalFactorial(k, { generators: String(opt.generators), ...common });
   else if (opt.runs) d = fractionalFactorial(k, { runs: int(opt.runs, 'runs'), ...common });
   else if (opt.full) d = fullFactorial(study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels ? f.levels.length : 2)), common);
-  else fail('design: choose --full, --runs N, --generators … or --pb');
+  else fail('design: choose --full, --runs N, --generators …, --pb, --ccd or --bbd');
   const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
   const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed }), observations: [] });
   save(file, next);
@@ -102,6 +112,14 @@ function cmdDesign({ pos, opt }) {
     out(`resolution ${roman(d.params.resolution)}; generators ${gens.join(', ')}  (see: alias ${file})`);
   }
   if (d.params.blockGenerators) out(`blocks confounded with ${[...d.params.confoundedWithBlocks[2], ...d.params.confoundedWithBlocks[3]].join(', ') || 'higher-order interactions only'}`);
+  if (d.kind === 'ccd') {
+    const c = d.params.centrePoints;
+    out(`α = ${num(d.params.alpha, 5)} (${typeof d.params.alphaRule === 'number' ? 'given' : d.params.alphaRule}${d.params.inscribed ? ', inscribed: cube at ±' + num(d.params.cubeAt, 4) : ''}); cube ${d.params.cubeRuns} runs; centre points ${typeof c === 'number' ? c : `${c.perCubeBlock} per cube block, ${c.axialBlock} in the axial block`}`);
+  }
+  if (d.kind === 'ccd' || d.kind === 'box-behnken') {
+    const p = varianceProfile(d.X, { block: d.block, radii: [0, 0.5, 1, Math.max(...d.X.map(r => Math.hypot(...r)))] });
+    out(`scaled prediction variance (full quadratic) by radius: ${p.map(x => `ρ ${num(x.radius, 3)}: ${num(x.min, 3)}${x.max - x.min > 1e-6 * x.max ? '–' + num(x.max, 3) : ''}`).join(', ')}`);
+  }
   if (opt.sheet) { writeFileSync(opt.sheet, runSheetCSV(next)); out(`run sheet: ${opt.sheet}`); }
   if (opt.html) { writeFileSync(opt.html, runSheetHTML(next)); out(`printable run sheet: ${opt.html}`); }
 }

@@ -14,7 +14,7 @@ import * as T from './twolevel.js';
 import { CATALOGUE } from './catalogue.js';
 import { chooseBlockGenerators } from './factorial.js';
 import { rng } from './rng.js';
-import { cholInverse, chol, crossprod } from '../linalg.js';
+import { cholInverse, chol, crossprod, qr } from '../linalg.js';
 
 const popcount = (x) => { let c = 0; while (x) { x &= x - 1; c++; } return c; };
 
@@ -36,8 +36,9 @@ export const cubeBlockAlpha = (k, nFb, n0c, n0a) => Math.sqrt((2 * k + n0a) * (n
 /**
  * Central composite design for k continuous factors, in coded units.
  * opts:
- *   alpha: 'rotatable' (default unblocked) | 'orthogonal' (default when blocked) | 'spherical'
- *          (√k) | 'faces' (1) | a number
+ *   alpha: 'rotatable' (default unblocked) | 'orthogonal' (default when blocked: orthogonal
+ *          blocking; unblocked: uncorrelated quadratic coefficients) | 'spherical' (√k) |
+ *          'faces' (1) | a number
  *   inscribed: true → scale so the axial points are at ±1 and the cube at ±1/α
  *   cubeRuns: runs in the cube portion (default 2^k; e.g. 16 for k = 5 uses the resolution V
  *             half fraction from the catalogue) or cubeGenerators: ['ABCD', …]
@@ -62,7 +63,7 @@ export function ccd(k, opts = {}) {
     }
   }
   if (gens.length && T.resolution(cube) < 5)
-    throw new Error(`the cube portion has resolution ${T.resolution(cube)}: a CCD needs resolution V or more so the two-factor interactions are estimable`);
+    throw new Error(`the cube portion has resolution ${['', 'I', 'II', 'III', 'IV'][T.resolution(cube)]}: a CCD needs resolution V or more so the two-factor interactions are estimable`);
   const nF = cube.X.length;
   const blocked = !!opts.blocks;
   const nCubeBlocks = blocked ? (opts.blocks === true ? 1 : opts.blocks - 1) : 1;
@@ -82,8 +83,10 @@ export function ccd(k, opts = {}) {
     spherical: Math.sqrt(k), faces: 1 }[alphaRule];
   if (!(alpha > 0)) throw new Error(`alpha must be 'rotatable', 'orthogonal', 'spherical', 'faces' or a positive number`);
   if (alphaRule === 'orthogonal' && !blocked) {
-    // unblocked: the same rule with the axial points in the cube's block (no separate block)
-    alpha = cubeBlockAlpha(k, nF, n0c, 0);
+    // unblocked: "orthogonal" means uncorrelated quadratic coefficients (Myers & Montgomery):
+    // α⁴ = (√(n_F N) − n_F)² / 4 with N = n_F + 2k + n0
+    const N = nF + 2 * k + n0c;
+    alpha = ((Math.sqrt(nF * N) - nF) ** 2 / 4) ** 0.25;
   }
   // cube blocks
   let cubeBlock = cube.X.map(() => 1), blockGenerators;
@@ -167,8 +170,9 @@ export function predictionVariance(X, { terms, block } = {}) {
   // block effects: indicators for blocks 2…B, centred so they do not change the intercept
   const bcols = blockIds.slice(1).map(b => (i) => (block[i] === b ? 1 : 0) - block.filter(x => x === b).length / block.length);
   const F = X.map((x, i) => [...f.map(t => t(x)), ...bcols.map(c => c(i))]);
-  let L;
-  try { L = chol(crossprod(F)).L; } catch { throw new Error('the model is not estimable from this design'); }
+  // rank check by QR first: Cholesky of a numerically singular FᵀF does not always fail
+  if (qr(F).rank < F[0].length) throw new Error('the model is not estimable from this design');
+  const L = chol(crossprod(F)).L;
   const M = cholInverse(L), N = X.length, p = f.length;
   return (x) => {
     const v = f.map(t => t(x));
