@@ -93,6 +93,12 @@ for (const c of np.filter(c => c.input.op === 'svd')) {
   const recon = la.matmul(U.map(r => r.map((v, j) => v * s[j])), la.transpose(V));
   check(`${c.name}: U S Vᵀ = A`, relErr(recon, A) < 1e-13, relErr(recon, A).toExponential(2));
   check(`${c.name}: rank ${o.rank}`, la.matrixRank(A) === o.rank, `got ${la.matrixRank(A)}`);
+  {
+    // Penrose conditions for every case; comparison with numpy where it recorded pinv
+    const P0 = la.pinv(A), sr0 = o.s.slice(0, o.rank), k0 = sr0[0] / sr0[sr0.length - 1];
+    const APA0 = la.matmul(la.matmul(A, P0), A);
+    check(`${c.name}: A pinv(A) A = A`, relErr(APA0, A) < 1e-12 * Math.max(1, k0 * 1e-4), relErr(APA0, A).toExponential(2));
+  }
   if (o.pinv) {
     // pinv is only determined to ~cond·ε (cond is s_max/s_min over the retained values)
     const P = la.pinv(A), sr = o.s.slice(0, o.rank), k = sr[0] / sr[sr.length - 1];
