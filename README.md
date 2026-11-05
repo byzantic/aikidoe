@@ -6,3 +6,10 @@ Design of Experiments assistant, in the browser: screening, response surfaces, s
 - Work plan: GitHub issues and milestones (drafts in [planning/issues.md](planning/issues.md), filed by `tools/file-issues.py`).
 
 Status: planning. MIT licence.
+
+## Development
+
+```sh
+npm test                 # all tests; Node ≥ 20, no dependencies
+npm run fixtures:check   # regenerate reference fixtures with R/Python and compare (see tests/ref/README.md)
+```
