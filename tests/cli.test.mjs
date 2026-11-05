@@ -66,6 +66,11 @@ try {
   r = run('design', 'ccd.aikidoe.json', '--bbd', '--force');
   check('design --bbd', r.code === 0 && /box-behnken, 15 runs/.test(r.out), r.out + r.err);
 
+  r = run('design', 'ccd.aikidoe.json', '--dsd', '--force');
+  check('design --dsd: 3 factors → order 4, 9 runs', r.code === 0 && /definitive-screening, 9 runs/.test(r.out) && /order 4/.test(r.out), r.out + r.err);
+  r = run('design', 'ccd.aikidoe.json', '--optimal', '--runs', '12', '--model', 'quadratic', '--criterion', 'I', '--restarts', '5', '--force');
+  check('design --optimal: I-optimal quadratic, efficiencies printed', r.code === 0 && /optimal, 12 runs/.test(r.out) && /I-optimal for quadratic: D-efficiency/.test(r.out), r.out + r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');

@@ -10,7 +10,7 @@
 //        SPEC for a response: id[:units]
 //   design STUDY  (--full | --runs N | --generators "E=ABCD,…" | --pb [--runs N]
 //                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
-//                  | --bbd)
+//                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
 //        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
 //        [--sheet FILE.csv] [--html FILE.html]
 //   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
@@ -25,6 +25,8 @@ import { createStudy, parseStudy, serializeStudy, StudyError } from '../js/study
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
+import { definitiveScreening } from '../js/design/dsd.js';
+import { optimalDesign } from '../js/design/optimal.js';
 import * as T from '../js/design/twolevel.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import { runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
@@ -86,13 +88,20 @@ function cmdDesign({ pos, opt }) {
   const study = load(file);
   if (study.design && !opt.force) fail(`${file} already has a design (use --force to replace it${study.observations.length ? ' — its observations will be removed' : ''})`);
   const k = study.factors.length;
-  const rsmDesign = !!(opt.ccd || opt.bbd);
+  const rsmDesign = !!(opt.ccd || opt.bbd || opt.dsd || opt.optimal);
   const common = { centre: opt.centre && !rsmDesign ? int(opt.centre, 'centre') : 0, replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1,
     ...(opt.blocks && !rsmDesign ? { blocks: int(opt.blocks, 'blocks') } : {}),
     continuous: study.factors.map(f => f.type === 'continuous') };
   let d;
   const centreOpt = opt.centre === undefined ? undefined : String(opt.centre).includes(',') ? String(opt.centre).split(',').map(v => int(v, 'centre')) : int(opt.centre, 'centre');
-  if (opt.ccd) {
+  if (opt.dsd) {
+    const cats = study.factors.map((f, j) => (f.type === 'categorical' ? j : -1)).filter(j => j >= 0);
+    if (cats.some(j => study.factors[j].levels.length !== 2)) fail('definitive screening designs allow only two-level categorical factors');
+    d = definitiveScreening(k, { fake: opt.fake ? int(opt.fake, 'fake') : 0, ...(centreOpt !== undefined ? { centre: centreOpt } : {}), categorical: cats });
+  } else if (opt.optimal) {
+    d = optimalDesign(study, { runs: int(opt.runs ?? fail('--optimal needs --runs N'), 'runs'), model: opt.model ?? 'main', criterion: opt.criterion ?? 'D',
+      ...(opt.restarts ? { restarts: int(opt.restarts, 'restarts') } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
+  } else if (opt.ccd) {
     const a = opt.alpha === undefined ? undefined : Number.isFinite(Number(opt.alpha)) ? Number(opt.alpha) : String(opt.alpha);
     d = ccd(k, { alpha: a, inscribed: !!opt.inscribed, ...(opt['cube-runs'] ? { cubeRuns: int(opt['cube-runs'], 'cube-runs') } : {}),
       ...(centreOpt !== undefined ? { centre: centreOpt } : {}), ...(opt.blocks ? { blocks: opt.blocks === true ? true : int(opt.blocks, 'blocks') } : {}) });
@@ -116,6 +125,11 @@ function cmdDesign({ pos, opt }) {
     const c = d.params.centrePoints;
     out(`α = ${num(d.params.alpha, 5)} (${typeof d.params.alphaRule === 'number' ? 'given' : d.params.alphaRule}${d.params.inscribed ? ', inscribed: cube at ±' + num(d.params.cubeAt, 4) : ''}); cube ${d.params.cubeRuns} runs; centre points ${typeof c === 'number' ? c : `${c.perCubeBlock} per cube block, ${c.axialBlock} in the axial block`}`);
   }
+  if (d.kind === 'optimal') {
+    const p = d.params;
+    out(`${p.criterion}-optimal for ${p.model}: D-efficiency ${num(p.dEfficiency, 4)}%, A ${num(p.aEfficiency, 4)}%, G ${num(p.gEfficiency, 4)}%, average prediction variance ${num(p.averageVariance, 4)} (${p.restarts} starts)`);
+  }
+  if (d.kind === 'definitive-screening') out(`conference matrix of order ${d.params.order} (${d.params.fake} dropped column${d.params.fake === 1 ? '' : 's'}); ${d.params.centrePoints} centre run(s)`);
   if (d.kind === 'ccd' || d.kind === 'box-behnken') {
     const p = varianceProfile(d.X, { block: d.block, radii: [0, 0.5, 1, Math.max(...d.X.map(r => Math.hypot(...r)))] });
     out(`scaled prediction variance (full quadratic) by radius: ${p.map(x => `ρ ${num(x.radius, 3)}: ${num(x.min, 3)}${x.max - x.min > 1e-6 * x.max ? '–' + num(x.max, 3) : ''}`).join(', ')}`);

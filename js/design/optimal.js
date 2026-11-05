@@ -308,8 +308,17 @@ export function optimalDesign(study, opts = {}) {
     if (sc < bestScore) { bestScore = sc; best = X.map(r => r.slice()); }
   }
   if (!best) throw new Error('no nonsingular design found: the model may not be estimable over this region with these runs');
-  // tidy: snap continuous coordinates within 1e-6 of the bounds or zero
-  for (const r of best) r.forEach((v, j) => { if (dom[j].type === 'continuous') { if (Math.abs(v - 1) < 1e-6) r[j] = 1; else if (Math.abs(v + 1) < 1e-6) r[j] = -1; else if (Math.abs(v) < 1e-6) r[j] = 0; } });
+  // polish: near the optimum the criterion is flat, so a coordinate can stop a little short of
+  // −1, 0 or +1; snap it there (within 0.002) when that is feasible and the criterion is no worse
+  for (let i = fixed.length; i < N; i++) for (let j = 0; j < k; j++) {
+    if (dom[j].type !== 'continuous') continue;
+    const v = best[i][j], target = [-1, 0, 1].find(t => Math.abs(v - t) < 2e-3 && v !== t);
+    if (target === undefined) continue;
+    const trial = best.map(r => r.slice()); trial[i][j] = target;
+    if (!feas.ok(trial[i])) continue;
+    let sc; try { sc = score(trial.map(r => cm.f(r))); } catch { continue; }
+    if (sc <= bestScore + 1e-9 * Math.abs(bestScore)) { best = trial; bestScore = Math.min(sc, bestScore); }
+  }
   const F = best.map(r => cm.f(r));
   const diag = designDiagnostics(cm, F, study, { W });
   return {
@@ -384,4 +393,14 @@ export function evaluateDesign(study, rows, { model = 'main', criterion } = {}) 
   const factors = study.factors, cm = compileModel(parseFormula(model, factors), factors);
   const F = rows.map(s => cm.f(factors.map(f => (f.type === 'categorical' ? f.levels.indexOf(s[f.id]) : code(f, s[f.id])))));
   return designDiagnostics(cm, F, study, criterion === 'I' ? {} : {});
+}
+
+/**
+ * Diagnostics of a design given in coded form (X as factorial.js returns it: coded values for
+ * continuous factors, ±1 for two-level categorical, level index otherwise) for a model.
+ */
+export function diagnoseCoded(study, X, { model = 'main' } = {}) {
+  const factors = study.factors, cm = compileModel(parseFormula(model, factors), factors);
+  const F = X.map(r => cm.f(r.map((v, j) => (factors[j].type === 'categorical' && factors[j].levels.length === 2 ? (v + 1) / 2 : v))));
+  return designDiagnostics(cm, F, study);
 }

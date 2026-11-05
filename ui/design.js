@@ -9,6 +9,21 @@ import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import * as T from '../js/design/twolevel.js';
 import { createStudy, feasible } from '../js/study.js';
+import { definitiveScreening, dsdOrder } from '../js/design/dsd.js';
+import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
+import { parseFormula } from '../js/model/formula.js';
+
+// the optimal-design search runs in a worker; one search at a time
+let worker = null, searchId = 0;
+function search(study, opts, onDone) {
+  worker?.terminate();
+  worker = new Worker(new URL('./optimal-worker.js', import.meta.url), { type: 'module' });
+  const id = ++searchId;
+  worker.onmessage = (e) => { if (e.data.id === id) { onDone(e.data); worker.terminate(); worker = null; } };
+  worker.onerror = (e) => { onDone({ ok: false, error: e.message || 'the search failed' }); worker = null; };
+  worker.postMessage({ study, opts, id });
+}
+const optKey = (o) => JSON.stringify([o.optRuns, o.optModel, o.optCriterion, o.optRestarts, o.seed]);
 
 const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n] ?? String(n) : 'full');
 
@@ -36,7 +51,13 @@ export function candidates(study) {
     out.push({ id: 'ccd', kind: 'ccd', label: 'Central composite', runs: d.X.length, note: `rotatable, α = ${num(d.params.alpha, 4)}; full quadratic`, opts: { cubeRuns: cube } });
   }
   if (allCont && k >= 3 && k <= 7) out.push({ id: 'bbd', kind: 'bbd', label: 'Box–Behnken', runs: boxBehnken(k).X.length, note: 'three levels, no corner points; full quadratic' });
-  return out.sort((a, b) => a.runs - b.runs);
+  if (twoLevel && k >= 3 && dsdOrder(k) && f.some(x => x.type === 'continuous')) {
+    const cats = f.map((x, j) => (x.type === 'categorical' ? j : -1)).filter(j => j >= 0);
+    out.push({ id: 'dsd', kind: 'dsd', label: 'Definitive screening', runs: definitiveScreening(k, { categorical: cats }).X.length, note: 'three levels; main effects clear of 2fis and curvature' });
+  }
+  const sorted = out.sort((a, b) => a.runs - b.runs);
+  sorted.push({ id: 'optimal', kind: 'optimal', label: 'Optimal (custom)', runs: null, note: 'D-, I- or A-optimal for a model you choose; respects constraints' });
+  return sorted;
 }
 
 /** Build the design object for a candidate and the UI options. */
@@ -50,6 +71,14 @@ function build(study, cand, o) {
     case 'ccd': return ccd(study.factors.length, { cubeRuns: cand.opts.cubeRuns, alpha: o.alpha === 'number' ? Number(o.alphaValue) : o.alpha || undefined,
       inscribed: !!o.inscribed, ...(o.rsmBlocks ? { blocks: true } : {}), ...(o.centre !== '' && o.centre !== undefined ? { centre: o.rsmBlocks ? [Number(o.centre), Number(o.centreAxial ?? o.centre)] : Number(o.centre) } : {}) });
     case 'bbd': return boxBehnken(study.factors.length, { centre: o.centre === '' || o.centre === undefined ? 3 : Number(o.centre), blocks: !!o.rsmBlocks });
+    case 'dsd': return definitiveScreening(study.factors.length, { fake: o.fake ?? 0, centre: o.centre === '' || o.centre === undefined ? 1 : Number(o.centre),
+      categorical: study.factors.map((x, j) => (x.type === 'categorical' ? j : -1)).filter(j => j >= 0) });
+    case 'optimal': {
+      const r = o.optResult;
+      if (!r || r.key !== optKey(o)) return null;          // not searched yet for these options
+      if (!r.ok) throw new Error(r.error);
+      return r.design;
+    }
   }
   throw new Error(`unknown design ${cand.kind}`);
 }
@@ -66,16 +95,18 @@ export function render({ state, setDoc, setUI }) {
   const list = h('section', { class: 'panel' }, h('h2', {}, `Designs for ${study.factors.length} factors`),
     dataTable([
       { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n' },
-      { key: 'res', label: 'resolution', fmt: (v, r) => (r.kind === 'ccd' || r.kind === 'bbd' ? '—' : roman(v)) }, { key: 'note', label: '' },
+      { key: 'res', label: 'resolution', fmt: (v, r) => (['ccd', 'bbd', 'dsd', 'optimal'].includes(r.kind) ? '—' : roman(v)) }, { key: 'note', label: '' },
     ], cands, { rowAttrs: (r) => ({ class: `click ${r.id === cand.id ? 'sel' : ''}`, 'data-design': r.id, onclick: () => set({ id: r.id, centre: undefined, blocks: undefined, rsmBlocks: false }) }) }),
     h('p', { class: 'muted small' }, 'Resolution III: main effects aliased with two-factor interactions; IV: main effects clear, 2fis aliased with each other; V: main effects and 2fis clear. Response-surface designs (central composite, Box–Behnken) estimate a full quadratic.'));
 
   // ---------------------------------------------------------------- options
-  const isRSM = cand.kind === 'ccd' || cand.kind === 'bbd';
+  const isRSM = cand.kind === 'ccd' || cand.kind === 'bbd' || cand.kind === 'dsd' || cand.kind === 'optimal';
   const field = (label, el) => h('label', { class: 'inline' }, label, el);
   const numIn = (key, attrs = {}) => h('input', { class: 'num', type: 'number', min: 0, value: ui[key] ?? '', ...attrs, onchange: (e) => set({ [key]: e.target.value === '' ? undefined : Number(e.target.value) }) });
   const options = h('div', { class: 'row' },
-    cand.kind !== 'pb' ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
+    cand.kind !== 'pb' && cand.kind !== 'optimal' ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
+    cand.kind === 'dsd' ? field('fake factors', select([0, 1, 2, 3, 4], ui.fake ?? 0, (v) => set({ fake: Number(v) }), { 'aria-label': 'fake factors', title: 'extra conference-matrix columns, dropped; 2 improves estimation of second-order effects (Jones & Nachtsheim 2013)' })) : null,
+    cand.kind === 'optimal' ? optimalOptions(study, ui, set) : null,
     cand.kind === 'ccd' && ui.rsmBlocks ? field('in the axial block', numIn('centreAxial', { placeholder: 'same' })) : null,
     !isRSM && cand.kind !== 'pb' ? field('replicates', numIn('replicates', { min: 1, placeholder: '1' })) : null,
     !isRSM && cand.kind !== 'pb' && study.factors.every(f => f.type === 'continuous' || f.levels?.length === 2) ? field('blocks', select([1, 2, 4, 8], ui.blocks ?? 1, (v) => set({ blocks: Number(v) }), { 'aria-label': 'blocks' })) : null,
@@ -87,7 +118,12 @@ export function render({ state, setDoc, setUI }) {
 
   let d, err = null;
   try { d = build(study, cand, ui); } catch (e) { err = e.message; }
-  const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label), options, err ? h('div', { class: 'msg error' }, err) : diagnostics(study, d));
+  let body;
+  if (err) body = h('div', { class: 'msg error' }, err);
+  else if (!d) body = h('div', { class: 'msg' }, ui.searching ? 'Searching… (several random starts of a coordinate-exchange search)' : 'Set the model, runs and criterion, then search.');
+  else body = diagnostics(study, d, cand.kind === 'dsd' ? 'quadratic' : null);
+  const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label), options, body);
+  if (!d) err = err ?? 'not searched';
 
   // ---------------------------------------------------------------- create
   const nObs = study.observations.length;
@@ -112,7 +148,7 @@ export function render({ state, setDoc, setUI }) {
   return h('div', {}, list, detail, create);
 }
 
-function diagnostics(study, d) {
+function diagnostics(study, d, modelFor) {
   const ids = study.factors.map(f => f.id);
   const parts = [h('div', { class: 'row small' }, h('span', { class: 'stat' }, h('b', {}, d.X.length), ' runs'),
     d.block ? h('span', { class: 'stat' }, h('b', {}, new Set(d.block).size), ' blocks') : null,
@@ -142,5 +178,48 @@ function diagnostics(study, d) {
       h('p', { class: 'muted small' }, p.every(x => x.max - x.min < 1e-6 * x.max) ? 'Rotatable: the variance depends only on the distance from the centre.' : 'Solid: largest, dashed: smallest variance over directions at each distance.'));
   }
   if (d.kind === 'full-factorial' && !d.block) parts.push(h('p', { class: 'small' }, 'Every main effect and interaction can be estimated.'));
+  if (d.kind === 'optimal' || d.kind === 'definitive-screening') {
+    const g = d.diagnostics ?? diagnoseCoded(study, d.X, { model: modelFor });
+    if (d.kind === 'definitive-screening') parts.push(h('p', { class: 'small' }, `Built from a conference matrix of order ${d.params.order}${d.params.fake ? ` (${d.params.fake} column${d.params.fake > 1 ? 's' : ''} dropped)` : ''}. Main effects are orthogonal to each other${d.params.categorical ? ' (up to a small correlation with the categorical factors)' : ''} and to every two-factor interaction and quadratic term; no two second-order terms are completely aliased. With few active factors, the full quadratic in those factors can be fitted.`));
+    parts.push(h('h3', {}, `Efficiency${d.kind === 'definitive-screening' ? ' for the full quadratic' : ` for ${d.params.model}`}`),
+      h('div', { class: 'row small', 'data-efficiency': '' },
+        h('span', { class: 'stat' }, 'D ', h('b', {}, `${num(g.dEfficiency, 4)}%`)), h('span', { class: 'stat' }, 'A ', h('b', {}, `${num(g.aEfficiency, 4)}%`)),
+        h('span', { class: 'stat' }, 'G ', h('b', {}, `${num(g.gEfficiency, 4)}%`)), h('span', { class: 'stat' }, 'average prediction variance ', h('b', {}, num(g.averageVariance, 4)))),
+      h('p', { class: 'muted small' }, 'D, A, G: relative to an ideal orthogonal design of the same size on the coded cube (100% is rarely attainable for quadratic models). Average prediction variance (in units of σ²) is what I-optimality minimises.'),
+      h('div', { class: 'grid2' },
+        h('figure', {}, h('figcaption', {}, 'Fraction of design space'), plot({ xLabel: 'fraction of the region', yLabel: 'relative prediction variance', height: 220, series: [{ kind: 'line', points: g.fds.map(x => ({ x: x.fraction, y: x.variance })) }] })),
+        h('figure', {}, h('figcaption', {}, 'Correlations between model terms'), correlationMap(g.correlations))));
+  }
   return h('div', {}, parts);
+}
+
+function optimalOptions(study, ui, set) {
+  const k = study.factors.length, allCont = study.factors.every(f => f.type === 'continuous');
+  const model = ui.optModel ?? (allCont && k <= 6 ? 'quadratic' : k <= 8 ? '2fi' : 'main');
+  let p = null; try { p = compileModel(parseFormula(model, study.factors), study.factors).p; } catch { /* shown when searching */ }
+  const runs = ui.optRuns ?? (p ? p + Math.max(4, Math.ceil(p / 4)) : 12);
+  const opts = { ...ui, optModel: model, optRuns: runs, optCriterion: ui.optCriterion ?? (model === 'quadratic' ? 'I' : 'D'), optRestarts: ui.optRestarts ?? 20 };
+  const go = () => {
+    const key = optKey(opts);
+    set({ ...opts, searching: true, optResult: null });
+    search(study, { runs: opts.optRuns, model: opts.optModel, criterion: opts.optCriterion, restarts: opts.optRestarts, seed: opts.seed ?? study.seed },
+      (r) => set({ ...opts, searching: false, optResult: { ...r, key } }));
+  };
+  return [
+    h('label', { class: 'inline' }, 'model', h('input', { type: 'text', class: 'formula', style: 'width:18em', value: model, 'aria-label': 'optimal model', onchange: (e) => set({ optModel: e.target.value.replace(/^.*~/, '').trim() || 'main', optResult: null }) })),
+    p ? h('span', { class: 'muted small' }, `${p} coefficients`) : null,
+    h('label', { class: 'inline' }, 'runs', h('input', { class: 'num', type: 'number', min: p ?? 1, value: runs, 'aria-label': 'optimal runs', onchange: (e) => set({ optRuns: Number(e.target.value), optResult: null }) })),
+    h('label', { class: 'inline' }, 'criterion', select([{ value: 'D', label: 'D (estimate coefficients)' }, { value: 'I', label: 'I (predict well)' }, { value: 'A', label: 'A' }], opts.optCriterion, (v) => set({ optCriterion: v, optResult: null }), { 'aria-label': 'criterion' })),
+    h('label', { class: 'inline' }, 'starts', h('input', { class: 'num', type: 'number', min: 1, value: opts.optRestarts, 'aria-label': 'restarts', onchange: (e) => set({ optRestarts: Number(e.target.value), optResult: null }) })),
+    h('button', { class: 'btn primary', id: 'search-optimal', disabled: !!ui.searching, onclick: go }, ui.searching ? 'Searching…' : 'Search'),
+  ];
+}
+
+/** Heat map of |correlation| between model terms. */
+function correlationMap({ names, r }) {
+  if (names.length > 30) return h('p', { class: 'muted small' }, `${names.length} terms: too many to show.`);
+  const cell = (v) => h('td', { style: `background: color-mix(in srgb, var(--accent) ${Math.round(100 * Math.min(1, v))}%, transparent); width: 14px; height: 14px; padding: 0`, title: num(v, 3) });
+  return h('div', { class: 'table-wrap' }, h('table', { class: 'corr', style: 'border-collapse: collapse; font-size: 10px' },
+    h('tbody', {}, r.map((row, i) => h('tr', {}, h('th', { style: 'text-align:right; padding-right:4px; font-weight:400; white-space:nowrap' }, names[i]), row.map(cell))))),
+    h('p', { class: 'muted small' }, 'Darker = more correlated (|r| from 0 to 1); hover for values.'));
 }
