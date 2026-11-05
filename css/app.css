@@ -110,3 +110,4 @@ svg.plot .ribbon { fill: var(--accent); opacity: .15; stroke: none; }
 .dbar { display: inline-block; width: 60px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; } .dbar > span { display: block; height: 100%; background: var(--accent); }
 svg.plot .ref.cur { stroke: var(--ink); stroke-dasharray: none; opacity: .5; } svg.plot .ref.lim { stroke: var(--muted, #888); }
 #opt-result table input.num { max-width: 9em; }
+#robust table input.num, #optimise-goals input.num { max-width: 9em; }

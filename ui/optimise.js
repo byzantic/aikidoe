@@ -5,16 +5,73 @@ import { plot } from './plot.js';
 import { num } from '../js/format.js';
 import { fittedModels, optimiseDesirability, profile, desirabilityGrid, dValue, dOverall } from '../js/model/desirability.js';
 import { decode, code } from '../js/study.js';
+import { propagationOfError, dualResponse, poeGrid } from '../js/model/robust.js';
 
 const GOALS = [{ value: 'none', label: '—' }, { value: 'maximize', label: 'maximise' }, { value: 'minimize', label: 'minimise' }, { value: 'target', label: 'target' }, { value: 'range', label: 'in range' }];
 
 // fitted models, cached per study document and formulas (mixed fits take a moment)
-let cache = { key: null, doc: null, value: null };
-function models(state) {
+const caches = {};
+function models(state, all = false) {
   const formulas = state.ui.analyse?.formulas ?? {};
-  const key = JSON.stringify(formulas);
-  if (cache.doc !== state.doc || cache.key !== key) cache = { doc: state.doc, key, value: fittedModels(state.study, { formulas }) };
-  return cache.value;
+  const key = JSON.stringify(formulas), c = caches[all] ??= { key: null, doc: null, value: null };
+  if (c.doc !== state.doc || c.key !== key) Object.assign(c, { doc: state.doc, key, value: fittedModels(state.study, { formulas, all }) });
+  return c.value;
+}
+
+// robust design (#19): noise factors and tolerances, propagation of error, dual response
+function robustPanel({ state, update, setUI }, at, set, ui) {
+  const study = state.study;
+  let all; try { all = models(state, true).models; } catch { return null; }
+  if (!all.length) return null;
+  const m = all.find(x => x.id === ui.rResp) ?? all[0];
+  const cont = study.factors.filter(f => f.type !== 'categorical');
+  const sdIn = (f, key) => h('input', { class: 'num', type: 'number', min: 0, step: 'any', value: key === 'noise' ? f.noise?.sd ?? '' : f.tolerance ?? '', placeholder: '—', 'aria-label': `${f.id} ${key} sd`,
+    onchange: (e) => update(d => { const o = d.factors.find(x => x.id === f.id), v = e.target.value; if (key === 'noise') { if (v === '' || !(Number(v) > 0)) delete o.noise; else o.noise = { ...(o.noise ?? {}), sd: Number(v) }; } else { if (v === '') delete o.tolerance; else o.tolerance = Number(v); } }) });
+  const factorTable = dataTable([{ key: 'f', label: 'factor' }, { key: 'noise', label: 'noise: sd in production' }, { key: 'tol', label: 'tolerance: sd about the setting' }],
+    cont.map(f => ({ f: f.units ? `${f.id} (${f.units})` : f.id, noise: sdIn(f, 'noise'), tol: sdIn(f, 'tol') })));
+  const sigma = m.sigma ?? 0;
+  const poe = (st) => propagationOfError(study, m.predict, st, { sigma });
+  const p = poe(at);
+  const goal = ui.rGoal ?? 'target';
+  const controls = h('div', { class: 'row' },
+    h('label', { class: 'inline' }, 'response', select(all.map(x => x.id), m.id, (v) => set({ rResp: v }), { 'aria-label': 'robust response' })),
+    h('label', { class: 'inline' }, 'goal', select([{ value: 'target', label: 'mean on target, minimum sd' }, { value: 'mse', label: 'minimum (mean − target)² + sd²' }, { value: 'maximize', label: 'maximum mean, sd ≤' }, { value: 'minimize', label: 'minimum mean, sd ≤' }], goal, (v) => set({ rGoal: v }), { 'aria-label': 'robust goal' })),
+    goal === 'target' || goal === 'mse' ? h('label', { class: 'inline' }, 'target', h('input', { class: 'num', type: 'number', step: 'any', value: ui.rTarget ?? study.responses.find(r => r.id === m.id)?.target ?? '', 'aria-label': 'robust target', onchange: (e) => set({ rTarget: Number(e.target.value) }) }))
+      : h('label', { class: 'inline' }, 'max sd', h('input', { class: 'num', type: 'number', min: 0, step: 'any', value: ui.rMaxSd ?? '', 'aria-label': 'robust max sd', onchange: (e) => set({ rMaxSd: Number(e.target.value) }) })),
+    h('button', { class: 'btn primary', id: 'robust-opt', onclick: () => {
+      try {
+        const target = ui.rTarget ?? study.responses.find(r => r.id === m.id)?.target;
+        const fixed = Object.fromEntries(study.factors.filter(f => ui.hold?.[f.id] || f.type === 'categorical').map(f => [f.id, at[f.id]]));
+        const r = dualResponse(study, (st) => poe(st).mean, (st) => poe(st).sd, { goal, target, maxSd: ui.rMaxSd ?? Infinity, fixed, seed: study.seed, region: ui.region ?? 'cube', ...(ui.radius ? { radius: ui.radius } : {}) });
+        set({ at: r.settings, rNote: r.feasible ? null : 'The constraint cannot be met in the region: closest settings shown.', error: null });
+      } catch (e) { set({ rNote: e.message }); }
+    } }, 'Find robust settings'));
+  const tiny = (v) => (Math.abs(v) < 1e-6 * Math.max(1, p.sd) ? 0 : v);
+  const parts = [...p.parts.map(q => ({ src: q.id, sd: num(q.sd), slope: num(tiny(q.slope)), pct: 100 * q.contribution / p.var })), ...(p.curvature > 1e-12 ? [{ src: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { src: 'residual', sd: num(sigma), slope: '', pct: 100 * p.residual / p.var }];
+  const summary = h('div', { id: 'poe' }, h('div', { class: 'row small' }, h('span', { class: 'stat' }, `${m.id} mean `, h('b', {}, num(p.mean))), h('span', { class: 'stat' }, 'sd ', h('b', { 'data-sd': p.sd }, num(p.sd))),
+      h('span', { class: 'stat' }, 'transmitted ', h('b', {}, num(tiny(Math.sqrt(p.transmitted))))), h('span', { class: 'muted' }, 'at the settings above (noise factors at their mean)')),
+    dataTable([{ key: 'src', label: 'source' }, { key: 'sd', label: 'sd', cls: 'n' }, { key: 'slope', label: 'slope ∂y/∂x', cls: 'n' }, { key: 'pct', label: '% of variance', cls: 'n', fmt: (v) => num(v, 3) }, { key: 'bar', label: '' }],
+      parts.map(q => ({ ...q, bar: h('span', { class: 'vbar' }, h('span', { style: `width:${Math.min(100, q.pct).toFixed(1)}%` })) }))));
+  // POE surface over two control factors
+  // control factors, those in the model first
+  const used = new Set(m.fit.model.terms.flatMap(t => t.comps.flatMap(c => (c.f ? [c.f] : Object.keys(c.I)))));
+  const ctl = cont.filter(f => !f.noise && !ui.hold?.[f.id]).sort((a, b) => used.has(b.id) - used.has(a.id));
+  let surf = null;
+  if (ctl.length >= 2 && p.parts.length) {
+    const fx = ctl.some(f => f.id === ui.px) ? ui.px : ctl[0].id, fy = ctl.some(f => f.id === ui.py) && ui.py !== fx ? ui.py : ctl.find(f => f.id !== fx).id;
+    const g = poeGrid(study, m.predict, at, fx, fy, { n: 31, sigma });
+    const vals = g.cells.flat().map(c => c.sd), lo = Math.min(...vals), hi = Math.max(...vals), n = g.xs.length, W = 300, cw = W / n;
+    surf = h('figure', {}, h('figcaption', {}, `sd of ${m.id} over ${fx} and ${fy} (darker = more robust); range ${num(lo)} … ${num(hi)} `,
+      select(ctl.map(f => f.id), fx, (v) => set({ px: v }), { 'aria-label': 'poe x' }), ' ', select(ctl.map(f => f.id), fy, (v) => set({ py: v }), { 'aria-label': 'poe y' })),
+      h('svg:svg', { class: 'heat', viewBox: `0 0 ${W + 50} ${W + 36}`, role: 'img', 'aria-label': `POE surface over ${fx} and ${fy}`, id: 'poe-surface' },
+        ...g.cells.flatMap((row, j) => row.map((c, i) => h('svg:rect', { x: 44 + i * cw, y: (n - 1 - j) * cw, width: cw + 0.5, height: cw + 0.5,
+          style: `fill: color-mix(in srgb, var(--accent) ${Math.round(100 * (hi - c.sd) / ((hi - lo) || 1))}%, var(--panel))` }, h('svg:title', {}, `sd ${num(c.sd)}, mean ${num(c.mean)}`)))),
+        h('svg:circle', { cx: 44 + (code(study.factors.find(f => f.id === fx), at[fx]) + 1) / 2 * W, cy: W - (code(study.factors.find(f => f.id === fy), at[fy]) + 1) / 2 * W, r: 5, class: 'site-dot' }),
+        h('svg:text', { x: 44 + W / 2, y: W + 28, 'text-anchor': 'middle', class: 'site-label' }, fx), h('svg:text', { x: 12, y: W / 2, 'text-anchor': 'middle', class: 'site-label', transform: `rotate(-90 12 ${W / 2})` }, fy)));
+  }
+  return h('section', { class: 'panel', id: 'robust' }, h('h2', {}, 'Robustness'),
+    h('p', { class: 'small' }, 'Noise factors vary in production (set them to a fixed level only in the experiment); tolerances are how far the actual value of a control factor wanders from its setting. Their variation is transmitted through the fitted surface: settings on a flat part of it are robust. The sd adds the residual (run-to-run) variation of the model.'),
+    factorTable, controls, ui.rNote ? h('div', { class: 'msg warning' }, ui.rNote) : null, summary, surf);
 }
 
 export function render(ctx) {
@@ -41,7 +98,10 @@ export function render(ctx) {
   try { fm = models(state); } catch (e) { return h('div', {}, goals, h('div', { class: 'msg error' }, e.message)); }
   const { models: ms, missing } = fm;
   const notes = missing.map(m => `${m.id}: ${m.reason}`);
-  if (!ms.length) return h('div', {}, goals, messages([...notes, 'Give at least one response with results a goal and its limits (lower / target / upper) to optimise.'], 'warning'));
+  if (!ms.length) {
+    const centre0 = Object.fromEntries(study.factors.map(f => [f.id, f.noise ? f.noise.mean ?? decode(f, 0) : f.type === 'categorical' ? f.levels[0] : decode(f, 0)]));
+    return h('div', {}, goals, messages([...notes, 'Give at least one response with results a goal and its limits (lower / target / upper) to optimise.'], 'warning'), robustPanel(ctx, { ...centre0, ...(ui.at ?? {}) }, set, ui));
+  }
 
   // current settings: chosen by the user, else the optimum, else the centre
   const centre = Object.fromEntries(study.factors.map(f => [f.id, f.type === 'categorical' ? f.levels[0] : decode(f, 0)]));
@@ -98,7 +158,9 @@ export function render(ctx) {
   const contF = study.factors.filter(f => f.type !== 'categorical');
   let overlay = null;
   if (contF.length >= 2) {
-    const fx = ui.ox ?? contF[0].id, fy = ui.oy ?? contF[1].id;
+    const used = new Set(ms.flatMap(m => m.fit.model.terms.flatMap(t => t.comps.flatMap(c => (c.f ? [c.f] : Object.keys(c.I))))));
+    const pref = contF.filter(f => !f.noise).sort((a, b) => used.has(b.id) - used.has(a.id)).concat(contF.filter(f => f.noise));
+    const fx = ui.ox ?? pref[0].id, fy = ui.oy ?? pref.find(f => f.id !== fx).id;
     const gr = desirabilityGrid(study, ms, at, fx, fy, { n: 41 });
     const W = 320, Hh = 320, n = gr.xs.length, cw = W / n, ch = Hh / n;
     const svg = h('svg:svg', { class: 'heat', viewBox: `0 0 ${W + 50} ${Hh + 36}`, role: 'img', 'aria-label': `overall desirability over ${fx} and ${fy}` },
@@ -113,5 +175,5 @@ export function render(ctx) {
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
       svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region.`));
   }
-  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings'), controls, res), profPanel, overlay);
+  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings'), controls, res), profPanel, overlay, robustPanel(ctx, at, set, ui));
 }

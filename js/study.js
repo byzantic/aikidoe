@@ -35,7 +35,7 @@ const TRANSFORMS = ['none', 'log'];
 
 const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'history'],
-  continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'note'],
+  continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
   response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
@@ -255,7 +255,14 @@ function normFactor(f, i, errors) {
   if (!TRANSFORMS.includes(tr)) errors.push(`${path}.transform: must be one of ${TRANSFORMS.join(', ')}`);
   if (tr === 'log' && isNum(low) && !(low > 0)) errors.push(`${path}: a log-transformed factor needs low > 0`);
   out.transform = tr;
-  if (f.tolerance !== undefined) out.tolerance = f.tolerance;     // used by #19, #20
+  // robust design (§8): tolerance = standard deviation of the actual value about its setting
+  // (natural units); noise = a factor varied in the experiment but random in production:
+  // { sd (natural units), mean (default: centre of the range) }
+  if (f.tolerance !== undefined) { if (!isNum(f.tolerance) || f.tolerance < 0) errors.push(`${path}.tolerance: must be a non-negative number (a standard deviation in the factor's units)`); else out.tolerance = f.tolerance; }
+  if (f.noise !== undefined) {
+    if (!isObj(f.noise) || !isNum(f.noise.sd) || !(f.noise.sd > 0) || (f.noise.mean !== undefined && !isNum(f.noise.mean))) errors.push(`${path}.noise: must be { sd: positive number, mean?: number } (natural units)`);
+    else out.noise = { sd: f.noise.sd, ...(f.noise.mean !== undefined ? { mean: f.noise.mean } : {}) };
+  }
   return out;
 }
 

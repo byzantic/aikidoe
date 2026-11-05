@@ -247,6 +247,21 @@ try {
   check('importance stored on the response', (await state()).study.responses.find(r => r.id === 'conv').importance === 3);
   await shot('11-optimise');
 
+  section('robust design (issue #19)');
+  await page.click('#btn-examples'); await page.click('[data-example="filtration"]'); await settle();
+  await page.click('[data-step="analyse"]'); await settle();
+  await page.fill('#formula', 'rate ~ A + C + D + A:C + A:D'); await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); await settle();
+  await page.click('[data-step="optimise"]'); await settle();
+  check('Robustness panel: temperature is a noise factor (sd 1)', (await page.inputValue('input[aria-label="A noise sd"]')) === '1');
+  await page.selectOption('select[aria-label="robust goal"]', 'target'); await settle();
+  await page.fill('input[aria-label="robust target"]', '72'); await page.keyboard.press('Tab'); await settle();
+  await page.check('input[aria-label="hold B"]'); await settle();
+  await page.click('#robust-opt'); await settle();
+  const sdv = Number(await page.getAttribute('#poe [data-sd]', 'data-sd'));
+  check('robust settings: sd = residual only (√19.51 = 4.417), mean on target', Math.abs(sdv - Math.sqrt(19.5125)) < 1e-4 && /mean 72/.test(await page.textContent('#poe')), sdv);
+  check('POE surface drawn', (await page.locator('#poe-surface rect').count()) === 31 * 31);
+  await shot('12-robust');
+
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide', 'anneal-results']) {
     await page.click('#btn-examples'); await page.click(`[data-example="${id}"]`); await page.waitForTimeout(300);

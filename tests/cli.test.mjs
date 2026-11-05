@@ -194,6 +194,15 @@ try {
   r = run('optimise', 'ccd.aikidoe.json', '--region', 'sphere');
   check('optimise --region sphere (default radius √k)', r.code === 0 && /region: sphere/.test(r.out), r.out + r.err);
 
+  section('robust design (issue #19)');
+  writeFileSync(join(dir, 'filt.aikidoe.json'), serializeStudy(EXAMPLES.find(e => e.id === 'filtration').build()));
+  r = run('robust', 'filt.aikidoe.json', '--model', 'rate ~ A + C + D + A:C + A:D', '--target', '72', '--fix', 'B=0');
+  check('robust --target: Vining–Myers optimum where the noise effect cancels', r.code === 0 && /settings: B=0, C=0\.886\d*, D=-0\.333\d*/.test(r.out) && /mean 72, sd 4\.417/.test(r.out), r.out + r.err);
+  r = run('robust', 'filt.aikidoe.json', '--model', 'rate ~ A + C + D + A:C + A:D', '--at', 'C=1,D=1');
+  check('robust --at: POE breakdown', r.code === 0 && /^A\s+1\s+10\.06\s+83\.84/m.test(r.out), r.out + r.err);
+  r = run('robust', 'filt.aikidoe.json', '--model', 'rate ~ A + C + D + A:C + A:D', '--noise', 'A=0.5', '--at', 'C=1,D=1');
+  check('robust --noise overrides the study', r.code === 0 && /A noise sd 0\.5/.test(r.out), r.out + r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');
