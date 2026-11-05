@@ -145,7 +145,38 @@ Spec §10: factors from `tune` params and substrate parameters (εr, h, t, etch 
 
 **Done when:** the example runs from the CLI and UI; a sample of surrogate predictions agree with direct comb-over runs within stated CV error.
 
-## docs | Manual, worked examples and report export | M6 Docs | docs
-Spec §11–12: `docs/manual.md` and examples (2^(5−1) screening from a textbook; furnace split-plot with drop-in sites; gauge R&R; comb-over coupler yield); self-contained HTML report export; doc build check in `npm test`, as in comb-over.
+## docs | Online manual, worked examples and report export | M6 Docs | docs
+Spec §16.1, §11–12: Markdown manual in `docs/manual/` (getting started, concepts, one page per design family, analysis, process topics, simulation, reference, worked examples), published with the UI on Pages at `/manual/` and rendered in the browser by a small in-repo Markdown renderer; `?` links from each UI panel; links from the manual open example studies in the UI. Reference pages (study format, CLI) generated from #json-cli's schema and the CLI help. Worked examples: 2^(5−1) screening from a textbook; furnace split-plot with drop-in sites; gauge R&R; comb-over coupler yield. Self-contained HTML report export.
 
-**Done when:** every example is executable and its numbers are checked by the test suite.
+- Every command block in the manual is run by `npm test` and its output compared with the page; links checked; generated pages regenerated and diffed.
+
+**Done when:** the manual is live on Pages, every example is executable and its numbers are checked by the test suite.
+
+## json-cli | Machine-readable CLI: --json, schema, recommend | M6 Docs | docs, io
+Spec §16.3. Every `doe` command takes `--json` and writes one JSON object (with a `schema` version) instead of tables; errors as `{ error: { message } }` with non-zero exit. `doe schema` prints the JSON Schema of the study file (also used to generate the manual's format page). `doe recommend STUDY [--goal screen|model|optimise] [--budget N]`: the design recommender of §12, shared with the UI's Design step — ranked options with reasons, run counts, resolution / efficiency and power.
+
+Can be done at any point; #agent-skill and #docs depend on it.
+
+**Done when:** each command's JSON output is validated against a published schema in the tests; the study schema accepts every example and test study and rejects the invalid ones `parseStudy` rejects.
+
+## vproc | Virtual process simulator and exercise generator | M6 Docs | docs, simulation
+Spec §16.2. Seeded virtual processes with a hidden true model (effect sparsity, heredity, curvature, effects sized in units of σ, optional transform, several responses, constraints, categorical factors) and switchable nuisance (noise, nested measurement error, whole-plot variance, block shifts, drift, outliers, gauge bias); engineering scenario templates with units and ranges. Results are a deterministic function of (seed, settings, replicate index); run budget.
+
+Exercise generator: `generateExercise({ topic, difficulty, seed, … })` → scenario, study without a design, budget, questions, sealed truth. Solvability check by a scripted reference strategy per topic, using power (#power); the reference path becomes the model answer. Grader: active factors (precision / recall), effect signs and sizes, best settings by true regret and constraint violations, predictions, confirmation, budget. Class mode in the CLI: `doe exercise new --set`, `doe exercise run KEY sheet.csv`, `doe exercise grade KEY STUDY`.
+
+Also replaces the hand-written simulated data of the UI examples.
+
+**Done when:** across topics × difficulties × 50 seeds, the reference strategy earns full marks and a one-factor-at-a-time strategy scores lower; exercises are reproducible from the seed; class-mode round trip works from the CLI.
+
+## tutorial | Interactive tutorial (Learn mode) | M6 Docs | docs, ui
+Spec §16.2. A *Learn* mode in the UI: lessons 1–13 of §16.2, each an explanation linked to the manual, a task on an exercise from #vproc, in-context hints while working, and graded feedback with the model answer and the revealed truth; lessons for unbuilt features shown locked; progress kept per browser; exercises shareable by link.
+
+**Done when:** each available lesson can be completed in the browser (Playwright: the reference strategy, driven through the UI, gets full marks); lesson text links resolve to manual sections.
+
+## agent-skill | Agent skill and llms.txt | M6 Docs | docs
+Spec §16.3. `skills/aikidoe/SKILL.md` (Agent Skills format) with reference files: when to use, workflow, elicitation checklist, design decision guide (mirrors #json-cli's recommender), CLI recipes with `--json`, rules (never invent results, keep randomisation, check estimability and power, state aliasing, sequential experimentation, intervals, hand cost/safety decisions back), links to the generated CLI and format references. `llms.txt` at the Pages root. Optional: `tools/mcp.mjs`, an MCP server over the JSON CLI.
+
+- Every recipe is executed in CI; reference files regenerated and diffed.
+- Manual (needs a model, not in CI): an agent with only the skill solves #vproc exercises through a simulated user; scores recorded in `docs/agent-eval.md`.
+
+**Done when:** recipes pass in CI and a first agent evaluation is recorded.
