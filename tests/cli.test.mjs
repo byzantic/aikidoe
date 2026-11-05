@@ -56,6 +56,16 @@ try {
   r = run('sheet', S);
   check('sheet to stdout includes the results', r.code === 0 && parseCSV(r.out).rows.every(row => row[parseCSV(r.out).header.indexOf('yield')] !== ''));
 
+  section('response-surface designs');
+  writeFileSync(join(dir, 'rs.aikidoe.json'), readFileSync(join(dir, S), 'utf8'));
+  r = run('init', 'ccd.aikidoe.json', '--seed', '1', '--factor', 'T:140:180', '--factor', 'P:1:3', '--factor', 'C:2:8:%:log', '--response', 'y');
+  r = run('design', 'ccd.aikidoe.json', '--ccd');
+  check('design --ccd: rotatable, uniform-precision centre points, variance profile', r.code === 0 && /20 runs/.test(r.out) && /α = 1\.6818 \(rotatable\)/.test(r.out) && /centre points 6/.test(r.out) && /scaled prediction variance/.test(r.out), r.out + r.err);
+  r = run('design', 'ccd.aikidoe.json', '--ccd', '--alpha', 'faces', '--blocks', '--centre', '2,2', '--force');
+  check('design --ccd faces, blocked', r.code === 0 && /α = 1 \(faces\)/.test(r.out) && /2 per cube block, 2 in the axial block/.test(r.out), r.out + r.err);
+  r = run('design', 'ccd.aikidoe.json', '--bbd', '--force');
+  check('design --bbd', r.code === 0 && /box-behnken, 15 runs/.test(r.out), r.out + r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');
