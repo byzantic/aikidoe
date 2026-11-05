@@ -5,14 +5,33 @@ Design of Experiments assistant, in the browser: screening, response surfaces, s
 - Specification: [docs/spec.md](docs/spec.md)
 - Work plan: GitHub issues and milestones (drafts in [planning/issues.md](planning/issues.md), filed by `tools/file-issues.py`).
 
-Status: milestone M1 (core) — designs, fitting and run sheets from the command line; browser UI from M2. MIT licence.
+Status: M1 (core) complete; M2 in progress — screening, response-surface designs and the first browser UI. MIT licence.
 
 ## Development
 
 ```sh
 npm test                 # all tests; Node ≥ 20, no dependencies
 npm run fixtures:check   # regenerate reference fixtures with R/Python and compare (see tests/ref/README.md)
+npm run test:ui          # browser smoke test (needs Playwright with Chromium)
 ```
+
+## Browser UI
+
+```sh
+npm run ui        # → http://localhost:8080/
+```
+
+Four steps, each usable on its own: **Define** factors, responses, constraints and drop-in
+sites; **Design** — compare candidate designs (fractions, Plackett–Burman, full factorial,
+central composite, Box–Behnken) with their aliasing or prediction-variance diagnostics, then
+create one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
+printable sheet; **Analyse** — fit a formula, ANOVA with lack of fit, Lenth's method with a
+half-normal plot, residual plots and Box–Cox. The study is autosaved in the browser; **Save**
+downloads it as a `.aikidoe.json` file and **Link** puts it, compressed, in the URL. The
+examples include simulated results so every step can be tried at once.
+
+There is no build step: the page loads the same ES modules as the command line. It needs a
+local web server (`npm run ui`) because browsers do not load modules from `file://`.
 
 ## Command line
 
