@@ -205,6 +205,7 @@ function uniqueRows(rows) { const seen = new Map(); for (const r of rows) seen.s
 export function toStudyDesign(study, design, opts = {}) {
   const factors = study.factors;
   if (factors.length !== design.levels.length) throw new Error(`the design has ${design.levels.length} factors, the study ${factors.length}`);
+  if (design.continuousOnly) for (const f of factors) if (f.type === 'categorical') throw new Error(`a ${design.kind} design needs continuous factors; ${f.id} is categorical`);
   factors.forEach((f, j) => {
     const m = design.levels[j];
     if (f.type === 'categorical' && f.levels.length !== m) throw new Error(`factor ${f.id} has ${f.levels.length} levels but the design gives it ${m}`);

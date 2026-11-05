@@ -48,7 +48,7 @@ doe fit reactor.aikidoe.json "yield ~ F*T + Conc" --anova 2 --boxcox
 | command | does |
 |---|---|
 | `init STUDY --factor … --response …` | create a study file |
-| `design STUDY --full \| --runs N \| --generators "E=ABCD" \| --pb` | add a design (`--centre`, `--replicates`, `--blocks`, `--seed`); write run sheets |
+| `design STUDY --full \| --runs N \| --generators "E=ABCD" \| --pb \| --ccd \| --bbd` | add a design (`--centre`, `--replicates`, `--blocks`, `--seed`; for `--ccd`: `--alpha`, `--inscribed`, `--cube-runs`); write run sheets |
 | `sheet STUDY [--csv F] [--html F]` | run sheet, with any results so far |
 | `import STUDY RESULTS.csv [--dry-run] [--mode append]` | read a filled sheet or long-format results, with checks |
 | `fit STUDY "y ~ formula" [--anova 1\|2\|3] [--lenth] [--boxcox]` | coefficients, fit statistics, ANOVA with lack of fit, Lenth, Box–Cox |
