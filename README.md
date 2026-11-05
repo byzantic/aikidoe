@@ -30,6 +30,9 @@ half-normal plot, residual plots and Box–Cox. The study is autosaved in the br
 downloads it as a `.aikidoe.json` file and **Link** puts it, compressed, in the URL. The
 examples include simulated results so every step can be tried at once.
 
+Once GitHub Pages is enabled (Settings → Pages → Source: GitHub Actions), every push to main
+publishes the UI at https://byzantic.github.io/aikidoe/ (workflow `pages`, after the tests pass).
+
 There is no build step: the page loads the same ES modules as the command line. It needs a
 local web server (`npm run ui`) because browsers do not load modules from `file://`.
 
