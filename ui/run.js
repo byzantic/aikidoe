@@ -71,7 +71,8 @@ export function render({ state, update, setDoc, setUI, go }) {
   const rows = [];
   let prev;
   sheet.rows.forEach((row) => {
-    if (groupKey && row[H.indexOf(groupKey)] !== prev) { prev = row[H.indexOf(groupKey)]; rows.push(h('tr', { class: 'group' }, h('td', { colspan: H.length - 1 }, `${groupKey === 'wholePlot' ? 'Whole plot' : 'Block'} ${prev}`))); }
+    if (groupKey && row[H.indexOf(groupKey)] !== prev) { prev = row[H.indexOf(groupKey)]; rows.push(h('tr', { class: 'group' }, h('td', { colspan: H.length - 1 }, `${groupKey === 'wholePlot' ? 'Whole plot' : 'Block'} ${prev}`,
+      groupKey === 'wholePlot' ? h('span', { class: 'muted' }, ` — set once: ${study.factors.filter(f => f.htc).map(f => `${f.name} ${row[H.indexOf(f.id)]}${f.units ? ` ${f.units}` : ''}`).join(', ')}`) : null))); }
     rows.push(h('tr', { 'data-run': row[iRun] }, H.map((key, j) => {
       if (key === 'note') return null;
       const ri = resIdx.indexOf(j);

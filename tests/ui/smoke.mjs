@@ -150,6 +150,33 @@ try {
   check('confirmation results checked: outside the interval', /outside/.test(await page.textContent('#confirm')) && /28 runs/.test(await page.textContent('#fit-stats')));
   await shot('6-sequential');
 
+  section('split-plot designs (issue #14)');
+  await page.click('#btn-examples'); await page.click('[data-example="reactor-plan"]'); await settle();
+  await page.click('[data-step="define"]'); await settle();
+  await page.check('tr[data-factor]:nth-child(4) input[aria-label="hard to change"]'); await settle();   // T
+  await page.click('[data-step="design"]'); await settle();
+  check('htc factor: split-plot candidates offered', (await page.locator('tr[data-design="sp-frac-16"]').count()) === 1 && (await page.locator('tr[data-design="sp-optimal"]').count()) === 1);
+  await page.click('tr[data-design="sp-frac-16"]'); await settle();
+  check('split-plot fraction: whole plots and whole-plot effects shown', /2 whole plots of 8 runs/.test(await page.textContent('main')) && /Whole-plot effects/.test(await page.textContent('main')));
+  await page.selectOption('select[aria-label="whole plots"]', '4'); await settle();
+  check('4 whole plots of 4', (await page.getAttribute('[data-whole-plots]', 'data-whole-plots')) === '4');
+  await page.click('tr[data-design="sp-optimal"]'); await settle();
+  await page.fill('input[aria-label="optimal model"]', 'main + F:T'); await page.keyboard.press('Tab'); await settle();
+  await page.fill('input[aria-label="optimal runs"]', '16'); await page.keyboard.press('Tab'); await settle();
+  await page.fill('input[aria-label="optimal whole plots"]', '4'); await page.keyboard.press('Tab'); await settle();
+  await page.fill('input[aria-label="restarts"]', '5'); await page.keyboard.press('Tab'); await settle();
+  await page.click('#search-optimal');
+  await page.waitForSelector('[data-whole-plots]', { timeout: 30000 });
+  check('optimal split-plot searched in the worker', (await page.getAttribute('[data-whole-plots]', 'data-whole-plots')) === '4' && /log\|XᵀV⁻¹X\|/.test(await page.textContent('main')));
+  await page.click('#create-design'); await settle();
+  s = await state();
+  const T = s.study.factors.find(f => f.id === 'T');
+  const byWP = new Map(); for (const r of s.study.design.runs) { if (!byWP.has(r.wholePlot)) byWP.set(r.wholePlot, new Set()); byWP.get(r.wholePlot).add(r.settings.T); }
+  check('created: restricted randomisation, T constant within each whole plot', s.study.design.randomisation === 'restricted' && T.htc && [...byWP.values()].every(v => v.size === 1) && byWP.size === 4);
+  const ord = s.study.design.runs.slice().sort((a, b) => a.order - b.order).map(r => r.wholePlot);
+  check('run sheet order keeps whole plots together', ord.every((w, i) => i === 0 || w === ord[i - 1] || !ord.slice(0, i).includes(w)));
+  await shot('7-split-plot');
+
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide']) {
     await page.click('#btn-examples'); await page.click(`[data-example="${id}"]`); await page.waitForTimeout(300);

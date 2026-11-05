@@ -48,8 +48,9 @@ screening study, from nothing to the active effects:
 ```sh
 doe init reactor.aikidoe.json --name "Reactor screening" --seed 7 \
     --factor F:10:15:L/min --factor Cat:1:2:% --factor RPM:100:120 \
-    --factor T:140:180:°C! --factor Conc:3:6:% --response yield:%
-#   (id:low:high[:units][:log]; id=a,b,c for a categorical factor; a trailing ! marks it hard to change)
+    --factor T:140:180:°C --factor Conc:3:6:% --response yield:%
+#   (id:low:high[:units][:log]; id=a,b,c for a categorical factor; a trailing ! marks it hard to
+#    change, and --full, --runs and --optimal then give split-plot designs: --whole-plots W, --eta η)
 
 doe design reactor.aikidoe.json --runs 16 --sheet sheet.csv --html sheet.html
 #   fractional-factorial, 16 runs, randomisation complete, seed 7

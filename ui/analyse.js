@@ -68,6 +68,7 @@ export function render(ctx) {
   const notes = [];
   if (fit.rows.some(r => r.n > 1)) notes.push('Repeated observations of a run (wafers, sites, repeats) are averaged: this least-squares fit uses run means. Mixed models for nested measurements come in a later version.');
   for (const v of hierarchyViolations(fit.model)) notes.push(`${v.term} is in the model without ${v.missing.join(', ')}.`);
+  if (study.design.runs.some(r => r.wholePlot !== undefined)) notes.push('Split-plot design: this least-squares fit treats every run as independent, so the standard errors and tests of whole-plot effects are too optimistic. The REML analysis with the whole-plot error comes in issue #15.');
   if (fit.aliased.length) notes.push(`Not estimable (aliased with earlier terms): ${fit.aliased.join(', ')}.`);
   const missingRuns = study.design.runs.filter(r => r.kind !== 'confirm').length - fit.n;
   if (fit.model.terms[0]?.block) notes.push(`The design has ${fit.factors.find(f => f.block).levels.length} blocks (stages); a block term is fitted first so shifts between them do not bias the effects.`);

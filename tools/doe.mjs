@@ -12,6 +12,8 @@
 //                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
 //                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
 //        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
+//        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
+//        [--whole-plots W] [--eta η (optimal; σ²_wp/σ², default 1)] [--no-split-plot]
 //        [--sheet FILE.csv] [--html FILE.html]
 //   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
 //   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
@@ -34,6 +36,7 @@ import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
 import { optimalDesign } from '../js/design/optimal.js';
+import { splitPlotFraction, splitPlotFull, optimalSplitPlot } from '../js/design/splitplot.js';
 import * as T from '../js/design/twolevel.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import { runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
@@ -103,8 +106,25 @@ function cmdDesign({ pos, opt }) {
     ...(opt.blocks && !rsmDesign ? { blocks: int(opt.blocks, 'blocks') } : {}),
     continuous: study.factors.map(f => f.type === 'continuous') };
   let d;
+  const htc = study.factors.map(f => !!f.htc), split = htc.some(Boolean) && !opt['no-split-plot'];
+  if (split && !(opt.full || opt.runs || opt.optimal) || split && (opt.pb || opt.ccd || opt.bbd || opt.dsd || opt.generators))
+    fail(`hard-to-change factors (${study.factors.filter(f => f.htc).map(f => f.id).join(', ')}): split-plot designs are available for --full, --runs N and --optimal; use --no-split-plot to randomise completely instead`);
+  if (split && (opt.centre || opt.blocks)) fail('centre points and blocks are not available for split-plot designs yet (replicates are: --replicates n)');
   const centreOpt = opt.centre === undefined ? undefined : String(opt.centre).includes(',') ? String(opt.centre).split(',').map(v => int(v, 'centre')) : int(opt.centre, 'centre');
-  if (opt.dsd) {
+  if (split) {
+    const k1 = htc.filter(Boolean).length;
+    const reps = opt.replicates ? int(opt.replicates, 'replicates') : 1;
+    if (opt.optimal) {
+      if (!opt['whole-plots']) fail('--optimal with hard-to-change factors needs --whole-plots W (and --runs N, a multiple of W)');
+      d = optimalSplitPlot(study, { runs: int(opt.runs ?? fail('--optimal needs --runs N'), 'runs'), wholePlots: int(opt['whole-plots'], 'whole-plots'), model: opt.model ?? 'main',
+        eta: opt.eta !== undefined ? Number(opt.eta) : 1, ...(opt.restarts ? { restarts: int(opt.restarts, 'restarts') } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
+    } else if (opt.full) d = splitPlotFull(study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels ? f.levels.length : 2)), htc, { replicates: reps, replicateBlocks: !!opt['replicate-blocks'] });
+    else {
+      const N = int(opt.runs, 'runs');
+      const W = opt['whole-plots'] ? int(opt['whole-plots'], 'whole-plots') : Math.min(2 ** k1, N / 2);
+      d = splitPlotFraction(htc, { runs: N, wholePlots: W, replicates: reps, names: study.factors.map(f => f.id) });
+    }
+  } else if (opt.dsd) {
     const cats = study.factors.map((f, j) => (f.type === 'categorical' ? j : -1)).filter(j => j >= 0);
     if (cats.some(j => study.factors[j].levels.length !== 2)) fail('definitive screening designs allow only two-level categorical factors');
     d = definitiveScreening(k, { fake: opt.fake ? int(opt.fake, 'fake') : 0, ...(centreOpt !== undefined ? { centre: centreOpt } : {}), categorical: cats });
@@ -122,10 +142,22 @@ function cmdDesign({ pos, opt }) {
   else if (opt.full) d = fullFactorial(study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels ? f.levels.length : 2)), common);
   else fail('design: choose --full, --runs N, --generators …, --pb, --ccd or --bbd');
   const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
-  const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed }), observations: [] });
+  const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed, ...(opt['no-split-plot'] && htc.some(Boolean) ? { randomise: 'complete' } : {}) }), observations: [] });
   save(file, next);
   out(`${file}: ${d.kind}, ${next.design.runs.length} runs, randomisation ${next.design.randomisation}, seed ${seed}`);
-  if (d.params.resolution) {
+  if (d.wholePlot) {
+    const W = new Set(d.wholePlot).size;
+    out(`split-plot: ${W} whole plots${d.params.runsPerWholePlot ? ` of ${d.params.runsPerWholePlot} runs` : ''}; whole-plot (hard-to-change) factors ${study.factors.filter(f => f.htc).map(f => f.id).join(', ')} are set once per whole plot`);
+    if (d.kind === 'split-plot-fraction') {
+      out(`resolution ${roman(d.params.resolution)}; generators ${d.params.generators.join(', ') || 'none'}`);
+      out(`whole-plot effects (tested against the whole-plot error): ${d.params.wholePlotEffects.join(', ')}`);
+      if (d.params.aliasChains.length) out(`alias chains (main effects and 2fis): ${d.params.aliasChains.join('; ')}`);
+    }
+    if (d.kind === 'optimal-split-plot') out(`D-optimal for ${d.params.model} with η = ${d.params.eta}: log|XᵀV⁻¹X| = ${num(d.params.logDet, 6)} (${d.params.restarts} starts)`);
+    const nWP = d.params.wholePlotEffects ? d.params.wholePlotEffects.length : k1Count(study), what = d.params.wholePlotEffects ? 'whole-plot main effects and 2fis' : 'whole-plot main effects';
+    if (W - 1 - nWP < 2) out(`note: ${W} whole plots leave ${Math.max(0, W - 1 - nWP)} df for the whole-plot error after the ${what}: too few to test them; more whole plots (--whole-plots) or replicates (--replicates) would help`);
+  }
+  if (d.params.resolution && !d.wholePlot) {
     const ids = study.factors.map(f => f.id), q = Math.log2(d.params.runs);
     const gens = d.params.generators.map((g, j) => { const [, w] = g.split('='); const neg = w.startsWith('-'); return `${ids[q + j]} = ${neg ? '−' : ''}${maskNames(T.wordToMask(w.replace('-', ''), q), ids)}`; });
     out(`resolution ${roman(d.params.resolution)}; generators ${gens.join(', ')}  (see: alias ${file})`);
@@ -187,6 +219,7 @@ function cmdFit({ pos, opt }) {
   }
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
   out(`${fit.n} runs, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.rows.some(r => r.n > 1) ? '; per-run means of repeated observations' : ''}`);
+  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this least-squares fit treats all runs as independent, so the standard errors and tests of whole-plot effects are too optimistic (REML analysis: issue #15)');
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
   out('');
@@ -317,6 +350,15 @@ function cmdAlias({ pos, opt }) {
     names = study.factors.map(f => f.id);
     const p = study.design?.params;
     if (!p) fail('the study has no design');
+    if (study.design.kind === 'split-plot-fraction') {
+      out(`split-plot fraction: ${p.runs} runs in ${p.wholePlots} whole plots; whole-plot factors ${p.wholePlotFactors.join(', ')}; resolution ${roman(p.resolution)}`);
+      out(`generators: ${p.generators.join(', ') || 'none'}`);
+      out(`defining relation: I = ${p.definingRelation.join(' = ') || '(none)'}`);
+      out(`word-length pattern (A3, A4, …): ${p.wlp.slice(2).join(', ')}`);
+      out(p.aliasChains.length ? `alias chains among main effects and 2fis:\n${p.aliasChains.map(c => `  ${c}`).join('\n')}` : 'no aliasing among main effects and 2fis');
+      out(`whole-plot effects: ${p.wholePlotEffects.join(', ')}`);
+      return;
+    }
     if (p.generators) { const q = Math.log2(p.runs); d = T.regularDesign(q, p.generators.map(g => g.split('=')[1])); label = `${study.factors.length} factors in ${p.runs} runs`; }
     else if (study.design.kind === 'plackett-burman') {
       const X = study.design.runs.map(r => study.factors.map(f => ((f.type === 'categorical' ? r.settings[f.id] === f.levels[1] : r.settings[f.id] === f.high) ? 1 : -1)));
@@ -366,6 +408,7 @@ function cmdInfo({ pos }) {
   out(`design: ${s.design.kind}, ${runs.length} runs, randomisation ${s.design.randomisation}; results for ${done.size} of ${runs.length} runs`);
 }
 
+const k1Count = (study) => study.factors.filter(f => f.htc).reduce((a, f) => a + (f.type === 'categorical' ? f.levels.length - 1 : 1), 0);
 const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'][n] ?? String(n) : '∞');
 
 // ---------------------------------------------------------------- main
@@ -376,7 +419,7 @@ function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 30).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 32).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];

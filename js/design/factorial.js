@@ -200,7 +200,9 @@ function uniqueRows(rows) { const seen = new Map(); for (const r of rows) seen.s
  * Convert a generated design to study.design: natural settings via the study's factors (in
  * order), run ids 1 … N in standard order, and a seeded randomised execution order.
  * opts.seed (default study.seed); opts.randomise: 'complete' (default) | 'blocked' (default when
- * there are blocks: block order and run order within blocks randomised) | 'none'.
+ * there are blocks: block order and run order within blocks randomised) | 'restricted' (default
+ * for split-plot designs, which carry design.wholePlot: whole plots in random order — within
+ * blocks if any — and runs in random order within each whole plot) | 'none'.
  */
 export function toStudyDesign(study, design, opts = {}) {
   const factors = study.factors;
@@ -223,9 +225,11 @@ export function toStudyDesign(study, design, opts = {}) {
   const runs = design.X.map((row, i) => {
     const r = { run: i + 1, kind: design.runKind[i], settings: Object.fromEntries(factors.map((f, j) => [f.id, setting(f, j, row[j])])) };
     if (design.block) r.block = design.block[i];
+    if (design.wholePlot) r.wholePlot = design.wholePlot[i];
     return r;
   });
-  const mode = opts.randomise ?? (design.block ? 'blocked' : 'complete');
+  const mode = opts.randomise ?? (design.wholePlot ? 'restricted' : design.block ? 'blocked' : 'complete');
+  if (design.wholePlot && mode === 'complete') throw new Error('a split-plot design cannot be completely randomised: its whole plots would be broken up');
   const g = rng(opts.seed ?? study.seed);
   let order;
   if (mode === 'none') order = runs.map(r => r.run);
@@ -234,7 +238,15 @@ export function toStudyDesign(study, design, opts = {}) {
     if (!design.block) throw new Error('blocked randomisation needs blocks');
     const labels = g.shuffle([...new Set(design.block)].sort((a, b) => a - b));
     order = labels.flatMap(b => g.shuffle(runs.filter(r => r.block === b).map(r => r.run)));
+  } else if (mode === 'restricted') {
+    if (!design.wholePlot) throw new Error('restricted randomisation needs whole plots');
+    const blocks = design.block ? g.shuffle([...new Set(design.block)].sort((a, b) => a - b)) : [undefined];
+    order = blocks.flatMap(b => {
+      const inB = runs.filter(r => b === undefined || r.block === b);
+      const wps = g.shuffle([...new Set(inB.map(r => r.wholePlot))].sort((a, b2) => a - b2));
+      return wps.flatMap(w => g.shuffle(inB.filter(r => r.wholePlot === w).map(r => r.run)));
+    });
   } else throw new Error(`unknown randomisation "${mode}"`);
   order.forEach((run, i) => { runs[run - 1].order = i + 1; });
-  return { kind: design.kind, params: { ...design.params, seed: opts.seed ?? study.seed }, randomisation: mode === 'blocked' ? 'blocked' : mode, runs };
+  return { kind: design.kind, params: { ...design.params, seed: opts.seed ?? study.seed }, randomisation: mode, runs };
 }

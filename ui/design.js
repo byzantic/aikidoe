@@ -14,18 +14,27 @@ import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
 import { parseFormula } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
 import { designPower, detectableEffect } from '../js/model/power.js';
+import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
 
 // the optimal-design search runs in a worker; one search at a time
 let worker = null, searchId = 0;
-function search(study, opts, onDone) {
+function search(study, opts, onDone, extra = {}) {
   worker?.terminate();
   worker = new Worker(new URL('./optimal-worker.js', import.meta.url), { type: 'module' });
   const id = ++searchId;
   worker.onmessage = (e) => { if (e.data.id === id) { onDone(e.data); worker.terminate(); worker = null; } };
   worker.onerror = (e) => { onDone({ ok: false, error: e.message || 'the search failed' }); worker = null; };
-  worker.postMessage({ study, opts, id });
+  worker.postMessage({ study, opts, id, ...extra });
 }
-const optKey = (o) => JSON.stringify([o.optRuns, o.optModel, o.optCriterion, o.optRestarts, o.seed]);
+const optKey = (o) => JSON.stringify([o.optRuns, o.optModel, o.optCriterion, o.optRestarts, o.seed, o.optWholePlots, o.optEta]);
+
+// whole-plot choices for a split-plot fraction of N runs: 2^q1 plots with room for the factors
+function wholePlotChoices(k1, k2, N) {
+  const out = [];
+  for (let W = 2; W < N; W *= 2) if (k1 <= W - 1 && k2 <= N - W) out.push(W);
+  return out;
+}
+const defaultWholePlots = (k1, k2, N) => { const c = wholePlotChoices(k1, k2, N); return c.find(W => W >= 2 ** k1) ?? c[c.length - 1]; };
 
 const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n] ?? String(n) : 'full');
 
@@ -59,7 +68,21 @@ export function candidates(study) {
   }
   const sorted = out.sort((a, b) => a.runs - b.runs);
   sorted.push({ id: 'optimal', kind: 'optimal', label: 'Optimal (custom)', runs: null, note: 'D-, I- or A-optimal for a model you choose; respects constraints' });
-  return sorted;
+  const htc = f.map(x => !!x.htc), k1 = htc.filter(Boolean).length;
+  if (!k1 || k1 === k) return sorted;
+  // hard-to-change factors: factorial designs become split-plots; the others ignore the restriction
+  const sp = [];
+  for (const c of sorted) {
+    if (c.kind === 'full') sp.push({ ...c, id: 'sp-full', kind: 'sp-full', label: 'Split-plot full factorial', note: `${new Set(fullFactorial(levels).X.map(r => r.filter((_, j) => htc[j]).join())).size} whole plots; ${c.note}` });
+    else if (c.kind === 'fraction') {
+      const W = defaultWholePlots(k1, k - k1, c.runs);
+      if (!W) continue;
+      let res = null; try { res = splitPlotFraction(htc, { runs: c.runs, wholePlots: W }).params.resolution; } catch { continue; }
+      sp.push({ ...c, id: `sp-frac-${c.runs}`, kind: 'sp-frac', label: `Split-plot 2^(${k}−${k - Math.log2(c.runs)}) fraction`, res, note: `${W} whole plots by default; whole-plot factors constant within each` });
+    } else if (c.kind === 'optimal') sp.push({ id: 'sp-optimal', kind: 'sp-optimal', label: 'Optimal split-plot', runs: null, note: 'D-optimal for your model, number of whole plots and assumed variance ratio η' });
+    else sp.push({ ...c, note: `${c.note}; ignores hard-to-change factors (completely randomised)`, ignoresHtc: true });
+  }
+  return sp;
 }
 
 /** Build the design object for a candidate and the UI options. */
@@ -75,6 +98,12 @@ function build(study, cand, o) {
     case 'bbd': return boxBehnken(study.factors.length, { centre: o.centre === '' || o.centre === undefined ? 3 : Number(o.centre), blocks: !!o.rsmBlocks });
     case 'dsd': return definitiveScreening(study.factors.length, { fake: o.fake ?? 0, centre: o.centre === '' || o.centre === undefined ? 1 : Number(o.centre),
       categorical: study.factors.map((x, j) => (x.type === 'categorical' ? j : -1)).filter(j => j >= 0) });
+    case 'sp-full': return splitPlotFull(study.factors.map(x => (x.type === 'categorical' ? x.levels.length : x.levels ? x.levels.length : 2)), study.factors.map(x => !!x.htc), { replicates: o.replicates || 1 });
+    case 'sp-frac': {
+      const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length;
+      return splitPlotFraction(htc, { runs: cand.opts.runs, wholePlots: o.wholePlots ?? defaultWholePlots(k1, htc.length - k1, cand.opts.runs), replicates: o.replicates || 1, names: study.factors.map(x => x.id) });
+    }
+    case 'sp-optimal':
     case 'optimal': {
       const r = o.optResult;
       if (!r || r.key !== optKey(o)) return null;          // not searched yet for these options
@@ -92,28 +121,32 @@ export function render(ctx) {
   const ui = state.ui.design ??= {};
   const cands = candidates(study);
   if (!cands.length) return h('section', { class: 'panel' }, h('h2', {}, 'Design'), h('div', { class: 'msg warning' }, 'No design is available for these factors yet.'));
-  const cand = cands.find(c => c.id === ui.id) ?? cands.find(c => c.kind === 'fraction' && c.res >= 4) ?? cands[0];
+  const cand = cands.find(c => c.id === ui.id) ?? cands.find(c => (c.kind === 'fraction' || c.kind === 'sp-frac') && c.res >= 4) ?? cands[0];
   const set = (patch) => setUI({ design: { ...ui, ...patch } });
 
   // ---------------------------------------------------------------- candidates
   const list = h('section', { class: 'panel' }, h('h2', {}, `Designs for ${study.factors.length} factors`),
     dataTable([
       { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n' },
-      { key: 'res', label: 'resolution', fmt: (v, r) => (['ccd', 'bbd', 'dsd', 'optimal'].includes(r.kind) ? '—' : roman(v)) }, { key: 'note', label: '' },
+      { key: 'res', label: 'resolution', fmt: (v, r) => (['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) }, { key: 'note', label: '' },
     ], cands, { rowAttrs: (r) => ({ class: `click ${r.id === cand.id ? 'sel' : ''}`, 'data-design': r.id, onclick: () => set({ id: r.id, centre: undefined, blocks: undefined, rsmBlocks: false }) }) }),
     h('p', { class: 'muted small' }, 'Resolution III: main effects aliased with two-factor interactions; IV: main effects clear, 2fis aliased with each other; V: main effects and 2fis clear. Response-surface designs (central composite, Box–Behnken) estimate a full quadratic.'));
 
   // ---------------------------------------------------------------- options
-  const isRSM = cand.kind === 'ccd' || cand.kind === 'bbd' || cand.kind === 'dsd' || cand.kind === 'optimal';
+  const isRSM = cand.kind === 'ccd' || cand.kind === 'bbd' || cand.kind === 'dsd' || cand.kind === 'optimal' || cand.kind === 'sp-optimal';
+  const isSP = cand.kind.startsWith('sp-');
   const field = (label, el) => h('label', { class: 'inline' }, label, el);
   const numIn = (key, attrs = {}) => h('input', { class: 'num', type: 'number', min: 0, value: ui[key] ?? '', ...attrs, onchange: (e) => set({ [key]: e.target.value === '' ? undefined : Number(e.target.value) }) });
   const options = h('div', { class: 'row' },
-    cand.kind !== 'pb' && cand.kind !== 'optimal' ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
+    cand.kind !== 'pb' && cand.kind !== 'optimal' && !isSP ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
+    cand.kind === 'sp-frac' ? (() => { const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length; const ch = wholePlotChoices(k1, htc.length - k1, cand.opts.runs);
+      return field('whole plots', select(ch.map(W => ({ value: W, label: `${W} of ${cand.opts.runs / W} runs` })), ui.wholePlots ?? defaultWholePlots(k1, htc.length - k1, cand.opts.runs), (v) => set({ wholePlots: Number(v) }), { 'aria-label': 'whole plots' })); })() : null,
+    cand.kind === 'sp-optimal' ? optimalOptions(study, ui, set, true) : null,
     cand.kind === 'dsd' ? field('fake factors', select([0, 1, 2, 3, 4], ui.fake ?? 0, (v) => set({ fake: Number(v) }), { 'aria-label': 'fake factors', title: 'extra conference-matrix columns, dropped; 2 improves estimation of second-order effects (Jones & Nachtsheim 2013)' })) : null,
     cand.kind === 'optimal' ? optimalOptions(study, ui, set) : null,
     cand.kind === 'ccd' && ui.rsmBlocks ? field('in the axial block', numIn('centreAxial', { placeholder: 'same' })) : null,
     !isRSM && cand.kind !== 'pb' ? field('replicates', numIn('replicates', { min: 1, placeholder: '1' })) : null,
-    !isRSM && cand.kind !== 'pb' && study.factors.every(f => f.type === 'continuous' || f.levels?.length === 2) ? field('blocks', select([1, 2, 4, 8], ui.blocks ?? 1, (v) => set({ blocks: Number(v) }), { 'aria-label': 'blocks' })) : null,
+    !isRSM && !isSP && cand.kind !== 'pb' && study.factors.every(f => f.type === 'continuous' || f.levels?.length === 2) ? field('blocks', select([1, 2, 4, 8], ui.blocks ?? 1, (v) => set({ blocks: Number(v) }), { 'aria-label': 'blocks' })) : null,
     cand.kind === 'ccd' ? field('α', select([{ value: '', label: 'rotatable' }, { value: 'orthogonal', label: 'orthogonal' }, { value: 'spherical', label: 'spherical (√k)' }, { value: 'faces', label: 'face-centred (1)' }, { value: 'number', label: 'value…' }], ui.alpha ?? '', (v) => set({ alpha: v || undefined }), { 'aria-label': 'alpha' })) : null,
     cand.kind === 'ccd' && ui.alpha === 'number' ? h('input', { class: 'num', type: 'number', step: 0.01, value: ui.alphaValue ?? 1.5, onchange: (e) => set({ alphaValue: Number(e.target.value) }) }) : null,
     cand.kind === 'ccd' ? field('inscribed', h('input', { type: 'checkbox', checked: !!ui.inscribed, onchange: (e) => set({ inscribed: e.target.checked }) })) : null,
@@ -125,7 +158,8 @@ export function render(ctx) {
   let body;
   if (err) body = h('div', { class: 'msg error' }, err);
   else if (!d) body = h('div', { class: 'msg' }, ui.searching ? 'Searching… (several random starts of a coordinate-exchange search)' : 'Set the model, runs and criterion, then search.');
-  else body = h('div', {}, diagnostics(study, d, cand.kind === 'dsd' ? 'quadratic' : null), powerSection(study, d, cand, ui, set));
+  else body = h('div', {}, cand.ignoresHtc ? h('div', { class: 'msg warning' }, `This design ignores the hard-to-change factors: runs are completely randomised, so ${study.factors.filter(f => f.htc).map(f => f.id).join(', ')} must be reset for every run. Split-plot versions are offered for factorial and optimal designs.`) : null,
+    diagnostics(study, d, cand.kind === 'dsd' ? 'quadratic' : null), powerSection(study, d, cand, ui, set));
   const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label), options, body);
   if (!d) err = err ?? 'not searched';
 
@@ -181,6 +215,22 @@ function diagnostics(study, d, modelFor) {
         vlines: [{ x: 1, label: 'cube', cls: 's2' }] })),
       h('p', { class: 'muted small' }, p.every(x => x.max - x.min < 1e-6 * x.max) ? 'Rotatable: the variance depends only on the distance from the centre.' : 'Solid: largest, dashed: smallest variance over directions at each distance.'));
   }
+  if (d.wholePlot) {
+    const W = new Set(d.wholePlot).size, sizes = [...new Set(d.wholePlot)].map(w => d.wholePlot.filter(x => x === w).length);
+    const wpF = study.factors.filter(f => f.htc).map(f => f.id);
+    parts.push(h('h3', {}, 'Whole plots'), h('p', { class: 'small', 'data-whole-plots': W },
+      `${W} whole plots of ${Math.min(...sizes) === Math.max(...sizes) ? sizes[0] : `${Math.min(...sizes)}–${Math.max(...sizes)}`} runs. ${wpF.join(', ')} ${wpF.length > 1 ? 'are' : 'is'} set once per whole plot; the other factors change from run to run inside it. Whole plots are run in random order, and runs in random order within each.`));
+    if (d.params.wholePlotEffects) {
+      const nWP = d.params.wholePlotEffects.length, df = W - 1 - nWP;
+      parts.push(h('div', { class: 'mono small' }, `generators: ${d.params.generators.join(', ') || 'none'}`),
+        h('div', { class: 'small' }, 'Whole-plot effects (estimated against the larger whole-plot variance): ', h('span', { class: 'mono' }, d.params.wholePlotEffects.join(', '))),
+        d.params.aliasChains.length ? h('details', { open: d.params.aliasChains.length <= 12 }, h('summary', {}, `${d.params.aliasChains.length} alias chains among main effects and two-factor interactions`), h('div', { class: 'mono small', 'data-aliases': '' }, d.params.aliasChains.map(c => h('div', {}, c))))
+          : h('div', { class: 'msg ok' }, 'No aliasing among main effects and two-factor interactions.'),
+        W - 1 - nWP < 2 ? h('div', { class: 'msg warning' }, `${W} whole plots leave ${Math.max(0, df)} degrees of freedom for the whole-plot error after the whole-plot effects above: too few to test them. Use more whole plots or replicate.`) : null);
+    }
+    if (d.kind === 'optimal-split-plot') parts.push(h('div', { class: 'row small', 'data-efficiency': '' }, h('span', { class: 'stat' }, 'D-optimal for ', h('b', {}, d.params.model)), h('span', { class: 'stat' }, 'η = ', h('b', {}, d.params.eta)), h('span', { class: 'stat' }, 'log|XᵀV⁻¹X| = ', h('b', {}, num(d.params.logDet, 5)))));
+    parts.push(h('p', { class: 'muted small' }, 'Analysis: the whole-plot effects need the whole-plot error (REML, coming in issue #15); until then the Analyse step fits least squares and warns.'));
+  }
   if (d.kind === 'full-factorial' && !d.block) parts.push(h('p', { class: 'small' }, 'Every main effect and interaction can be estimated.'));
   if (d.kind === 'optimal' || d.kind === 'definitive-screening') {
     const g = d.diagnostics ?? diagnoseCoded(study, d.X, { model: modelFor });
@@ -199,10 +249,10 @@ function diagnostics(study, d, modelFor) {
 
 /** The model a design is meant for, as a starting point for its power table. */
 function intendedModel(study, d) {
-  if (d.kind === 'optimal') return d.params.model;
+  if (d.kind === 'optimal' || d.kind === 'optimal-split-plot') return d.params.model;
   if (d.kind === 'ccd' || d.kind === 'box-behnken') return 'quadratic';
   if (d.params.resolution >= 5) return '2fi';
-  if (d.kind === 'full-factorial') {
+  if (d.kind === 'full-factorial' || d.kind === 'split-plot-full') {
     const k = study.factors.length;
     return d.X.length > 1 + k + k * (k - 1) / 2 ? '2fi' : 'main';
   }
@@ -235,26 +285,33 @@ function powerSection(study, d, cand, ui, set) {
       h('p', { class: 'muted small' }, `${res.dfRes} residual df${res.terms.some(t => t.block) ? '; blocks fitted' : ''}. Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
         'Power below 0.8 is marked; Δ/σ for 80% is the smallest effect this design would usually find.'));
   }
-  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, body);
+  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, d.wholePlot ? h('div', { class: 'msg warning' }, 'Power here assumes complete randomisation: for whole-plot effects of a split-plot it is optimistic. Split-plot power comes with REML (issue #15).') : null, body);
 }
 
-function optimalOptions(study, ui, set) {
+function optimalOptions(study, ui, set, split = false) {
   const k = study.factors.length, allCont = study.factors.every(f => f.type === 'continuous');
   const model = ui.optModel ?? (allCont && k <= 6 ? 'quadratic' : k <= 8 ? '2fi' : 'main');
   let p = null; try { p = compileModel(parseFormula(model, study.factors), study.factors).p; } catch { /* shown when searching */ }
   const runs = ui.optRuns ?? (p ? p + Math.max(4, Math.ceil(p / 4)) : 12);
-  const opts = { ...ui, optModel: model, optRuns: runs, optCriterion: ui.optCriterion ?? (model === 'quadratic' ? 'I' : 'D'), optRestarts: ui.optRestarts ?? 20 };
+  const wpDefault = Math.max(2, Math.round(runs / 4));
+  const opts = { ...ui, optModel: model, optRuns: runs, optCriterion: split ? 'D' : ui.optCriterion ?? (model === 'quadratic' ? 'I' : 'D'), optRestarts: ui.optRestarts ?? 20,
+    ...(split ? { optWholePlots: ui.optWholePlots ?? wpDefault, optEta: ui.optEta ?? 1 } : {}) };
   const go = () => {
     const key = optKey(opts);
     set({ ...opts, searching: true, optResult: null });
-    search(study, { runs: opts.optRuns, model: opts.optModel, criterion: opts.optCriterion, restarts: opts.optRestarts, seed: opts.seed ?? study.seed },
+    if (split) search(study, { runs: opts.optRuns, wholePlots: opts.optWholePlots, model: opts.optModel, eta: opts.optEta, restarts: opts.optRestarts, seed: opts.seed ?? study.seed },
+      (r) => set({ ...opts, searching: false, optResult: { ...r, key } }), { splitPlot: true });
+    else search(study, { runs: opts.optRuns, model: opts.optModel, criterion: opts.optCriterion, restarts: opts.optRestarts, seed: opts.seed ?? study.seed },
       (r) => set({ ...opts, searching: false, optResult: { ...r, key } }));
   };
   return [
     h('label', { class: 'inline' }, 'model', h('input', { type: 'text', class: 'formula', style: 'width:18em', value: model, 'aria-label': 'optimal model', onchange: (e) => set({ optModel: e.target.value.replace(/^.*~/, '').trim() || 'main', optResult: null }) })),
     p ? h('span', { class: 'muted small' }, `${p} coefficients`) : null,
     h('label', { class: 'inline' }, 'runs', h('input', { class: 'num', type: 'number', min: p ?? 1, value: runs, 'aria-label': 'optimal runs', onchange: (e) => set({ optRuns: Number(e.target.value), optResult: null }) })),
-    h('label', { class: 'inline' }, 'criterion', select([{ value: 'D', label: 'D (estimate coefficients)' }, { value: 'I', label: 'I (predict well)' }, { value: 'A', label: 'A' }], opts.optCriterion, (v) => set({ optCriterion: v, optResult: null }), { 'aria-label': 'criterion' })),
+    split ? [
+      h('label', { class: 'inline' }, 'whole plots', h('input', { class: 'num', type: 'number', min: 2, value: opts.optWholePlots, 'aria-label': 'optimal whole plots', onchange: (e) => set({ optWholePlots: Number(e.target.value), optResult: null }) })),
+      h('label', { class: 'inline', title: 'assumed ratio of whole-plot to run-to-run variance; 1 is the usual default' }, 'η', h('input', { class: 'num', type: 'number', min: 0, step: 0.1, value: opts.optEta, 'aria-label': 'eta', onchange: (e) => set({ optEta: Number(e.target.value), optResult: null }) }))]
+    : h('label', { class: 'inline' }, 'criterion', select([{ value: 'D', label: 'D (estimate coefficients)' }, { value: 'I', label: 'I (predict well)' }, { value: 'A', label: 'A' }], opts.optCriterion, (v) => set({ optCriterion: v, optResult: null }), { 'aria-label': 'criterion' })),
     h('label', { class: 'inline' }, 'starts', h('input', { class: 'num', type: 'number', min: 1, value: opts.optRestarts, 'aria-label': 'restarts', onchange: (e) => set({ optRestarts: Number(e.target.value), optResult: null }) })),
     h('button', { class: 'btn primary', id: 'search-optimal', disabled: !!ui.searching, onclick: go }, ui.searching ? 'Searching…' : 'Search'),
   ];

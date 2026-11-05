@@ -105,7 +105,7 @@ Study files are JSON; comments (`//`, `/* */`) and trailing commas are accepted 
 | CCD | circumscribed / inscribed / face-centred; α for rotatability or orthogonal blocking | #9 |
 | Box–Behnken | k = 3…7 standard tables | #9 |
 | D-, I-optimal | coordinate exchange over a candidate set or continuous region, linear constraints, fixed runs to augment, multiple random starts; reports D-, A-, G-efficiency and the fraction-of-design-space (FDS) curve | #10 |
-| Split-plot | from a factorial or optimal design: htc factors grouped into whole plots; optimal split-plot by coordinate exchange on the GLS information matrix with an assumed variance ratio η | #14 |
+| Split-plot | from a factorial or optimal design: htc factors grouped into whole plots; regular fractions by minimum aberration among split-plot-compatible generators (unassigned whole-plot base columns count as pseudo-factors, as in FrF2); optimal split-plot by coordinate exchange on the GLS information matrix with an assumed variance ratio η; restricted randomisation (whole plots, then runs within them); centre points and blocking of split-plots later | #14 |
 | Latin hypercube | maximin, for simulators (U6) | #20 |
 | Gauge R&R layout | parts × operators × repeats, crossed or nested | #17 |
 
