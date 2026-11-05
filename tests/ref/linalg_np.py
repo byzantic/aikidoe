@@ -79,7 +79,11 @@ for name, A in [('random 8x5', rng.standard_normal((8, 5))),
     U, s, Vt = np.linalg.svd(A, full_matrices=False)
     r = int(np.linalg.matrix_rank(A))
     out = {'s': s, 'rank': r}
-    if name != 'Hilbert 10':          # pinv/cond of Hilbert 10 are only accurate to ~1e-3
+    # pinv and cond are only determined to ~cond·eps, and vary between numpy builds when that is
+    # above ~1e-9; record them only for well-conditioned matrices (the test checks the
+    # Penrose conditions for every case)
+    k = s[0] / s[r - 1]
+    if k < 1e6:
         out['pinv'] = np.linalg.pinv(A)
         if r == min(A.shape):
             out['cond'] = np.linalg.cond(A)

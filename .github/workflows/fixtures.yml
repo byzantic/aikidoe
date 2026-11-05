@@ -34,9 +34,22 @@ jobs:
         with:
           path: ${{ env.R_LIBS_USER }}
           key: r-${{ runner.os }}-${{ hashFiles('tests/ref/r-packages.txt') }}
+      - name: System libraries for R package binaries
+        run: sudo apt-get install -y --no-install-recommends libglpk40   # igraph (needed by FrF2)
       - run: Rscript tests/ref/install-r-packages.R
       - run: node tools/regen-fixtures.mjs --out .fixtures-fresh
       - run: node tools/check-fixtures.mjs --fresh .fixtures-fresh
+      # A generator that needs packages unavailable locally can be run here first: any fixture
+      # that is new (not committed yet) is printed gzip+base64 so it can be recovered from the log.
+      - name: Print new fixtures
+        if: always()
+        run: |
+          for f in .fixtures-fresh/*.json; do
+            [ -f "$f" ] || continue
+            b=$(basename "$f")
+            [ -f "tests/fixtures/$b" ] && continue
+            echo "BEGIN-FIXTURE $b"; gzip -9c "$f" | base64 -w0; echo; echo "END-FIXTURE $b"
+          done
       - name: Keep the regenerated fixtures for inspection
         if: always()
         uses: actions/upload-artifact@v4
