@@ -203,6 +203,30 @@ try {
   r = run('robust', 'filt.aikidoe.json', '--model', 'rate ~ A + C + D + A:C + A:D', '--noise', 'A=0.5', '--at', 'C=1,D=1');
   check('robust --noise overrides the study', r.code === 0 && /A noise sd 0\.5/.test(r.out), r.out + r.err);
 
+  section('computer experiments (issue #20)');
+  r = run('init', 'sim.aikidoe.json', '--factor', 'a:-2:2', '--factor', 'b:-2:2', '--factor', 'c:-1:1', '--response', 'y', '--response', 'z', '--seed', '4');
+  r = run('design', 'sim.aikidoe.json', '--lhs');
+  check('design --lhs: 30-run maximin LHS', r.code === 0 && /lhs, 30 runs/.test(r.out) && /maximin Latin hypercube/.test(r.out), r.out + r.err);
+  r = run('simulator', 'sim.aikidoe.json', '--expression', 'y=10 + 2*a - 1.5*b + 0.8*a*b + 0.6*a^2 + 0.3*c', '--expression', 'z=3 + b^2 - c');
+  check('simulator --expression', r.code === 0 && /simulator expression/.test(r.out), r.out + r.err);
+  r = run('simulate', 'sim.aikidoe.json');
+  check('simulate: runs the design', r.code === 0 && /ran 30 runs on expression/.test(r.out), r.out + r.err);
+  r = run('tolerance', 'sim.aikidoe.json', 'a=0.4', 'b=uniform:0.3', 'c=truncated:0.5:2');
+  check('tolerance: three distributions', r.code === 0 && /b: uniform sd 0\.3 \(±0\.5196\)/.test(r.out) && /c: truncated sd 0\.5 cut at ±2 sd/.test(r.out), r.out + r.err);
+  r = run('spec', 'sim.aikidoe.json', 'y', '--lower', '9', '--upper', '11.5');
+  r = run('spec', 'sim.aikidoe.json', 'z', '--upper', '3.6');
+  check('spec: limits stored', r.code === 0 && /z: spec −∞ … 3\.6/.test(r.out), r.out + r.err);
+  r = run('yield', 'sim.aikidoe.json', '--check', '4000');
+  check('yield: surrogate yield with CI, CV error and a direct check', r.code === 0 && /^yield \d+\.?\d* %  \(95% CI/m.test(r.out) && /direct check on expression/.test(r.out) && /same pass\/fail for 100 %/.test(r.out) && /intervals overlap/.test(r.out) && !/warning/.test(r.out), r.out + r.err);
+  r = run('sensitivity', 'sim.aikidoe.json', '--over', 'tolerance');
+  check('sensitivity: Sobol table per response', r.code === 0 && /z: Sobol indices over the tolerances/.test(r.out) && /^a\s+0\.\d+/m.test(r.out), r.out + r.err);
+  writeFileSync(join(dir, 'mysim.mjs'), 'export async function run(list) { return list.map(s => ({ y: s.a + s.b, z: s.c })); }\n');
+  r = run('simulator', 'sim.aikidoe.json', '--module', 'mysim.mjs');
+  r = run('simulate', 'sim.aikidoe.json', '--all');
+  check('simulator --module: a Node module runs the design', r.code === 0 && /ran 30 runs on module mysim\.mjs/.test(r.out), r.out + r.err);
+  r = run('yield', 'sim.aikidoe.json', '--model', 'y ~ main', '--model', 'z ~ main', '--at', 'a=0,b=0,c=0');
+  check('yield --model --at', r.code === 0 && /nominal: a=0, b=0, c=0/.test(r.out), r.out + r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');

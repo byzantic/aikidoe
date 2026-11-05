@@ -102,7 +102,30 @@ export function render(ctx) {
 
   const next = state.study ? h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => go(d.design ? 'run' : 'design') }, d.design ? 'Go to Run →' : 'Choose a design →')) : null;
   const gauge = state.ui.gauge?.open ? gaugePanel(ctx, state.ui.gauge.open) : null;
-  return h('div', {}, errs, warns, factors, responses, gauge, sites, cons, desc, next);
+  return h('div', {}, errs, warns, factors, responses, gauge, sites, simulatorPanel(d, update), cons, desc, next);
+}
+
+// computer experiments (§10): the simulator that runs the design. Adapters with their own UI
+// (comb-over) register an editor in SIMULATOR_EDITORS.
+export const SIMULATOR_EDITORS = {
+  expression: (d, update) => h('div', {},
+    h('p', { class: 'muted small' }, 'Each response as a formula in the factor ids: + − * / ^, parentheses, sin cos tan exp log log10 sqrt abs min max pow tanh, pi.'),
+    (d.responses ?? []).map(r => h('div', { class: 'row' }, h('label', { class: 'inline' }, `${r.id} =`,
+      h('input', { type: 'text', class: 'formula', style: 'width:32em', value: d.simulator.responses?.[r.id] ?? '', placeholder: '—', 'aria-label': `simulator ${r.id}`,
+        onchange: (e) => update(x => { x.simulator.responses ??= {}; if (e.target.value.trim()) x.simulator.responses[r.id] = e.target.value.trim(); else delete x.simulator.responses[r.id]; }) }))))),
+};
+export const SIMULATOR_CHOICES = [{ value: 'expression', label: 'formulas', make: () => ({ adapter: 'expression', responses: {} }) }];
+
+function simulatorPanel(d, update) {
+  const sim = d.simulator;
+  const choose = h('div', { class: 'row' }, SIMULATOR_CHOICES.map(c => h('button', { class: 'btn', 'data-simulator': c.value, disabled: sim?.adapter === c.value,
+    onclick: () => update(x => { x.simulator = c.make(x); }) }, sim ? `Use ${c.label} instead` : `Simulate with ${c.label}`)),
+    sim ? h('button', { class: 'btn', onclick: () => update(x => { delete x.simulator; }) }, 'No simulator') : null);
+  if (!sim) return h('section', { class: 'panel', id: 'simulator' }, h('details', {}, h('summary', {}, 'Simulator (computer experiments)'),
+    h('p', { class: 'muted small' }, 'Run the design on a simulator instead of in the lab: the Run step fills in the results, and the Optimise step estimates yield and sensitivities from a surrogate model.'), choose));
+  const ed = SIMULATOR_EDITORS[sim.adapter];
+  return h('section', { class: 'panel', id: 'simulator' }, h('h2', {}, 'Simulator'), choose,
+    ed ? ed(d, update) : h('div', { class: 'msg warning' }, `The "${sim.adapter}" simulator runs from the command line only.`));
 }
 
 // per-wafer summaries of site-measured responses, as derived responses

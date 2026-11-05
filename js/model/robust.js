@@ -19,6 +19,7 @@
 //   'maximize' / 'minimize': optimise μ subject to σ ≤ σ_max.
 import { decode, code } from '../study.js';
 import { rng } from '../design/rng.js';
+import { toleranceSd } from '../sim/sample.js';
 
 const H_REL = 1e-4;     // finite-difference step, relative to the factor's half-range
 
@@ -29,7 +30,7 @@ const H_REL = 1e-4;     // finite-difference step, relative to the factor's half
  */
 export function propagationOfError(study, predict, settings, { sigma = 0, extra = {}, order = 2 } = {}) {
   const fs = study.factors.filter(f => f.type !== 'categorical');
-  const sds = fs.map(f => extra[f.id] ?? f.noise?.sd ?? f.tolerance ?? 0);
+  const sds = fs.map(f => extra[f.id] ?? f.noise?.sd ?? (f.tolerance !== undefined ? toleranceSd(f.tolerance) : 0));
   const at = { ...settings };
   for (const f of fs) if (f.noise && settings[f.id] === undefined) at[f.id] = f.noise.mean ?? decode(f, 0);
   const idx = fs.map((_, i) => i).filter(i => sds[i] > 0);

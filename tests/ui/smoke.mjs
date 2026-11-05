@@ -262,6 +262,32 @@ try {
   check('POE surface drawn', (await page.locator('#poe-surface rect').count()) === 31 * 31);
   await shot('12-robust');
 
+  section('computer experiments (issue #20)');
+  await page.click('#btn-examples'); await page.click('[data-example="sallen-key"]'); await settle();
+  check('Sallen–Key example opens on Optimise with the Yield panel', (await page.locator('#yield').count()) === 1);
+  const yv = Number(await page.getAttribute('#yield-result [data-yield]', 'data-yield'));
+  check(`yield at the centre of the ranges is high (${yv})`, yv > 0.99 && yv < 1, yv);
+  check('no trust warning: the quadratic surrogates are accurate', (await page.locator('#yield-trust').count()) === 0);
+  check('tolerance distribution shown: C1 truncated', (await page.inputValue('select[aria-label="yield C1 distribution"]')) === 'truncated');
+  await page.selectOption('select[aria-label="sensitivity domain"]', 'tolerance'); await settle();
+  const sensText = await page.textContent('#sensitivity');
+  check('sensitivity over tolerances: tables for f0 and Q', /f0/.test(sensText) && /Q/.test(sensText) && (await page.locator('#sensitivity table').count()) === 2);
+  await page.fill('input[aria-label="check runs"]', '300'); await page.keyboard.press('Tab'); await settle();
+  await page.click('#yield-check'); await page.waitForSelector('#yield-check-result', { timeout: 10000 });
+  check('check on the simulator: direct yield with CI and agreement', /Simulator: yield .* 300 runs/.test(await page.textContent('#yield-check-result')));
+  await shot('13-yield');
+  await page.fill('input[aria-label="spec f0 upper"]', '10.02'); await page.keyboard.press('Tab'); await settle();
+  const yv2 = Number(await page.getAttribute('#yield-result [data-yield]', 'data-yield'));
+  check(`a tighter spec lowers the yield (${yv2})`, yv2 < 0.8, yv2);
+  await page.click('[data-step="design"]'); await settle();
+  check('Design: Latin hypercube offered first for a study with a simulator', (await page.locator('[data-design]').first().getAttribute('data-design')) === 'lhs');
+  await page.click('[data-step="define"]'); await settle();
+  check('Define: simulator formulas shown', (await page.inputValue('input[aria-label="simulator Q"]')).startsWith('sqrt('));
+  await page.fill('input[aria-label="simulator Q"]', '0.7 + 0*R1'); await page.keyboard.press('Tab'); await settle();
+  await page.click('[data-step="run"]'); await settle();
+  await page.click('#run-simulator'); await settle(); await page.waitForTimeout(300);
+  check('Run: re-run on the simulator replaces the results', (await page.inputValue('#run-sheet tbody tr:first-child td.res:last-child input')) === '0.7');
+
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide', 'anneal-results']) {
     await page.click('#btn-examples'); await page.click(`[data-example="${id}"]`); await page.waitForTimeout(300);

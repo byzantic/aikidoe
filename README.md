@@ -94,6 +94,13 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `goal STUDY RESPONSE --maximize\|--minimize\|--target\|--range [--lower] [--target] [--upper] [--weight] [--importance]` | desirability goal of a response |
 | `optimise STUDY [--model "y ~ …" …] [--region cube\|sphere] [--radius r] [--fix "A=1"]` | best settings by overall desirability, with predictions and CIs |
 | `robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd"] [--sd-model "y_logsd ~ …"] [--goal target\|mse\|maximize\|minimize] [--target T] [--max-sd s] [--at …]` | propagation of error and dual-response optimisation |
+| `design STUDY --lhs [--runs N]` | maximin Latin hypercube for a simulator (default quadratic surrogate) |
+| `simulator STUDY --expression "y=…" … \| --module sim.mjs` | the study's simulator: formulas per response, or a Node module exporting `run(settingsList)` |
+| `simulate STUDY [--all]` | run the design on the simulator, results stored as observations |
+| `tolerance STUDY "A=sd" "B=uniform:sd" "C=truncated:sd:at"` | tolerance distributions of the factors' actual values |
+| `spec STUDY RESPONSE [--lower L] [--upper U]` | specification limits for yield |
+| `yield STUDY [--model …] [--at "A=…"] [--n 20000] [--check M]` | Monte Carlo yield on the surrogate, with its CV error, a trust check and (`--check`) a direct check on the simulator |
+| `sensitivity STUDY [--over range\|tolerance]` | Sobol first-order and total indices of each surrogate |
 | `predict STUDY "y ~ formula" --at "A=…,B=…"` | predictions with 95% confidence and prediction intervals |
 | `power STUDY [--model …] [--delta Δ \| "A=3,default=2"] [--sigma σ] [--alpha α]` | power of each term, and the Δ detectable with 80% power |
 | `fit … --reduce p\|aicc [--alpha-out 0.1] [--keep A,B]` | backward elimination keeping hierarchy, then the fit |

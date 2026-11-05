@@ -7,6 +7,8 @@ import { rng } from '../js/design/rng.js';
 import { splitPlotFull } from '../js/design/splitplot.js';
 import { fullFactorial } from '../js/design/factorial.js';
 import { siteScheme, sitePositions } from '../js/model/sites.js';
+import { lhsDesign } from '../js/sim/surrogate.js';
+import { compileExpression } from '../js/sim/expression.js';
 
 const reactor = () => ({
   aikidoe: FORMAT_VERSION, name: 'Reactor screening', seed: 7,
@@ -91,6 +93,20 @@ export const EXAMPLES = [
       const design = toStudyDesign(s, fullFactorial([2, 2, 2, 2]));
       const idx = (st) => ['A', 'B', 'C', 'D'].reduce((a, id, b) => a + (st[id] > 0 ? 1 << b : 0), 0);
       return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'rate', value: y[idx(r.settings)] })) });
+    } },
+  { id: 'sallen-key', title: 'Filter yield: computer experiment', step: 'optimise',
+    blurb: 'A unity-gain Sallen–Key low-pass filter, 10 kHz Butterworth, simulated from its formulas: a Latin-hypercube design, quadratic surrogates, and the yield with 1 % resistors and 5 % capacitors. Which tolerance matters most?',
+    build: () => {
+      const sim = { adapter: 'expression', responses: { f0: '1000/(2*pi*sqrt(R1*R2*C1*C2))', Q: 'sqrt(R1*R2*C1*C2)/(C2*(R1+R2))' } };
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Sallen–Key filter yield', seed: 11,
+        description: 'Unity-gain Sallen–Key low-pass: f0 = 1/(2π√(R1R2C1C2)), Q = √(R1R2C1C2)/(C2(R1+R2)). Nominal 10 kΩ, 10 kΩ, 2.25 nF, 1.125 nF (10 kHz, Q 0.707). Resistors 1 % (sd 0.5 %), capacitors 5 % (sd 2.5 %, parts screened at ±2 sd).',
+        factors: [{ id: 'R1', units: 'kΩ', low: 9, high: 11, tolerance: 0.05 }, { id: 'R2', units: 'kΩ', low: 9, high: 11, tolerance: 0.05 },
+          { id: 'C1', units: 'nF', low: 2, high: 2.5, tolerance: { sd: 0.05625, dist: 'truncated', at: 2 } }, { id: 'C2', units: 'nF', low: 1, high: 1.25, tolerance: { sd: 0.028125, dist: 'truncated', at: 2 } }],
+        responses: [{ id: 'f0', name: 'Corner frequency', units: 'kHz', spec: { lower: 9.5, upper: 10.5 } }, { id: 'Q', name: 'Q factor', spec: { lower: 0.66, upper: 0.75 } }],
+        simulator: sim });
+      const design = toStudyDesign(s, lhsDesign(s), { seed: 11 });
+      const fns = Object.fromEntries(Object.entries(sim.responses).map(([k, e]) => [k, compileExpression(e)]));
+      return createStudy({ ...s, design, observations: design.runs.flatMap(r => Object.entries(fns).map(([id, f]) => ({ run: r.run, response: id, value: f(r.settings) }))) });
     } },
   { id: 'gate-oxide', title: 'Gate oxide anneal (split-plot)', step: 'run', url: 'examples/gate-oxide-anneal.aikidoe.json',
     blurb: 'The spec §4 example: furnace temperature and ambient set per run, drop-in sites, a missing value.' },
