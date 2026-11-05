@@ -1,6 +1,8 @@
 // Robust design (issue #19): propagation of error and dual-response optimisation. Worked
-// example: Montgomery's filtration-rate experiment (Design and Analysis of Experiments, example
-// 6.2; robust-design chapter: temperature as a noise variable).
+// example: the filtration-rate 2⁴ data of Montgomery, Design and Analysis of Experiments
+// (example 6.2; data cross-checked against an independent copy), with temperature treated as a
+// noise variable (σ_z = 1, coded). The mean and variance models follow from the data; the
+// optimisation is checked analytically and by search, not against a published optimum.
 import { section, check, near, throws, done } from './lib/check.mjs';
 import { createStudy } from '../js/study.js';
 import { fitModel } from '../js/model/ols.js';
@@ -11,9 +13,9 @@ const ex = EXAMPLES.find(e => e.id === 'filtration').build();
 const fit = fitModel(ex, 'rate ~ A + C + D + A:C + A:D');
 const pred = (s) => { const x = { A: s.A, C: s.C, D: s.D }; return fit.coef[0] + fit.coef[1] * x.A + fit.coef[2] * x.C + fit.coef[3] * x.D + fit.coef[4] * x.A * x.C + fit.coef[5] * x.A * x.D; };
 
-section('the published response model (Montgomery)');
+section('response model from the example 6.2 data, temperature as noise');
 {
-  // effects A 21.625, C 9.875, D 14.625, AC −18.125, AD 16.625; coefficients are half
+  // the example's effects: A 21.625, C 9.875, D 14.625, AC −18.125, AD 16.625; coefficients are half
   near('ŷ = 70.06 + 10.81 z + 4.94 x_C + 7.31 x_D − 9.06 z x_C + 8.31 z x_D', fit.coef, [70.0625, 10.8125, 4.9375, 7.3125, -9.0625, 8.3125], { abs: 1e-10 });
   near('σ̂² = MS_E = 19.51 (10 df)', [fit.sigma ** 2, fit.dfRes], [19.5125, 10], { abs: 1e-10 });
 }
