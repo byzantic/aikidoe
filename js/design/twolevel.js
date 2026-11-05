@@ -92,19 +92,26 @@ export function wordLengthPattern(design) {
 }
 export const resolution = (design) => { const A = wordLengthPattern(design); const i = A.findIndex(a => a > 0); return i < 0 ? Infinity : i + 1; };
 
-const effectName = (fac) => { let s = ''; for (let i = 0; fac >> i; i++) if (fac >> i & 1) s += factorName(i); return s; };
+const bits = (x) => { const out = []; for (let i = 0; x >> i; i++) if (x >> i & 1) out.push(i); return out; };
+const lexBits = (a, b) => { const x = bits(a), y = bits(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
+// effect names: letters run together (ABC), or the given factor names joined with ':' (T:t:amb)
+const effectName = (fac, names) => {
+  const parts = [];
+  for (let i = 0; fac >> i; i++) if (fac >> i & 1) parts.push(names ? names[i] : factorName(i));
+  return parts.join(names ? ':' : '');
+};
 
-/** Defining relation as strings, e.g. ['ABCE', '-BCDF', …], sorted by length then name. */
-export const definingRelation = (design) => definingWords(design)
-  .map(w => (w.sign < 0 ? '-' : '') + effectName(w.factors))
-  .sort((a, b) => a.replace('-', '').length - b.replace('-', '').length || a.localeCompare(b));
+/** Defining relation as strings, e.g. ['ABCE', '-BCDF', …], sorted by length then name. names: optional factor names. */
+export const definingRelation = (design, names) => definingWords(design)
+  .map(w => ({ s: (w.sign < 0 ? '-' : '') + effectName(w.factors, names), len: popcount(w.factors) }))
+  .sort((a, b) => a.len - b.len || a.s.localeCompare(b.s)).map(w => w.s);
 
 /**
  * Alias chains among all effects up to `order` (default 2): effects that share a column (up to
  * sign) are aliased. Returns chains (arrays of effect names, lowest order first) with ≥ 1 effect;
  * each chain also lists its column mask.
  */
-export function aliasChains(design, order = 2) {
+export function aliasChains(design, order = 2, names) {
   const { k, cols } = design, byCol = new Map();
   const visit = (fac, col, start, depth) => {
     if (depth > 0) { if (!byCol.has(col)) byCol.set(col, []); byCol.get(col).push(fac); }
@@ -114,10 +121,12 @@ export function aliasChains(design, order = 2) {
   visit(0, 0, 0, 0);
   const chains = [];
   for (const [col, facs] of byCol) {
-    facs.sort((a, b) => popcount(a) - popcount(b) || a - b);
-    chains.push({ col, effects: facs.map(effectName), orders: facs.map(popcount) });
+    facs.sort((a, b) => popcount(a) - popcount(b) || lexBits(a, b));
+    chains.push({ col, effects: facs.map(f => effectName(f, names)), orders: facs.map(popcount), first: bits(facs[0]) });
   }
-  return chains.sort((a, b) => a.orders[0] - b.orders[0] || a.effects[0].localeCompare(b.effects[0], 'en', { numeric: true }));
+  // lowest-order chains first, then by factor order of their first effect (A, B, … ; AB, AC, AD, BC, …)
+  const lex = (x, y) => { for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i]; return x.length - y.length; };
+  return chains.sort((a, b) => a.orders[0] - b.orders[0] || lex(a.first, b.first)).map(({ first, ...c }) => c);
 }
 
 /**
@@ -125,9 +134,9 @@ export function aliasChains(design, order = 2) {
  * main: chains containing a main effect and at least one 2fi ("A=BC=DE");
  * fi2: chains of two or more 2fis with no main effect ("AB=CD").
  */
-export function aliasSummary(design) {
+export function aliasSummary(design, names) {
   const main = [], fi2 = [];
-  for (const c of aliasChains(design, 2)) {
+  for (const c of aliasChains(design, 2, names)) {
     if (c.effects.length < 2) continue;
     if (c.orders[0] === 1) { if (c.orders[1] === 2) main.push(c.effects.join('=')); }
     else fi2.push(c.effects.join('='));
