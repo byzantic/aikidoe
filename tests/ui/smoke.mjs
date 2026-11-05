@@ -267,7 +267,7 @@ try {
   check('Sallen–Key example opens on Optimise with the Yield panel', (await page.locator('#yield').count()) === 1);
   const yv = Number(await page.getAttribute('#yield-result [data-yield]', 'data-yield'));
   check(`yield at the centre of the ranges is high (${yv})`, yv > 0.99 && yv < 1, yv);
-  check('no trust warning: the quadratic surrogates are accurate', (await page.locator('#yield-trust').count()) === 0);
+  check('no trust note: the quadratic surrogates are accurate', (await page.locator('#yield-trust').count()) === 0);
   check('tolerance distribution shown: C1 truncated', (await page.inputValue('select[aria-label="yield C1 distribution"]')) === 'truncated');
   await page.selectOption('select[aria-label="sensitivity domain"]', 'tolerance'); await settle();
   const sensText = await page.textContent('#sensitivity');
@@ -287,6 +287,23 @@ try {
   await page.click('[data-step="run"]'); await settle();
   await page.click('#run-simulator'); await settle(); await page.waitForTimeout(300);
   check('Run: re-run on the simulator replaces the results', (await page.inputValue('#run-sheet tbody tr:first-child td.res:last-child input')) === '0.7');
+
+  section('comb-over adapter (issue #21)');
+  await page.click('#btn-examples'); await page.click('[data-example="coupler"]'); await page.waitForTimeout(400); await settle();
+  const cy = Number(await page.getAttribute('#yield-result [data-yield]', 'data-yield'));
+  check(`coupler yield from the quadratic surrogates (${cy})`, cy > 0.7 && cy < 0.82, cy);
+  check('trust "fair": the surrogate limits the precision, with bounds', (await page.getAttribute('#yield-trust', 'data-trust')) === 'fair');
+  await page.fill('input[aria-label="check runs"]', '100'); await page.keyboard.press('Tab'); await settle();
+  await page.click('#yield-check'); await page.waitForSelector('#yield-check-result', { timeout: 20000 });
+  check('check on comb-over in the browser (vendored solver)', /Simulator: yield .* 100 runs/.test(await page.textContent('#yield-check-result')), await page.textContent('#yield-check-result'));
+  await shot('14-coupler-yield');
+  await page.click('[data-step="define"]'); await settle();
+  check('Define: comb-over netlist and factor mapping', /cline K geom=msl/.test(await page.inputValue('textarea[aria-label="comb-over netlist"]')) && (await page.inputValue('select[aria-label="comb-over factor etch"]')) === 'etch' && (await page.inputValue('select[aria-label="comb-over factor er"]')) === 'substrate:er');
+  await page.fill('input[aria-label="comb-over metric directivity"]', 'min(db(S31/S41)) @ 4.5G..5.5G'); await page.keyboard.press('Tab'); await settle();
+  await page.click('[data-step="run"]'); await settle();
+  await page.click('#run-simulator'); await page.waitForTimeout(1500); await settle();
+  const dirv = Number(await page.inputValue('#run-sheet tbody tr:first-child td.res:last-child input'));
+  check(`Run: re-run on comb-over with a band metric (directivity ${dirv})`, dirv > 10 && dirv < 14, dirv);
 
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide', 'anneal-results']) {

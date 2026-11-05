@@ -227,6 +227,22 @@ try {
   r = run('yield', 'sim.aikidoe.json', '--model', 'y ~ main', '--model', 'z ~ main', '--at', 'a=0,b=0,c=0');
   check('yield --model --at', r.code === 0 && /nominal: a=0, b=0, c=0/.test(r.out), r.out + r.err);
 
+  section('comb-over adapter (issue #21)');
+  writeFileSync(join(dir, 'cpl.cir'), readFileSync(new URL('../examples/coupler-10dB-ro4350b.cir', import.meta.url), 'utf8'));
+  r = run('comb-over', 'cpl.aikidoe.json', 'cpl.cir', '--seed', '3', '--factor', 'etch=8', '--factor', 'er=0.025', '--factor', 'w:0.85:0.92',
+    '--metric', 'coupling=-db(S31) @ 5G', '--metric', 'directivity=min(db(S31/S41)) @ 4.5G..5.5G', '--spec', 'coupling=9.5:10.5', '--spec', 'directivity=11:');
+  check('comb-over: study from a netlist (etch, εr, a param)', r.code === 0 && /^etch\s+etch bias \(per edge\)\s+-32 … 32 µm/m.test(r.out) && /^w\s+param w\s+0\.85 … 0\.92 mm\s+nominal 0\.8831/m.test(r.out), r.out + r.err);
+  r = run('design', 'cpl.aikidoe.json', '--lhs');
+  r = run('simulate', 'cpl.aikidoe.json');
+  check('simulate on comb-over', r.code === 0 && /ran 30 runs on comb-over/.test(r.out), r.out + r.err);
+  r = run('tolerance', 'cpl.aikidoe.json', 'w=0.005');
+  r = run('yield', 'cpl.aikidoe.json', '--check', '100');
+  check('yield on comb-over, checked directly', r.code === 0 && /^yield \d/m.test(r.out) && /direct check on comb-over/.test(r.out), r.out + r.err);
+  r = run('comb-over', 'cpl.aikidoe.json', 'cpl.cir', '--factor', 'etch', '--metric', 'c=db(S21)');
+  check('comb-over: existing study refused without --force', r.code === 1 && /exists/.test(r.err));
+  r = run('comb-over', 'cpl2.aikidoe.json', 'cpl.cir', '--factor', 'etch', '--metric', 'c=db(S21)');
+  check('comb-over: a metric without a frequency is refused', r.code === 1 && /give EXPR @ FREQ/.test(r.err), r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');

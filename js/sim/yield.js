@@ -4,10 +4,11 @@
 // distribution (sample.js); every response must lie within its specification [lower, upper]
 // (either may be open). The yield estimate p̂ = passes / N gets a Wilson score interval. When the
 // predictions come from a surrogate with cross-validated error e_r per response, the yield is
-// recomputed with every limit tightened and loosened by 2·e_r: if those bounds differ by more
-// than the Monte Carlo interval, the surrogate — not the sampling — limits the estimate, and the
-// result is flagged as not trustworthy (spec: "if cross-validated error is comparable to the spec
-// margin, aikidoe says so").
+// recomputed with every limit tightened and loosened by 2·e_r. If those bounds differ by less
+// than the Monte Carlo interval the trust is 'good'; up to 20 points 'fair' (the surrogate, not
+// the sampling, limits the precision, and the bounds say by how much); beyond that 'poor', and the
+// estimate is not trustworthy (spec: "if cross-validated error is comparable to the spec margin,
+// aikidoe says so").
 import { rng } from '../design/rng.js';
 import { normal } from '../dist.js';
 import { deviationSampler } from './sample.js';
@@ -50,7 +51,12 @@ export function monteCarloYield(predict, nominal, tolerances, specs, { N = 10000
   }
   const ci = wilson(pass, N, level);
   const bounds = hasErr ? { strict: strictPass / N, loose: loosePass / N } : null;
-  const trustworthy = !bounds || bounds.loose - bounds.strict <= Math.max(ci.upper - ci.lower, 0.01);
+  // trust: 'good' when the surrogate's error moves the yield less than the Monte Carlo interval
+  // (or 1 point); 'fair' up to 20 points (the surrogate limits the precision: say by how much);
+  // 'poor' beyond — the estimate says more about the surrogate than the process
+  const spread = bounds ? bounds.loose - bounds.strict : 0;
+  const trust = spread <= Math.max(ci.upper - ci.lower, 0.01) ? 'good' : spread <= 0.2 ? 'fair' : 'poor';
+  const trustworthy = trust !== 'poor';
   return { yield: pass / N, ...ci, N, passes: pass, perResponse: per.map(p => ({ ...p, pass: p.pass / N, below: p.below / N, above: p.above / N })),
-    ...(bounds ? { bounds } : {}), trustworthy, ...(samples ? { samples } : {}) };
+    ...(bounds ? { bounds } : {}), trust, trustworthy, ...(samples ? { samples } : {}) };
 }

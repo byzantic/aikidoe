@@ -3,6 +3,7 @@
 // to the study (CLI) when an adapter needs one; the browser passes files it has been given.
 import { compileExpression } from './expression.js';
 import { functionAdapter } from './adapter.js';
+import { combOverAdapter } from './combover.js';
 
 export const ADAPTERS = {
   /** { adapter: 'expression', responses: { id: 'formula in the factor ids' } } */
@@ -12,6 +13,8 @@ export const ADAPTERS = {
     if (!Object.keys(fns).length) throw new Error('the expression simulator gives no response a formula (simulator.responses: { id: "…" })');
     return functionAdapter('expression', (s) => Object.fromEntries(Object.entries(fns).map(([id, f]) => [id, f(s)])), study.factors, study.responses.filter(r => fns[r.id]));
   },
+  /** { adapter: 'comb-over', netlist, factors, metrics } (combover.js) */
+  'comb-over': combOverAdapter,
 };
 
 /** Register another adapter factory (the comb-over adapter, a Node module adapter, …). */

@@ -74,7 +74,8 @@ export function yieldPanel({ state, update, setUI }, at, set, ui) {
         { key: 'cvError', label: 'RMSE_cv', cls: 'n', fmt: (v) => num(v, 3) }, { key: 'below', label: '% below', cls: 'n', fmt: (v) => num(v, 3) }, { key: 'above', label: '% above', cls: 'n', fmt: (v) => num(v, 3) }],
         yres.margins.map((m, i) => ({ ...m, spec: `${yres.specs[i].lower ?? '−∞'} … ${yres.specs[i].upper ?? '∞'}`, below: 100 * yres.perResponse[i].below, above: 100 * yres.perResponse[i].above }))),
       yres.bounds ? h('p', { class: 'small' }, `With every limit moved in or out by 2 × RMSE_cv the yield would be ${num(100 * yres.bounds.strict, 4)} … ${num(100 * yres.bounds.loose, 4)} %.`) : null,
-      yres.trustworthy ? null : h('div', { class: 'msg warning', id: 'yield-trust' }, 'The surrogate’s cross-validated error is comparable to the margins to the spec limits: this yield reflects the surrogate more than the process. Check it on the simulator, add runs near the limits, narrow the factor ranges or fit a better model.'),
+      yres.trust === 'fair' ? h('div', { class: 'msg', id: 'yield-trust', 'data-trust': 'fair' }, `The surrogate’s error, not the sampling, limits this estimate: it could lie anywhere in ${num(100 * yres.bounds.strict, 3)} … ${num(100 * yres.bounds.loose, 3)} %. Check it on the simulator, or add runs to the design to tighten it.`) : null,
+      yres.trustworthy ? null : h('div', { class: 'msg warning', id: 'yield-trust', 'data-trust': 'poor' }, 'The surrogate’s cross-validated error is comparable to the margins to the spec limits: this yield reflects the surrogate more than the process. Check it on the simulator, add runs near the limits, narrow the factor ranges or fit a better model.'),
       h('div', { class: 'grid2' }, hist),
       study.simulator ? h('div', { class: 'row' }, h('button', { class: 'btn', id: 'yield-check', onclick: async (e) => {
         e.target.disabled = true; e.target.textContent = 'Simulating…';
