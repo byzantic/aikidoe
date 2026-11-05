@@ -12,6 +12,7 @@ import { createStudy, feasible } from '../js/study.js';
 import { definitiveScreening, dsdOrder } from '../js/design/dsd.js';
 import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
 import { parseFormula } from '../js/model/formula.js';
+import { nextStagePanel } from './augment.js';
 
 // the optimal-design search runs in a worker; one search at a time
 let worker = null, searchId = 0;
@@ -83,8 +84,10 @@ function build(study, cand, o) {
   throw new Error(`unknown design ${cand.kind}`);
 }
 
-export function render({ state, setDoc, setUI }) {
+export function render(ctx) {
+  const { state, setDoc, setUI } = ctx;
   const study = state.study;
+  const next = study.design ? nextStagePanel(ctx) : null;
   const ui = state.ui.design ??= {};
   const cands = candidates(study);
   if (!cands.length) return h('section', { class: 'panel' }, h('h2', {}, 'Design'), h('div', { class: 'msg warning' }, 'No design is available for these factors yet.'));
@@ -145,7 +148,7 @@ export function render({ state, setDoc, setUI }) {
         h('button', { class: `btn ${study.design && nObs ? 'danger' : 'primary'}`, id: 'create-design', onclick: make }, study.design ? (nObs ? `Replace the design and delete ${nObs} results` : 'Replace the design') : `Create this design (${d.X.length} runs)`),
         h('span', { class: 'muted small' }, `Runs are put in a random order from seed ${seed}; the same seed always gives the same run sheet.`)));
   }
-  return h('div', {}, list, detail, create);
+  return h('div', {}, next, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, create);
 }
 
 function diagnostics(study, d, modelFor) {

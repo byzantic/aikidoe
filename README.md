@@ -26,7 +26,10 @@ sites; **Design** — compare candidate designs (fractions, Plackett–Burman, f
 central composite, Box–Behnken) with their aliasing or prediction-variance diagnostics, then
 create one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
 printable sheet; **Analyse** — fit a formula, ANOVA with lack of fit, Lenth's method with a
-half-normal plot, residual plots and Box–Cox. The study is autosaved in the browser; **Save**
+half-normal plot, residual plots and Box–Cox, predictions with confidence and prediction
+intervals, and confirmation runs checked against them. Once a design exists, **Design** also
+offers a **Next stage**: fold-over, axial points (turning a fraction into a central composite)
+or optimal runs for a larger model, added as a new block that the fit adjusts for. The study is autosaved in the browser; **Save**
 downloads it as a `.aikidoe.json` file and **Link** puts it, compressed, in the URL. The
 examples include simulated results so every step can be tried at once.
 
@@ -63,6 +66,12 @@ doe fit reactor.aikidoe.json "yield ~ (F+Cat+RPM+T+Conc)^2" --lenth
 #   Conc       3.971    43.22  > SME
 #   …
 doe fit reactor.aikidoe.json "yield ~ F*T + Conc" --anova 2 --boxcox
+
+# sequential: curvature? add axial points as block 2, then plan confirmation runs
+doe augment reactor.aikidoe.json --axial --centre 2       # α for orthogonal blocking
+doe fit reactor.aikidoe.json "yield ~ quadratic"          # Block is fitted first, automatically
+doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5" \
+    --formula "yield ~ quadratic" --replicates 2           # prediction and 95% PI stored with the runs
 ```
 
 (The numbers above are from simulated data, `tests/cli.test.mjs`.)
@@ -74,6 +83,8 @@ doe fit reactor.aikidoe.json "yield ~ F*T + Conc" --anova 2 --boxcox
 | `sheet STUDY [--csv F] [--html F]` | run sheet, with any results so far |
 | `import STUDY RESULTS.csv [--dry-run] [--mode append]` | read a filled sheet or long-format results, with checks |
 | `fit STUDY "y ~ formula" [--anova 1\|2\|3] [--lenth] [--boxcox]` | coefficients, fit statistics, ANOVA with lack of fit, Lenth, Box–Cox |
+| `augment STUDY --foldover [--factor F] \| --axial \| --optimal --runs n --model … \| --confirm "A=…,B=…" --formula …` | add a stage of runs as a new block |
+| `predict STUDY "y ~ formula" --at "A=…,B=…"` | predictions with 95% confidence and prediction intervals |
 | `alias STUDY` or `alias --factors k --runs N` | alias structure |
 | `info STUDY` | summary |
 

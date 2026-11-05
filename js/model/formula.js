@@ -189,7 +189,11 @@ export function modelMatrix(model, factors, rows) {
   const compCols = (c, s) => {
     if (c.f !== undefined) {
       const f = byId[c.f];
-      if (f.type === 'categorical') return { vals: effectCode(f, s[c.f]), names: f.levels.slice(1).map(l => `${c.f}[${l}]`) };
+      if (f.type === 'categorical') {
+        // the block pseudo-factor at an unspecified block (predictions): the average block, all zeros
+        if (f.block && s[c.f] === undefined) return { vals: new Array(f.levels.length - 1).fill(0), names: f.levels.slice(1).map(l => `${c.f}[${l}]`) };
+        return { vals: effectCode(f, s[c.f]), names: f.levels.slice(1).map(l => `${c.f}[${l}]`) };
+      }
       return { vals: [code(f, s[c.f])], names: [c.f] };
     }
     let v = 1;

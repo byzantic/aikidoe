@@ -114,6 +114,31 @@ try {
   const s2 = await p2.evaluate(() => JSON.parse(JSON.stringify(window.aikidoe.state)));
   check('the link opens the same study in a fresh page', s2.study?.observations.length === 16 && s2.study.design.runs.length === 16 && s2.study.name === 'Reactor screening');
 
+  section('sequential: axial stage, block term, confirmation (issue #11)');
+  await page.click('[data-step="design"]'); await settle();
+  check('Design shows the Next stage panel for an existing design', (await page.locator('#next-stage').count()) === 1);
+  check('full fold-over previewed by default', /full fold-over of 16 runs/.test(await page.textContent('#next-stage')));
+  await page.selectOption('select[aria-label="next stage"]', 'axial'); await settle();
+  check('axial preview: 12 runs as block 2', /12 runs/.test(await page.textContent('#next-stage')) && /block 2/.test(await page.textContent('#add-stage')));
+  await page.click('#add-stage'); await settle();
+  s = await state();
+  const newRuns = s.study.design.runs.filter(r => r.block === 2);
+  check('stage added: 28 runs, sequential, on Run, results kept', s.study.design.runs.length === 28 && s.study.design.kind === 'sequential' && s.step === 'run' && s.study.observations.length === 16);
+  for (const r of newRuns) { await page.fill(`input[aria-label="run ${r.run} yield"]`, (66 + 10 * c(r, 'F') - 6 * c(r, 'T') - 3 * c(r, 'T') ** 2 + 2 * c(r, 'Conc') + 0.3 * Math.cos(r.run)).toFixed(2)); await page.keyboard.press('Tab'); await page.waitForTimeout(30); }
+  await settle();
+  await page.click('[data-step="analyse"]'); await settle();
+  check('default model for CCD-by-stages is the quadratic', /~ quadratic/.test(await page.inputValue('#formula')), await page.inputValue('#formula'));
+  check('Block (1 df) in the ANOVA', (await page.$$eval('section.panel table.data tr', trs => trs.map(t => t.textContent))).some(t => /^Block1\d/.test(t)));
+  check('prediction with intervals shown', /95% PI/.test(await page.textContent('#prediction')));
+  await page.click('#add-confirm'); await settle();
+  s = await state();
+  check('2 confirmation runs added', s.study.design.runs.filter(r => r.kind === 'confirm').length === 2 && s.step === 'run');
+  const cr = s.study.design.runs.filter(r => r.kind === 'confirm');
+  for (const r of cr) { await page.fill(`input[aria-label="run ${r.run} yield"]`, '500'); await page.keyboard.press('Tab'); await page.waitForTimeout(30); }
+  await page.click('[data-step="analyse"]'); await settle();
+  check('confirmation results checked: outside the interval', /outside/.test(await page.textContent('#confirm')) && /28 runs/.test(await page.textContent('#fit-stats')));
+  await shot('6-sequential');
+
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide']) {
     await page.click('#btn-examples'); await page.click(`[data-example="${id}"]`); await page.waitForTimeout(300);

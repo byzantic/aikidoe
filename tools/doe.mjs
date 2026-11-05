@@ -16,6 +16,11 @@
 //   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
 //   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
 //   fit STUDY "y ~ formula"  [--anova 1|2|3] [--lenth] [--boxcox] [--aggregate mean|none]
+//   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
+//                 | --optimal --runs n [--model …] [--criterion D|I|A]
+//                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
+//        adds a stage of runs to the design as a new block
+//   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
 //
@@ -30,7 +35,8 @@ import { optimalDesign } from '../js/design/optimal.js';
 import * as T from '../js/design/twolevel.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import { runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
-import { fitModel, anova, lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
+import { fitModel, anova, lackOfFit, boxCox, lenth, twoLevelEffects, predict } from '../js/model/ols.js';
+import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { hierarchyViolations } from '../js/model/formula.js';
 import { num, pval, stars, table } from '../js/format.js';
 
@@ -204,10 +210,72 @@ function cmdFit({ pos, opt }) {
     ], eff.map((e, i) => ({ ...e, t: L.t[i], flag: L.activeSME[i] ? '> SME' : L.active[i] ? '> ME' : '' })).sort((a, b) => Math.abs(b.effect) - Math.abs(a.effect))));
     out('effect = 2 × coefficient (change from low to high)');
   }
+  const conf = checkConfirmation(study, fit.response);
+  if (conf.length) {
+    out('\nconfirmation runs (left out of the fit), against the predictions made when they were planned:');
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'n', label: 'n' }, { key: 'observed', label: 'observed' }, { key: 'predicted', label: 'predicted' },
+      { key: 'iv', label: '95% interval', align: 'left' }, { key: 'ok', label: '', align: 'left' }],
+      conf.map(c => ({ ...c, at: showSettings(c.settings), iv: `${num(c.lower)} … ${num(c.upper)}`, ok: c.inside === null ? 'no result yet' : c.inside ? 'confirmed' : 'OUTSIDE' }))));
+  }
   if (opt.boxcox) {
     const b = boxCox(fit);
     out(`\nBox–Cox: λ̂ = ${num(b.best, 3)}, 95% interval [${num(b.ci[0], 3)}, ${num(b.ci[1], 3)}]${b.ci[0] <= 1 && b.ci[1] >= 1 ? ' (includes 1: no transform needed)' : b.ci[0] <= 0 && b.ci[1] >= 0 ? ' (includes 0: consider log)' : ''}`);
   }
+}
+
+// "A=15,B=2" → { A: 15, B: 2 } in natural units (categorical levels as written)
+function parseSettings(study, text) {
+  const res = {};
+  for (const part of String(text).split(',')) {
+    const [id, v] = part.split('=').map(x => x?.trim());
+    const f = study.factors.find(x => x.id === id);
+    if (!f) fail(`unknown factor "${id}" in "${text}"`);
+    if (f.type === 'categorical') { if (!f.levels.includes(v)) fail(`${id}: "${v}" is not one of ${f.levels.join(', ')}`); res[id] = v; }
+    else { res[id] = Number(v); if (v === undefined || v === '' || !Number.isFinite(res[id])) fail(`${id}: "${v}" is not a number`); }
+  }
+  for (const f of study.factors) if (!(f.id in res)) fail(`"${text}" does not give ${f.id}`);
+  return res;
+}
+const showSettings = (s) => Object.entries(s).map(([k, v]) => `${k}=${typeof v === 'number' ? num(v, 6) : v}`).join(', ');
+
+function cmdAugment({ pos, opt }) {
+  const file = pos[0], study = load(file);
+  if (!study.design) fail('the study has no design to augment');
+  let stage;
+  if (opt.foldover) stage = foldover(study, opt.factor ? { factor: String(opt.factor) } : {});
+  else if (opt.axial) {
+    const a = opt.alpha === undefined ? {} : { alpha: Number.isFinite(Number(opt.alpha)) ? Number(opt.alpha) : String(opt.alpha) };
+    stage = axialPoints(study, { ...a, ...(opt.centre !== undefined ? { centre: int(opt.centre, 'centre') } : {}) });
+  } else if (opt.optimal) {
+    stage = optimalAugment(study, { runs: int(opt.runs ?? fail('--optimal needs --runs n (runs to add)'), 'runs'), model: opt.model ?? 'main', criterion: opt.criterion ?? 'D',
+      ...(opt.restarts ? { restarts: int(opt.restarts, 'restarts') } : {}) });
+  } else if (opt.confirm) {
+    if (!opt.formula) fail('--confirm needs --formula "y ~ …" (the model whose predictions are to be confirmed)');
+    const fit = fitModel(study, String(opt.formula));
+    stage = confirmationRuns(study, fit, list(opt.confirm).map(t => parseSettings(study, t)), { replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1 });
+    for (const p of stage.params.predictions) out(`predicted ${fit.response} at ${showSettings(p.settings)}: ${num(p.fit)} (95% prediction interval ${num(p.predLower)} … ${num(p.predUpper)})`);
+  } else fail('augment: choose --foldover, --axial, --optimal or --confirm');
+  const next = appendStage(study, stage, opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {});
+  save(file, next);
+  const added = next.history[next.history.length - 1].runs;
+  out(`${file}: ${stage.note}; ${added.length} runs added as block ${next.design.runs.find(r => r.run === added[0]).block} (runs ${added[0]}–${added[added.length - 1]}), ${next.design.runs.length} runs in all`);
+  if (stage.kind === 'foldover') {
+    const a = sequentialAliases(next);
+    out(a.chains.length ? `combined design: ${a.chains.length} alias chains among main effects and 2fis (see: alias ${file})` : 'combined design: no aliasing among main effects and two-factor interactions');
+  }
+  if (opt.sheet) { writeFileSync(opt.sheet, runSheetCSV(next)); out(`run sheet: ${opt.sheet}`); }
+}
+
+function cmdPredict({ pos, opt }) {
+  const [file, formula] = pos, study = load(file);
+  if (!formula) fail('predict: give the formula of the model to predict from');
+  const at = list(opt.at).map(t => parseSettings(study, t));
+  if (!at.length) fail('predict: give settings with --at "A=…,B=…"');
+  const fit = fitModel(study, formula);
+  const p = predict(fit, at);
+  out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: '95% PI (one run)', align: 'left' }],
+    at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)}` }))));
+  if (fit.model.terms[0]?.block) out('(for the average block)');
 }
 
 function cmdAlias({ pos, opt }) {
@@ -226,6 +294,13 @@ function cmdAlias({ pos, opt }) {
       if (t.length > 30) out(`… ${t.length - 30} more`);
       return;
     } else if (study.design.kind === 'full-factorial') { out('full factorial: no aliasing'); return; }
+    else if (study.design.kind === 'sequential') {
+      const a = sequentialAliases(study, { order: opt.order ? int(opt.order, 'order') : 2 });
+      out(`sequential design: ${study.design.params.stages.map(x => x.kind).join(' → ')}; ${a.runs} two-level runs`);
+      out(a.chains.length ? `alias chains:\n${a.chains.map(c => `  ${c.join(' = ')}`).join('\n')}` : 'no aliasing among the effects');
+      if (a.withBlocks.length) out(`confounded with blocks: ${a.withBlocks.join(', ')}`);
+      return;
+    }
     else fail(`no alias structure for a ${study.design.kind} design`);
   } else {
     const k = int(opt.factors ?? fail('alias: give a study, or --factors k with --runs N or --generators'), 'factors');
@@ -263,13 +338,13 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { init: cmdInit, design: cmdDesign, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 22).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 27).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];
