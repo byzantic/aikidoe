@@ -4,3 +4,6 @@ FrF2
 BsMD
 car
 rsm
+daewr
+skpr
+AlgDesign

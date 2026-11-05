@@ -213,6 +213,8 @@ export function toStudyDesign(study, design, opts = {}) {
   });
   const setting = (f, j, v) => {
     const m = design.levels[j];
+    // designs whose X holds coded values directly (definitive screening, optimal designs)
+    if (design.coded) return f.type === 'categorical' ? f.levels[m === 2 && f.levels.length === 2 ? (v + 1) / 2 : v] : decode(f, v);
     if (f.type === 'categorical') return f.levels[m === 2 ? (v + 1) / 2 : v];
     if (m === 2) return decode(f, v);                               // ±1, or 0 for centre points
     if (f.levels) return f.levels[v];                               // listed numeric levels
