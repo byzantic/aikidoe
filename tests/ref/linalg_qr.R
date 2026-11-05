@@ -32,11 +32,12 @@ cases <- lapply(mats, function(c) {
   b <- qr.coef(q, y)               # NA for aliased columns
   cov <- matrix(NA_real_, n, n)
   if (r > 0) { ci <- chol2inv(R[1:r, 1:r, drop = FALSE]); cov[piv[1:r], piv[1:r]] <- ci }
-  list(name = c[[1]],
-       input = list(A = A, y = I(y)),
-       output = list(rank = r, perm = I(piv - 1L), R = R, coef = I(unname(b)),
-                     fitted = I(unname(qr.fitted(q, y))), covUnscaled = cov))
+  out <- list(rank = r, perm = I(piv - 1L))
+  # Hilbert matrices are ill-conditioned (cond up to 1e13): R, coefficients and fitted values
+  # are only determined to ~cond·eps and differ between R versions, so only rank and pivots
+  # (which are stable) are recorded; the test checks backward error for these cases instead.
+  if (!grepl("Hilbert", c[[1]]))
+    out <- c(out, list(R = R, coef = I(unname(b)), fitted = I(unname(qr.fitted(q, y))), covUnscaled = cov))
+  list(name = c[[1]], input = list(A = A, y = I(y)), output = out)
 })
-# The Hilbert cases are ill-conditioned: R and coefficients are only meaningful to ~cond·eps,
-# so the test checks rank, pivots and backward error for them, not R itself.
 write_fixture("linalg-qr", cases, "tests/ref/linalg_qr.R", c("base"), tolerance = list(rel = 1e-9, abs = 1e-12))
