@@ -15,7 +15,8 @@ rows <- function(d) lapply(seq_len(nrow(d)), function(i) lapply(as.list(d[i, , d
 cases <- list()
 add <- function(...) cases[[length(cases) + 1]] <<- safe(...)
 
-for (m in c(4, 5, 6, 8, 10, 12))   # daewr tabulates 4 to 12 factors add(paste("DefScreen m =", m), list(kind = "dsd", m = m, c = 0), function() {
+# daewr tabulates DSDs for 4 to 12 factors
+for (m in c(4, 5, 6, 8, 10, 12)) add(paste("DefScreen m =", m), list(kind = "dsd", m = m, c = 0), function() {
   d <- DefScreen(m = m, c = 0, randomize = FALSE)
   list(X = unname(sapply(d, function(v) as.numeric(as.character(v)))))
 })
