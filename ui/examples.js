@@ -4,6 +4,7 @@ import { createStudy, FORMAT_VERSION, code } from '../js/study.js';
 import { fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { ccd } from '../js/design/rsm.js';
 import { rng } from '../js/design/rng.js';
+import { splitPlotFull } from '../js/design/splitplot.js';
 
 const reactor = () => ({
   aikidoe: FORMAT_VERSION, name: 'Reactor screening', seed: 7,
@@ -46,6 +47,27 @@ export const EXAMPLES = [
         const x1 = code(s.factors[0], r.settings.T), x2 = code(s.factors[1], r.settings.time);
         return { run: r.run, response: 'conv', value: +(78 + 3.5 * x1 + 2 * x2 - 4 * x1 * x1 - 2.5 * x2 * x2 + 1.5 * x1 * x2 + 0.6 * noise(g)).toFixed(2) };
       });
+      return createStudy({ ...s, design, observations });
+    } },
+  { id: 'anneal-results', title: 'Furnace anneal: split-plot with wafers and sites', step: 'analyse',
+    blurb: 'Temperature set per furnace run (whole plot, 6 runs), time and dose per wafer pair; 2 wafers × 5 sites each. Simulated sheet resistance; a mixed model separates furnace, run and wafer variation.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Furnace anneal', seed: 41,
+        description: 'Split-plot: anneal temperature is set once per furnace run; time and implant dose vary within it. Two wafers per condition, five drop-in sites per wafer (simulated data).',
+        factors: [{ id: 'T', name: 'Anneal temperature', units: '°C', low: 900, high: 1000, htc: true }, { id: 't', name: 'Anneal time', units: 'min', low: 10, high: 30 },
+          { id: 'dose', name: 'Implant dose', units: 'cm-2', low: 1e15, high: 5e15, transform: 'log' }],
+        responses: [{ id: 'Rs', name: 'Sheet resistance', units: 'Ω/sq', goal: 'target', target: 60 }] });
+      const design = toStudyDesign(s, splitPlotFull([2, 2, 2], [true, false, false], { replicates: 3 })), g = rng(17);
+      const furnace = {}, observations = [];
+      for (const r of design.runs) {
+        furnace[r.wholePlot] ??= 1.6 * noise(g);
+        const x = (id) => code(s.factors.find(f => f.id === id), r.settings[id]), runDev = 0.5 * noise(g);
+        for (const w of ['W1', 'W2']) {
+          const waf = 0.35 * noise(g);
+          for (const site of ['C', 'N', 'E', 'S', 'W']) observations.push({ run: r.run, wafer: `${r.run}${w}`, site, response: 'Rs',
+            value: +(62 - 4 * x('T') - 2.5 * x('t') - 6 * x('dose') + 1.2 * x('T') * x('dose') + furnace[r.wholePlot] + runDev + waf + (site === 'C' ? -0.4 : 0.1) + 0.2 * noise(g)).toFixed(2) });
+        }
+      }
       return createStudy({ ...s, design, observations });
     } },
   { id: 'gate-oxide', title: 'Gate oxide anneal (split-plot)', step: 'run', url: 'examples/gate-oxide-anneal.aikidoe.json',

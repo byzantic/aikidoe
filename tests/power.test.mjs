@@ -22,7 +22,7 @@ function studyFor(input, withY) {
 const codedX = (s, rows) => rows.map(r => s.factors.map(f => (f.type === 'categorical' ? f.levels.indexOf(r[f.id]) : r[f.id])));
 
 section('power vs base R (non-central F)');
-for (const c of loadFixture('power-r').cases) {
+for (const c of loadFixture('power-r').cases.filter(x => !x.input.splitPlot)) {
   const s = studyFor(c.input), opts = { model: c.input.model, delta: c.input.delta, alpha: c.input.alpha };
   const p = designPower(s, codedX(s, c.input.rows), opts);
   check(`${c.name}: residual df`, p.dfRes === c.output.dfRes, `${p.dfRes} vs ${c.output.dfRes}`);
@@ -30,6 +30,19 @@ for (const c of loadFixture('power-r').cases) {
   near(`${c.name}: term power`, p.terms.map(t => t.power), c.output.terms.map(t => t.power), PTOL);
   near(`${c.name}: coefficient λ and power`, p.parameters.map(q => [q.lambda, q.power]), c.output.parameters.slice(1).map(q => [q.lambda, q.power]), PTOL);
   near(`${c.name}: the same from the study's design`, studyPower(s, opts).terms.map(t => t.power), p.terms.map(t => t.power), { rel: 1e-14, abs: 0 });
+}
+
+section('split-plot power: GLS information, containment df (vs base R)');
+for (const c of loadFixture('power-r').cases.filter(x => x.input.splitPlot)) {
+  const s = studyFor(c.input), p = designPower(s, codedX(s, c.input.rows), { model: c.input.model, delta: c.input.delta, alpha: c.input.alpha, wholePlot: c.input.wholePlot, eta: c.input.eta });
+  near(`${c.name}: per-term df, λ and power`, p.terms.map(t => ({ term: t.term, df: t.df, ddf: t.ddf, lambda: t.lambda, power: t.power })), c.output.terms, PTOL);
+}
+{
+  const c = loadFixture('power-r').cases.find(x => x.input.splitPlot && x.input.eta === 4);
+  const s = studyFor(c.input), X = codedX(s, c.input.rows);
+  const sp = designPower(s, X, { model: c.input.model, wholePlot: c.input.wholePlot, eta: 4 }), cr = designPower(s, X, { model: c.input.model, sigma: Math.sqrt(1 + 4) });   // same total variance, completely randomised
+  check('whole-plot factors lose power in a split-plot, subplot factors gain', sp.terms[0].power < cr.terms[0].power && sp.terms[2].power > cr.terms[2].power);
+  check('strata reported', JSON.stringify(sp.strata) === JSON.stringify([{ name: 'Whole plot', df: 4 }, { name: 'Residual', df: 21 }]));
 }
 
 section('power vs skpr and pwr');

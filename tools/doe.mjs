@@ -19,7 +19,9 @@
 //   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
 //   fit STUDY "y ~ formula"  [--anova 1|2|3] [--lenth] [--boxcox] [--aggregate mean|none]
 //        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
-//   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8]
+//        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
+//        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
+//   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
 //                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
@@ -45,6 +47,7 @@ import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, s
 import { hierarchyViolations } from '../js/model/formula.js';
 import { studyPower, detectableEffect } from '../js/model/power.js';
 import { reduceModel } from '../js/model/reduce.js';
+import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
 import { num, pval, stars, table } from '../js/format.js';
 
 // ---------------------------------------------------------------- arguments
@@ -207,6 +210,16 @@ function cmdFit({ pos, opt }) {
   const [file, formula] = pos;
   const study = load(file);
   if (!formula) fail('fit: give a formula, e.g. "y ~ (A+B+C)^2"');
+  if (!opt.ols) {
+    const resp = (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : '') || study.responses[0]?.id;
+    const requested = opt.random ? String(opt.random).split(',').map(x => x.trim()).filter(Boolean) : 'auto';
+    let rand = [];
+    try { rand = randomEffects(observationTable(study, resp), requested); } catch (e) { if (requested !== 'auto') throw e; }
+    if (rand.length) {
+      if (opt.reduce || opt.lenth || opt.boxcox) fail('--reduce, --lenth and --boxcox work on least-squares fits: add --ols (the mixed model is the right analysis for these data, though)');
+      return printMixed(study, formula, requested, opt);
+    }
+  }
   let fit = fitModel(study, formula, { aggregate: opt.aggregate ?? 'mean' });
   if (opt.reduce) {
     const r = reduceModel(study, formula, { method: opt.reduce === true ? 'p' : String(opt.reduce), aggregate: opt.aggregate ?? 'mean',
@@ -219,7 +232,7 @@ function cmdFit({ pos, opt }) {
   }
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
   out(`${fit.n} runs, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.rows.some(r => r.n > 1) ? '; per-run means of repeated observations' : ''}`);
-  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this least-squares fit treats all runs as independent, so the standard errors and tests of whole-plot effects are too optimistic (REML analysis: issue #15)');
+  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this least-squares fit treats all runs as independent, so the standard errors and tests of whole-plot effects are too optimistic (drop --ols for the mixed model)');
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
   out('');
@@ -333,14 +346,41 @@ function cmdPower({ pos, opt }) {
   }
   const model = opt.model ? String(opt.model).replace(/^.*~/, '').trim() : 'main';
   const sigma = opt.sigma !== undefined ? Number(opt.sigma) : 1, alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target = opt.target !== undefined ? Number(opt.target) : 0.8;
-  const p = studyPower(study, { model, delta, sigma, alpha });
+  const p = studyPower(study, { model, delta, sigma, alpha, ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}) });
+  if (p.strata) out(`split-plot: whole-plot terms tested against the whole-plot error (assumed σ²_wp/σ² = η = ${p.eta}; --eta to change), subplot terms against the residual`);
   out(`power for ${model}: ${p.n} runs, ${p.rank} coefficients, ${p.dfRes} residual df; α = ${alpha}, σ = ${sigma}${typeof delta === 'number' ? `, Δ = ${delta} (low → high)` : ''}`);
   if (p.dfRes < 1) { out('no residual degrees of freedom: power is not defined (add runs, or a smaller model)'); return; }
   const det = Object.fromEntries(detectableEffect(p, { power: target }).map(d => [d.term, d]));
-  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'delta', label: 'Δ' }, { key: 'power', label: 'power' }, { key: 'det', label: `Δ for ${target * 100}%` }, { key: 'ratio', label: 'Δ/σ' }],
+  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, ...(p.strata ? [{ key: 'ddf', label: 'ddf' }] : []), { key: 'delta', label: 'Δ' }, { key: 'power', label: 'power' }, { key: 'det', label: `Δ for ${target * 100}%` }, { key: 'ratio', label: 'Δ/σ' }],
     p.terms.filter(t => !t.block).map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: det[t.term].delta, ratio: det[t.term].ratio }))));
   if (p.terms.some(t => t.block)) out('(blocks fitted as fixed effects)');
   out('Δ: change in the response from the low to the high setting of a factor (for a quadratic term, 2 × its coefficient)');
+}
+
+function printMixed(study, formula, random, opt) {
+  const m = fitMixedModel(study, formula, { random });
+  const nRuns = new Set(m.rows.map(r => r.run)).size;
+  out(`${m.response} ~ ${m.model.terms.map(t => t.label).join(' + ') || '1'}`);
+  out(`mixed model (REML): ${m.n} readings from ${nRuns} runs; random effects: ${m.random.map(r => `${r.name} (${new Set(r.labels).size})`).join(', ')}; residual = ${m.random.some(r => r.id === 'wafer') ? 'within wafer (sites, repeats)' : m.random.some(r => r.id === 'run') ? 'within run' : 'run to run'}`);
+  if (!m.converged) out('warning: the REML optimisation did not fully converge');
+  if (m.aliased.length) out(`aliased (not estimable): ${m.aliased.join(', ')}`);
+  const total = m.varcomp.reduce((a, v) => a + v.variance, 0);
+  out('\nvariance components');
+  out(table([{ key: 'name', label: 'source', align: 'left' }, { key: 'variance', label: 'variance' }, { key: 'sd', label: 'std. dev.' }, { key: 'ci', label: '95% CI (variance)', align: 'left' }, { key: 'pct', label: '% of total' }],
+    m.varcomp.map(v => ({ ...v, ci: v.boundary ? 'estimate on the boundary (0)' : `${num(v.lower)} … ${num(v.upper)}`, pct: num(100 * v.variance / total, 3) }))));
+  out('\nfixed effects (coded units; Kenward–Roger standard errors and df)');
+  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'est', label: 'estimate' }, { key: 'se', label: 'std. error' }, { key: 'df', label: 'df' }, { key: 't', label: 't' }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars }],
+    m.columns.map((c, j) => ({ term: c, est: m.coef[j], se: m.seKR[j], df: m.dfKR[j], t: m.t[j], p: m.pKR[j] })).filter(r => Number.isFinite(r.est))));
+  const useCont = opt.df === 'containment';
+  out(`\ntests of model terms (${useCont ? 'containment df' : 'Kenward–Roger'})`);
+  const cols = [{ key: 'term', label: 'term', align: 'left' }, { key: 'F', label: 'F' }, { key: 'df', label: 'ndf' }, { key: 'ddf', label: 'ddf' }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars }, { key: 'stratum', label: 'tested in', align: 'left' }];
+  if (opt.compare) cols.push({ key: 'naiveP', label: 'p if independent', fmt: pval });
+  out(table(cols, m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block).map(t => ({ ...t, F: useCont ? t.F : t.FKR, ddf: useCont ? t.ddfContainment : t.ddfKR, p: useCont ? t.pContainment : t.pKR,
+    stratum: t.stratum === 'Residual' ? 'residual' : (m.random.find(r => r.name === t.stratum)?.name ?? t.stratum ?? '').toLowerCase() }))));
+  if (m.strata) out(`strata (containment df): ${m.strata.map(st => `${st.name === 'Residual' ? 'residual' : st.name.toLowerCase()} ${st.df}`).join(', ')}`);
+  if (opt.compare) out(`"p if independent": least squares on the same ${m.n} readings as if every reading were independent — what an analysis that ignores the whole plots, runs and wafers would claim`);
+  if (m.boundary.length) out(`note: ${m.boundary.join(', ')} variance estimated as 0 (on the boundary): the data show no variation at that level beyond what the levels below explain`);
+  out(`REML criterion ${num(m.REML, 8)}`);
 }
 
 function cmdAlias({ pos, opt }) {
@@ -419,7 +459,7 @@ function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 32).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 34).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];

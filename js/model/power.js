@@ -18,6 +18,8 @@ import { qr } from '../linalg.js';
 import { fDist, ncf } from '../dist.js';
 import { parseFormula, modelMatrix } from './formula.js';
 import { decode } from '../study.js';
+import { splitPlotInfo } from '../design/splitplot.js';
+import { _containment as containment, _indexGroups as indexGroups } from './mixed.js';
 
 /**
  * Power from a model matrix mm = { X, columns, assign, model } (formula.js).
@@ -26,24 +28,44 @@ import { decode } from '../study.js';
  * Returns { n, rank, dfRes, terms: [{ term, df, lambda, power }], parameters: [{ name, term, lambda, power }] }.
  * Terms that are not estimable, nuisance (block) terms and, with dfRes = 0, everything get power NaN.
  */
-export function powerFromMatrix(mm, { delta = 2, sigma = 1, alpha = 0.05, coef } = {}) {
+export function powerFromMatrix(mm, { delta = 2, sigma = 1, alpha = 0.05, coef, wholePlot, eta = 1 } = {}) {
   const { X, columns, assign, model } = mm;
   if (!(sigma > 0)) throw new Error('σ must be positive');
   if (!(alpha > 0 && alpha < 1)) throw new Error('α must be between 0 and 1');
-  const n = X.length, f = qr(X), rank = f.rank, dfRes = n - rank;
-  const V = f.unscaledCov();
+  const n = X.length, f = qr(X), rank = f.rank;
+  let dfRes = n - rank, V = f.unscaledCov(), dfOf = () => dfRes, strata = null;
   const aliased = new Set(f.aliased);
+  if (wholePlot) {
+    // split-plot: GLS information Xᵀ V⁻¹ X with V = I + η Z Zᵀ (σ² units), and each term tested in
+    // its stratum with the containment df (whole-plot terms against the whole-plot error)
+    if (!(eta >= 0)) throw new Error('η must be ≥ 0');
+    const keep = columns.map((_, j) => j).filter(j => !aliased.has(j));
+    const Xk = X.map(r => keep.map(j => r[j]));
+    const M = splitPlotInfo(Xk, wholePlot, eta);
+    const Vk = solveSymMatrix(M);
+    V = columns.map(() => columns.map(() => NaN));
+    keep.forEach((i, a) => keep.forEach((j, b) => { V[i][j] = Vk[a][b]; }));
+    const g = indexGroups(wholePlot);
+    if (g.m >= 2 && g.m < n) {
+      const c = containment(Xk, [g], [0]);
+      const dfCol = new Map(keep.map((j, a) => [j, c.dfs[c.stratumOf[a]]]));
+      dfOf = (S) => Math.min(...S.map(j => dfCol.get(j)));
+      strata = [{ name: 'Whole plot', df: c.dfs[0] }, { name: 'Residual', df: c.dfs[1] }];
+      dfRes = c.dfs[1];
+    }
+  }
   const deltaOf = (label) => (typeof delta === 'number' ? delta : delta[label] ?? delta.default ?? 2);
   const b = columns.map((_, j) => (coef ? coef[j] : assign[j] < 0 ? 0 : deltaOf(model.terms[assign[j]].label) / 2) / sigma);
   const pw = (S) => {
-    if (dfRes < 1 || S.some(j => aliased.has(j))) return { lambda: NaN, power: NaN };
+    const df2 = S.some(j => aliased.has(j)) ? 0 : dfOf(S);
+    if (!(df2 >= 1) || S.some(j => aliased.has(j))) return { lambda: NaN, power: NaN, ddf: df2 };
     const bs = S.map(j => b[j]);
     // λ = bᵀ (V_SS)⁻¹ b via a small solve
     const A = S.map(i => S.map(j => V[i][j]));
     const x = solveSym(A, bs);
     const lambda = bs.reduce((s, v, i) => s + v * x[i], 0);
-    const crit = fDist.isf(alpha, S.length, dfRes);
-    return { lambda, power: ncf.sf(crit, S.length, dfRes, lambda) };
+    const crit = fDist.isf(alpha, S.length, df2);
+    return { lambda, ddf: df2, power: ncf.sf(crit, S.length, df2, lambda) };
   };
   const terms = model.terms.map((t, ti) => {
     const S = columns.map((_, j) => j).filter(j => assign[j] === ti);
@@ -52,7 +74,12 @@ export function powerFromMatrix(mm, { delta = 2, sigma = 1, alpha = 0.05, coef }
   // coefficients other than the intercept (whose "power" against zero means nothing here)
   const parameters = columns.map((name, j) => ({ j, name })).filter(c => assign[c.j] >= 0)
     .map(({ j, name }) => ({ name, term: model.terms[assign[j]].label, ...(model.terms[assign[j]].block ? { lambda: NaN, power: NaN } : pw([j])) }));
-  return { n, rank, dfRes, alpha, sigma, terms, parameters };
+  return { n, rank, dfRes, alpha, sigma, terms, parameters, ...(strata ? { strata, eta } : {}) };
+}
+
+function solveSymMatrix(M) {
+  const m = M.length;
+  return M.map((_, j) => solveSym(M, M.map((__, i) => (i === j ? 1 : 0)))).map((col, j, all) => all.map(c => c[j]));
 }
 
 // small symmetric positive definite solve (Gaussian elimination with partial pivoting)
@@ -98,6 +125,7 @@ export function designPower(study, X, { model = 'main', block, ...opts } = {}) {
   const m = withBlocks(parsed, study.factors, codedToSettings(study.factors, X), block);
   return { model: parsed, ...powerFromMatrix(modelMatrix(m.model, m.factors, m.settings), opts) };
 }
+// opts.wholePlot (label per run) and opts.eta (σ²_wp/σ², default 1) give split-plot power.
 
 /** Power of the study's design (confirmation runs excluded; blocks fitted as fixed effects). */
 export function studyPower(study, { model = 'main', ...opts } = {}) {
@@ -105,7 +133,8 @@ export function studyPower(study, { model = 'main', ...opts } = {}) {
   const runs = study.design.runs.filter(r => r.kind !== 'confirm');
   const parsed = parseFormula(model, study.factors);
   const m = withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
-  return { model: parsed, ...powerFromMatrix(modelMatrix(m.model, m.factors, m.settings), opts) };
+  const wp = runs.some(r => r.wholePlot !== undefined) ? { wholePlot: runs.map(r => String(r.wholePlot ?? `run ${r.run}`)) } : {};
+  return { model: parsed, ...powerFromMatrix(modelMatrix(m.model, m.factors, m.settings), { ...wp, ...opts }) };
 }
 
 /**
@@ -118,7 +147,8 @@ export function detectableEffect(result, { power = 0.8 } = {}) {
   if (!(power > result.alpha && power < 1)) throw new Error(`target power must be between α (${result.alpha}) and 1`);
   return result.terms.filter(t => !t.block).map(t => {
     if (!Number.isFinite(t.lambda) || !(t.lambda > 0)) return { term: t.term, delta: NaN, ratio: NaN };
-    const crit = fDist.isf(result.alpha, t.df, result.dfRes), f = (lam) => ncf.sf(crit, t.df, result.dfRes, lam);
+    const d2 = t.ddf ?? result.dfRes;
+    const crit = fDist.isf(result.alpha, t.df, d2), f = (lam) => ncf.sf(crit, t.df, d2, lam);
     let lo = 0, hi = 1;
     while (f(hi) < power && hi < 1e8) { lo = hi; hi *= 2; }
     for (let k = 0; k < 200 && hi - lo > 1e-13 * hi; k++) { const mid = (lo + hi) / 2; if (f(mid) < power) lo = mid; else hi = mid; }

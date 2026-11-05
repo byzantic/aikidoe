@@ -177,8 +177,24 @@ try {
   check('run sheet order keeps whole plots together', ord.every((w, i) => i === 0 || w === ord[i - 1] || !ord.slice(0, i).includes(w)));
   await shot('7-split-plot');
 
+  section('mixed model analysis (issue #15)');
+  await page.click('#btn-examples'); await page.click('[data-example="anneal-results"]'); await page.waitForTimeout(400);
+  check('furnace anneal example opens on Analyse with the mixed-model panel', (await page.locator('#mixed').count()) === 1);
+  const mtxt = await page.textContent('#mixed');
+  check('random effects: whole plot (6), run (24), wafer (48); 240 readings', /240 readings from 24 runs/.test(mtxt) && /whole plot \(6\), run \(24\), wafer \(48\)/.test(mtxt), mtxt.slice(0, 300));
+  check('T tested in the whole-plot stratum', (await page.$$eval('#mixed tr[data-term]', trs => trs.map(t => t.textContent))).some(t => /^T\d.*whole plot/.test(t)));
+  await page.check('#compare-ols'); await settle();
+  check('comparison column shown', /p if independent/.test(await page.textContent('#mixed')));
+  await page.selectOption('select[aria-label="df method"]', 'containment'); await settle();
+  check('containment df selectable', /containment df/.test(await page.textContent('#mixed')));
+  await shot('8-mixed');
+  await page.click('text=least squares instead'); await settle();
+  check('least squares on request, with a warning and a way back', (await page.locator('#mixed').count()) === 0 && (await page.locator('#use-mixed').count()) === 1);
+  await page.click('#use-mixed'); await settle();
+  check('back to the mixed model', (await page.locator('#mixed').count()) === 1);
+
   section('other examples render');
-  for (const id of ['ccd-results', 'gate-oxide']) {
+  for (const id of ['ccd-results', 'gate-oxide', 'anneal-results']) {
     await page.click('#btn-examples'); await page.click(`[data-example="${id}"]`); await page.waitForTimeout(300);
     for (const step of ['define', 'design', 'run', 'analyse']) {
       if (await page.isDisabled(`[data-step="${step}"]`)) continue;

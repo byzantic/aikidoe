@@ -175,8 +175,12 @@ Per-die wafer maps are out of scope for v1 (§14) but the observation format (§
 ### 7.3 REML
 
 - Linear mixed model y = Xβ + Σ Z_k u_k + ε, u_k ~ N(0, σ_k² I).
-- Fixed effects profiled out; variance components optimised on the log scale (Newton with analytic gradient, Nelder–Mead fallback); boundary estimates (σ_k² = 0) reported as such, not as failure.
-- Output: variance components with approximate CIs, fixed-effect estimates by GLS, and tests with **Kenward–Roger** denominator degrees of freedom (the accepted standard for split-plot analysis). Containment df are given first, as the first milestone; KR follows.
+- σ² and β profiled out; the variance ratios γ_k = σ_k²/σ² optimised by Newton's method with the exact gradient and Hessian, damped, with a backtracking line search projected onto γ ≥ 0 (so a component can sit exactly on the boundary, reported as estimate 0, not as failure); Nelder–Mead on √γ as fallback. All components nested, so H is block diagonal over the coarsest groups and the algebra is done block by block.
+- Random effects chosen automatically from the data: whole plots (when the design has them), runs (when a run has several readings), wafers (when runs have several wafers and wafers several readings); duplicates of another level or of the residual are dropped; the user can name them instead (`wholePlot`, `run`, `wafer`, `lot`).
+- Variance components with Satterthwaite (scaled χ²) intervals from the asymptotic covariance of the REML estimates.
+- Output: variance components with approximate CIs, fixed-effect estimates by GLS, and tests with **Kenward–Roger** denominator degrees of freedom and adjusted covariance (the accepted standard for split-plot analysis), or containment (stratum) df on request. A term is tested in the finest stratum within whose groups its columns are constant.
+- Power for split-plot designs uses the GLS information for an assumed η = σ²_wp/σ² and the containment df of each term's stratum.
+- Not yet: model reduction of mixed models; mixed-model prediction intervals for confirmation runs (they come from least squares on run means, with a note).
 - A naive OLS fit of a split-plot experiment is shown side by side on request, to show what restricted randomisation does to whole-plot standard errors.
 
 ### 7.4 Boat / slot position

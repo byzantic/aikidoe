@@ -13,4 +13,17 @@ power <- function(dd) {
   list(dfRes = df2, terms = terms, parameters = params)
 }
 cases <- lapply(designs, function(dd) list(name = dd$name, input = list(rows = rows_of(dd$d), model = dd$aikidoe, delta = dd$delta, alpha = dd$alpha, levels = dd$levels), output = power(dd)))
+# split-plot (issue #15): GLS information with V = I + η Z Zᵀ; each term tested with the
+# containment df of its stratum (whole-plot terms: W − 1 − p_wp; subplot terms: n − W − p_sp)
+sp <- expand.grid(C = c(-1, 1), D = c(-1, 1), wp = 1:8); sp$A <- c(-1, 1, -1, 1, -1, 1, -1, 1)[sp$wp]; sp$B <- c(-1, -1, 1, 1, -1, -1, 1, 1)[sp$wp]
+spf <- ~ A + B + C + D + A:B + A:C
+X <- model.matrix(spf, sp); Z <- model.matrix(~ factor(wp) - 1, sp)
+for (eta in c(1, 4)) {
+  V <- solve(t(X) %*% solve(diag(nrow(X)) + eta * Z %*% t(Z), X)); asg <- attr(X, "assign"); lab <- attr(terms(spf), "term.labels")
+  ddf <- c(A = 8 - 1 - 3, B = 4, C = 32 - 8 - 3, D = 21, "A:B" = 4, "A:C" = 21)
+  terms <- lapply(seq_along(lab), function(t) { S <- which(asg == t); b <- rep(1, length(S)); lam <- drop(t(b) %*% solve(V[S, S, drop = FALSE]) %*% b)
+    list(term = lab[t], df = length(S), ddf = ddf[[lab[t]]], lambda = lam, power = pf(qf(0.95, length(S), ddf[[lab[t]]]), length(S), ddf[[lab[t]]], ncp = lam, lower.tail = FALSE)) })
+  cases[[length(cases) + 1]] <- list(name = sprintf("split-plot 8 x 4, eta = %g", eta), input = list(rows = rows_of(sp[, c("A", "B", "C", "D")]), wholePlot = I(sp$wp), model = "A + B + C + D + A:B + A:C", delta = 2, alpha = 0.05, eta = eta, splitPlot = TRUE),
+    output = list(terms = terms))
+}
 write_fixture("power-r", cases, "tests/ref/power_r.R", c("stats"))

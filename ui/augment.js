@@ -117,6 +117,9 @@ export function confirmPanel({ state, setDoc, setUI }, fit) {
     conf.some(c => c.inside === false) ? messages(['A confirmation result is outside its prediction interval: the model may be missing a term, the process may have shifted, or the region of the optimum is not where the model says.'], 'warning') : null,
     h('p', { class: 'muted small' }, 'Each interval is the one stored when the runs were planned (for the mean of n runs where there are replicates), from the model then current.')) : null;
 
+  const nested = study.design?.runs.some(r => r.wholePlot !== undefined) || study.observations.some(o => o.wafer !== undefined || o.site !== undefined);
   return h('section', { class: 'panel', id: 'confirm' }, h('h2', {}, 'Predict and confirm'),
-    h('p', { class: 'small' }, `Predict ${fit.response} from this model at chosen settings, and plan confirmation runs there.`), inputs, out, check);
+    h('p', { class: 'small' }, `Predict ${fit.response} from this model at chosen settings, and plan confirmation runs there.`),
+    nested ? h('p', { class: 'muted small' }, 'Predictions and intervals here come from least squares on run means: for a split-plot or wafer/site data they leave out the whole-plot variance, so a new furnace run can fall wider than the prediction interval.') : null,
+    inputs, out, check);
 }

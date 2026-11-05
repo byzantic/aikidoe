@@ -123,8 +123,26 @@ try {
   const spS = parseStudy(readFileSync(join(dir, 'sp.aikidoe.json'), 'utf8'));
   writeFileSync(join(dir, 'sp.csv'), 'run,y\n' + spS.design.runs.map(x => `${x.run},${(5 + x.settings.t / 10).toFixed(3)}`).join('\n') + '\n');
   run('import', 'sp.aikidoe.json', 'sp.csv');
-  r = run('fit', 'sp.aikidoe.json', 'y ~ main');
-  check('fit on a split-plot warns about least squares', /warning: split-plot design/.test(r.out), r.out + r.err);
+  r = run('fit', 'sp.aikidoe.json', 'y ~ main', '--ols');
+  check('fit --ols on a split-plot warns about least squares', /warning: split-plot design/.test(r.out), r.out + r.err);
+
+  section('mixed models (issue #15)');
+  // two wafers per run; whole-plot noise; readings vary within runs
+  const sp2 = parseStudy(readFileSync(join(dir, 'sp.aikidoe.json'), 'utf8'));
+  let a = 7; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647 - 0.5; };
+  const u = {}, lines = ['run,wafer,y'];
+  for (const x of sp2.design.runs) { u[x.wholePlot] ??= 3 * rnd(); const ur = rnd(); for (const w of ['W1', 'W2']) lines.push(`${x.run},${w},${(50 + 4 * (x.settings.T - 950) / 50 + 2 * (x.settings.t - 20) / 10 + u[x.wholePlot] + ur + 0.4 * rnd()).toFixed(3)}`); }
+  writeFileSync(join(dir, 'sp2.csv'), lines.join('\n') + '\n');
+  r = run('import', 'sp.aikidoe.json', 'sp2.csv');
+  r = run('fit', 'sp.aikidoe.json', 'y ~ T + P + t + G + F', '--compare');
+  check('fit: REML with whole plot and run, KR tests, strata', r.code === 0 && /mixed model \(REML\): 64 readings from 32 runs; random effects: Whole plot \(4\), Run \(32\)/.test(r.out)
+    && /tests of model terms \(Kenward–Roger\)/.test(r.out) && /^T\s.*whole plot/m.test(r.out) && /^t\s.*\brun\b/m.test(r.out) && /p if independent/.test(r.out), r.out + r.err);
+  r = run('fit', 'sp.aikidoe.json', 'y ~ T + P + t + G + F', '--df', 'containment', '--random', 'wholePlot');
+  check('fit --df containment --random wholePlot', r.code === 0 && /containment df/.test(r.out) && /random effects: Whole plot \(4\);/.test(r.out), r.out + r.err);
+  r = run('fit', 'sp.aikidoe.json', 'y ~ T + t', '--reduce', 'p');
+  check('--reduce asks for --ols on mixed-model data', r.code !== 0 && /add --ols/.test(r.err), r.err);
+  r = run('power', 'sp.aikidoe.json', '--model', 'T + P + t + G + F', '--eta', '2');
+  check('power on a split-plot: GLS with η, per-term error df', r.code === 0 && /η = 2/.test(r.out) && /^T\s+1\s+1\s/m.test(r.out), r.out + r.err);
 
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
