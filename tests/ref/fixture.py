@@ -3,6 +3,8 @@
     from fixture import write_fixture
     write_fixture('smoke-py', cases, __file__, ['numpy', 'scipy'])
 
+tolerance (optional) sets the drift-check tolerance, e.g. {'rel': 1e-9, 'abs': 1e-14}.
+
 Writes $AIKIDOE_FIXTURES/<name>.json (default tests/fixtures/), run from the repo root.
 numpy scalars and arrays are converted to plain JSON; floats keep full precision (repr).
 """
@@ -28,7 +30,7 @@ def _plain(x):
     return x
 
 
-def write_fixture(name, cases, generator, packages=()):
+def write_fixture(name, cases, generator, packages=(), tolerance=None):
     out_dir = os.environ.get('AIKIDOE_FIXTURES', 'tests/fixtures')
     os.makedirs(out_dir, exist_ok=True)
     doc = {
@@ -38,6 +40,8 @@ def write_fixture(name, cases, generator, packages=()):
                  'packages': {p: version(p) for p in packages}},
         'cases': _plain(cases),
     }
+    if tolerance:
+        doc['tolerance'] = tolerance
     path = os.path.join(out_dir, f'{name}.json')
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(doc, f, indent=1, ensure_ascii=False)
