@@ -38,8 +38,8 @@ for n in (1, 3, 6, 12):
     b = rng.standard_normal(n)
     cases.append({'name': f'chol SPD {n}x{n}', 'input': {'op': 'chol', 'A': A, 'b': b},
                   'output': {'L': L, 'logdet': np.linalg.slogdet(A)[1], 'x': np.linalg.solve(A, b)}})
-cases.append({'name': 'chol Hilbert 8', 'input': {'op': 'chol', 'A': hilbert(8), 'b': np.ones(8)},
-              'output': {'logdet': np.linalg.slogdet(hilbert(8))[1]}})
+# (Hilbert log dets are checked against exact values in the test, not against numpy: numpy's
+# are only accurate to ~cond·eps and vary between builds.)
 
 # LU solve, slogdet, inverse
 for name, A in [('random 6x6', rng.standard_normal((6, 6))),
