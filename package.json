@@ -6,6 +6,11 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "echo \"no tests yet\""
+    "test": "node tests/run-all.mjs",
+    "fixtures": "node tools/regen-fixtures.mjs",
+    "fixtures:check": "node tools/regen-fixtures.mjs --out .fixtures-fresh && node tools/check-fixtures.mjs --fresh .fixtures-fresh"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
