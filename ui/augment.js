@@ -4,6 +4,7 @@ import { h, select, dataTable, messages } from './dom.js';
 import { num } from '../js/format.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { predict } from '../js/model/ols.js';
+import { predictMixed, runMeanWeights } from '../js/model/mixed.js';
 import { decode } from '../js/study.js';
 
 // optimal augmentation runs in the worker, as the optimal search does
@@ -94,19 +95,29 @@ export function confirmPanel({ state, setDoc, setUI }, fit) {
       : h('input', { class: 'num', type: 'number', step: 'any', value: +at[f.id].toPrecision(6), 'aria-label': `confirm ${f.id}`, onchange: (e) => setAt(f.id, Number(e.target.value)) }))),
     h('label', { class: 'inline' }, 'replicates', h('input', { class: 'num', type: 'number', min: 1, value: ui.replicates ?? 2, 'aria-label': 'confirm replicates', onchange: (e) => set({ replicates: Math.max(1, Number(e.target.value)) }) })));
 
-  let pred = null, err = null;
-  try { if (fit.dfRes < 1) throw new Error('A prediction interval needs residual degrees of freedom.'); pred = predict(fit, [at])[0]; } catch (e) { err = e.message; }
+  const mixed = fit.kind === 'mixed', reps = ui.replicates ?? 2;
+  const hasWP = mixed && fit.random.some(r => r.id === 'wholePlot');
+  let pred = null, predN = null, err = null;
+  try {
+    if (mixed) {
+      pred = predictMixed(fit, [at], { weights: runMeanWeights(fit) })[0];
+      predN = reps > 1 ? predictMixed(fit, [at], { weights: runMeanWeights(fit, { runs: reps, inOneWholePlot: !ui.separate }) })[0] : null;
+    } else { if (fit.dfRes < 1) throw new Error('A prediction interval needs residual degrees of freedom.'); pred = predict(fit, [at])[0]; }
+  } catch (e) { err = e.message; }
   const out = err ? h('div', { class: 'msg warning' }, err) : h('div', {},
     h('div', { class: 'row small', id: 'prediction' },
       h('span', { class: 'stat' }, `predicted ${fit.response} `, h('b', {}, num(pred.fit))),
-      h('span', { class: 'stat' }, '95% CI (mean) ', h('b', {}, `${num(pred.lower)} … ${num(pred.upper)}`)),
+      h('span', { class: 'stat' }, `95% CI (mean${mixed ? ', KR' : ''}) `, h('b', {}, `${num(pred.lower)} … ${num(pred.upper)}`)),
       h('span', { class: 'stat' }, '95% PI (one run) ', h('b', {}, `${num(pred.predLower)} … ${num(pred.predUpper)}`)),
+      predN ? h('span', { class: 'stat' }, `95% PI (mean of ${reps} runs) `, h('b', {}, `${num(predN.predLower)} … ${num(predN.predUpper)}`)) : null,
       fit.model.terms[0]?.block ? h('span', { class: 'muted' }, '(average block)') : null),
     h('div', { class: 'row' }, h('button', { class: 'btn', id: 'add-confirm', onclick: () => {
-      const next = appendStage(study, confirmationRuns(study, fit, [at], { replicates: ui.replicates ?? 2 }));
+      const next = appendStage(study, confirmationRuns(study, fit, [at], { replicates: reps, inOneWholePlot: !ui.separate }));
       state.step = 'run'; setDoc(structuredClone(next));
     } }, `Add ${ui.replicates ?? 2} confirmation run(s) here`),
-    h('span', { class: 'muted small' }, 'The prediction is stored with the runs; confirmation results are compared with it and left out of the fit.')));
+    hasWP && reps > 1 ? h('label', { class: 'inline small' }, h('input', { type: 'checkbox', checked: !!ui.separate, 'aria-label': 'separate whole plots', onchange: (e) => set({ separate: e.target.checked }) }), 'each run in its own whole plot') : null,
+    h('span', { class: 'muted small' }, 'The prediction is stored with the runs; confirmation results are compared with it and left out of the fit.')),
+    mixed ? h('p', { class: 'muted small' }, `Mixed model: a run is measured like the others; the intervals include the ${fit.random.map(r => r.name.toLowerCase()).join(', ')} and within-${fit.random.some(r => r.id === 'wafer') ? 'wafer' : 'run'} variation${hasWP ? `. Replicates ${ui.separate ? 'in separate whole plots average out the whole-plot variation too' : 'in one new whole plot (one furnace load) share its whole-plot deviation, so more of them barely narrows the interval'}` : ''}.`) : null);
 
   const conf = checkConfirmation(study, fit.response);
   const check = conf.length ? h('div', {}, h('h3', {}, 'Confirmation results'),
@@ -117,9 +128,7 @@ export function confirmPanel({ state, setDoc, setUI }, fit) {
     conf.some(c => c.inside === false) ? messages(['A confirmation result is outside its prediction interval: the model may be missing a term, the process may have shifted, or the region of the optimum is not where the model says.'], 'warning') : null,
     h('p', { class: 'muted small' }, 'Each interval is the one stored when the runs were planned (for the mean of n runs where there are replicates), from the model then current.')) : null;
 
-  const nested = study.design?.runs.some(r => r.wholePlot !== undefined) || study.observations.some(o => o.wafer !== undefined || o.site !== undefined);
   return h('section', { class: 'panel', id: 'confirm' }, h('h2', {}, 'Predict and confirm'),
     h('p', { class: 'small' }, `Predict ${fit.response} from this model at chosen settings, and plan confirmation runs there.`),
-    nested ? h('p', { class: 'muted small' }, 'Predictions and intervals here come from least squares on run means: for a split-plot or wafer/site data they leave out the whole-plot variance, so a new furnace run can fall wider than the prediction interval.') : null,
     inputs, out, check);
 }

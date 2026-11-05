@@ -22,7 +22,7 @@
 // algebra is done block by block: cost Σ n_b³ per evaluation, e.g. 32 whole plots of 18
 // wafer-sites in a few milliseconds. Only the residual-by-residual KR term is n × n.
 import { chol, cholInverse, cholLogdet, cholSolve, qr } from '../linalg.js';
-import { fDist, chi2 } from '../dist.js';
+import { fDist, chi2, studentT } from '../dist.js';
 import { parseFormula, modelMatrix } from './formula.js';
 import { withBlockTerm, fitOLS, anova } from './ols.js';
 import { observationsOf, withPositionTerms } from './sites.js';
@@ -59,20 +59,63 @@ function makeBlocks(n, groups) {
   return b;
 }
 
-// H⁻¹ per block: Hinv[b] (n_b × n_b), with log|H|
+// H⁻¹ per block: Hinv[b] (n_b × n_b), with log|H|. Within a block H_b = I + Z D Zᵀ with Z the
+// group indicators of the components (q_b columns, D = diag(γ)), so by Woodbury
+//   H_b⁻¹ = I − Z (D⁻¹ + ZᵀZ)⁻¹ Zᵀ,   log|H_b| = log|D⁻¹ + ZᵀZ| + Σ log γ
+// — a q_b × q_b factorisation instead of n_b × n_b; each row of Z has one 1 per component, so
+// (Z M⁻¹ Zᵀ)_ac = Σ_k Σ_l M⁻¹[g_k(a)][g_l(c)]. Components with γ = 0 are left out.
 function blockInverse(blocks, groups, gamma) {
+  if (!blocks._local || blocks._local.groups !== groups) {
+    // per block and component: local group index of each row, and the number of local groups
+    blocks._local = { groups, loc: blocks.map(I => groups.map(g => { const map = new Map(); const idx = I.map(i => { const v = g.idx[i]; if (!map.has(v)) map.set(v, map.size); return map.get(v); }); return { idx, m: map.size }; })) };
+  }
   let ld = 0;
-  const inv = blocks.map(I => {
-    const nb = I.length, Hb = Array.from({ length: nb }, (_, a) => Array.from({ length: nb }, (_, c) => {
-      let v = a === c ? 1 : 0;
-      for (let k = 0; k < groups.length; k++) if (gamma[k] && groups[k].idx[I[a]] === groups[k].idx[I[c]]) v += gamma[k];
-      return v;
-    }));
-    const L = chol(Hb).L; ld += cholLogdet(L);
-    return cholInverse(L);
+  const inv = blocks.map((I, bi) => {
+    const nb = I.length, comps = [];
+    let q = 0;
+    blocks._local.loc[bi].forEach((c, k) => { if (gamma[k] > 0) { comps.push({ ...c, off: q, g: gamma[k] }); q += c.m; } });
+    if (!q) return Array.from({ length: nb }, (_, a) => { const r = new Array(nb).fill(0); r[a] = 1; return r; });
+    const M = new Float64Array(q * q);
+    for (const c of comps) { for (let u = 0; u < c.m; u++) M[(c.off + u) * q + c.off + u] += 1 / c.g; ld += c.m * Math.log(c.g); }
+    for (let a = 0; a < nb; a++) for (const c1 of comps) { const u = c1.off + c1.idx[a]; for (const c2 of comps) M[u * q + c2.off + c2.idx[a]] += 1; }
+    const r = spdInverse(M, q); ld += r.ld;
+    const Mi = r.inv;
+    const out = Array.from({ length: nb }, () => new Array(nb));
+    for (let a = 0; a < nb; a++) {
+      const ua = comps.map(c => Mi[c.off + c.idx[a]]);
+      for (let cc = a; cc < nb; cc++) {
+        let v = a === cc ? 1 : 0;
+        for (const row of ua) for (const c of comps) v -= row[c.off + c.idx[cc]];
+        out[a][cc] = v; out[cc][a] = v;
+      }
+    }
+    return out;
   });
   return { inv, ld };
 }
+
+// inverse and log-determinant of a symmetric positive definite matrix (flat, row-major):
+// Cholesky, inverse of the factor, then L⁻ᵀ L⁻¹. Returns rows as arrays.
+function spdInverse(A, n) {
+  const L = new Float64Array(n * n);
+  let ld = 0;
+  for (let j = 0; j < n; j++) {
+    let d = A[j * n + j];
+    for (let k = 0; k < j; k++) d -= L[j * n + k] * L[j * n + k];
+    if (!(d > 0)) throw new Error('chol: matrix is not positive definite');
+    const ljj = Math.sqrt(d); L[j * n + j] = ljj; ld += 2 * Math.log(ljj);
+    for (let i = j + 1; i < n; i++) { let s = A[i * n + j]; for (let k = 0; k < j; k++) s -= L[i * n + k] * L[j * n + k]; L[i * n + j] = s / ljj; }
+  }
+  const M = new Float64Array(n * n);                     // M = L⁻¹ (lower)
+  for (let j = 0; j < n; j++) {
+    M[j * n + j] = 1 / L[j * n + j];
+    for (let i = j + 1; i < n; i++) { let s = 0; for (let k = j; k < i; k++) s -= L[i * n + k] * M[k * n + j]; M[i * n + j] = s / L[i * n + i]; }
+  }
+  const inv = Array.from({ length: n }, () => new Array(n));
+  for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s = 0; for (let k = i; k < n; k++) s += M[k * n + i] * M[k * n + j]; inv[i][j] = s; inv[j][i] = s; }
+  return { inv, ld };
+}
+
 // H⁻¹ M for an n × c matrix (or an n-vector)
 function blockApply(blocks, inv, M) {
   const vec = !Array.isArray(M[0]);
@@ -97,7 +140,7 @@ function blockGroupSums(blocks, inv, gk, gl) {
 }
 
 /** Pieces of the REML criterion at γ. */
-function evaluate(X, y, groups, gamma, blocks) {
+function evaluate(X, y, groups, gamma, blocks, ml = false) {
   const n = y.length, p = X[0].length;
   const { inv, ld: ldH } = blockInverse(blocks, groups, gamma);
   const HiX = blockApply(blocks, inv, X), Hiy = blockApply(blocks, inv, y);
@@ -107,7 +150,8 @@ function evaluate(X, y, groups, gamma, blocks) {
   const beta = cholSolve(LA, Xty);
   const Py = Hiy.map((v, i) => { let s = 0; for (let a = 0; a < p; a++) s += HiX[i][a] * beta[a]; return v - s; });
   const q = y.reduce((s, v, i) => s + v * Py[i], 0);
-  return { n, p, ldH, ldA, A, Ainv, beta, Py, q, inv, HiX, f: (n - p) * Math.log(q) + ldH + ldA };
+  // REML: (n − p) log q + log|H| + log|A|;  ML: n log q + log|H|
+  return { n, p, ldH, ldA, A, Ainv, beta, Py, q, inv, HiX, f: ml ? n * Math.log(q) + ldH : (n - p) * Math.log(q) + ldH + ldA };
 }
 
 // Z_kᵀ P Z_l = Z_kᵀH⁻¹Z_l − (Z_kᵀH⁻¹X) A⁻¹ (Z_lᵀH⁻¹X)ᵀ
@@ -119,18 +163,21 @@ function zPz(e, blocks, gk, gl, ZHX) {
 }
 
 // gradient and Hessian of f in γ
-function derivatives(e, groups, blocks) {
+function derivatives(e, groups, blocks, ml = false) {
   const K = groups.length, { Py, q, n, p } = e;
   const cache = new Map(), ZHX = (g) => { if (!cache.has(g)) cache.set(g, groupSumRows(e.HiX, g)); return cache.get(g); };
   const s = groups.map(g => groupSumVec(Py, g));           // Z_kᵀ P y
   const a = s.map(v => sum(v.map(x => x * x)));             // yᵀ P G_k P y
   const SS = groups.map((gk, k) => groups.map((gl, l) => (l >= k ? zPz(e, blocks, gk, gl, ZHX) : null)));
-  const grad = groups.map((g, k) => -(n - p) * a[k] / q + tr(SS[k][k]));
+  // ML: the log-determinant terms use H⁻¹ instead of P, and n instead of n − p
+  const SH = ml ? groups.map((gk, k) => groups.map((gl, l) => (l >= k ? blockGroupSums(blocks, e.inv, gk, gl) : null))) : SS;
+  const m = ml ? n : n - p;
+  const grad = groups.map((g, k) => -m * a[k] / q + tr(SH[k][k]));
   const hess = Array.from({ length: K }, () => new Array(K).fill(0));
   for (let k = 0; k < K; k++) for (let l = k; l < K; l++) {
     const S = SS[k][l];
     let b = 0; for (let x = 0; x < S.length; x++) for (let z = 0; z < S[x].length; z++) b += s[k][x] * S[x][z] * s[l][z];
-    hess[k][l] = hess[l][k] = -frob2(S) + (n - p) * (2 * b / q - a[k] * a[l] / (q * q));
+    hess[k][l] = hess[l][k] = -frob2(SH[k][l]) + m * (2 * b / q - a[k] * a[l] / (q * q));
   }
   return { grad, hess };
 }
@@ -148,11 +195,11 @@ function solveSmall(A, b) {
   return x;
 }
 
-function newton(X, y, groups, start, blocks) {
+function newton(X, y, groups, start, blocks, ml = false) {
   const K = groups.length;
-  let g = start.slice(), e = evaluate(X, y, groups, g, blocks), it = 0, converged = false;
+  let g = start.slice(), e = evaluate(X, y, groups, g, blocks, ml), it = 0, converged = false;
   for (; it < 200; it++) {
-    const { grad, hess } = derivatives(e, groups, blocks);
+    const { grad, hess } = derivatives(e, groups, blocks, ml);
     // active set: components on the boundary with the criterion increasing into the interior
     const free = g.map((v, k) => !(v === 0 && grad[k] >= 0));
     const idx = [...Array(K).keys()].filter(k => free[k]);
@@ -170,10 +217,12 @@ function newton(X, y, groups, start, blocks) {
     let lam = 1, moved = false;
     for (let t = 0; t < 60; t++, lam /= 2) {
       const trial = g.slice(); idx.forEach((k, i) => { trial[k] = Math.max(0, g[k] + lam * step[i]); });
-      let et; try { et = evaluate(X, y, groups, trial, blocks); } catch { continue; }
+      let et; try { et = evaluate(X, y, groups, trial, blocks, ml); } catch { continue; }
       if (et.f < e.f - 1e-14 * Math.abs(e.f)) { g = trial; e = et; moved = true; break; }
     }
-    if (!moved) { converged = pg < 1e-5; break; }
+    // no further decrease possible in floating point: converged if the gradient is negligible
+    // relative to the criterion (|f| grows with n, and its rounding limits the attainable gradient)
+    if (!moved) { converged = pg < 1e-7 * Math.max(1, Math.abs(e.f)); break; }
   }
   return { gamma: g, e, iterations: it, converged };
 }
@@ -235,6 +284,26 @@ function containment(X, groups, order) {
   const dfRes = n - rankOf([...last, ...cols], n);
   // the intercept and columns constant within the coarsest groups only are tested in that stratum
   return { stratumOf, dfs: [...dfs, dfRes] };
+}
+
+/**
+ * Maximum-likelihood fit (for comparing models with different fixed effects, e.g. by AICc:
+ * REML criteria are not comparable across fixed-effect structures). Returns { coef (kept columns),
+ * gamma, sigma2, varcomp: [σ_k²…, σ²], deviance (−2 log L), k (parameters: p + K + 1), n, converged }.
+ */
+export function mlFit(X0, y, random) {
+  const n = y.length;
+  const f0 = qr(X0), keep = [...Array(X0[0].length).keys()].filter(j => !f0.aliased.includes(j));
+  const X = X0.map(r => keep.map(j => r[j])), p = X[0].length;
+  const groups = random.map(r => indexGroups(r.labels)), K = groups.length, blocks = makeBlocks(n, groups);
+  let fit = K ? newton(X, y, groups, new Array(K).fill(1), blocks, true) : { gamma: [], e: evaluate(X, y, [], [], blocks, true), converged: true };
+  if (K && !fit.converged) {
+    const fn = (t) => { try { return evaluate(X, y, groups, t.map(v => v * v), blocks, true).f; } catch { return Infinity; } };
+    const alt = newton(X, y, groups, nelderMead(fn, fit.gamma.map(Math.sqrt)).map(v => v * v), blocks, true);
+    if (alt.e.f <= fit.e.f) fit = alt;
+  }
+  const { e, gamma } = fit, sigma2 = e.q / n;
+  return { coef: e.beta, kept: keep, gamma, sigma2, varcomp: [...gamma.map(g => g * sigma2), sigma2], deviance: n * (1 + Math.log(2 * Math.PI * sigma2)) + e.ldH, k: p + K + 1, n, converged: fit.converged };
 }
 
 /**
@@ -321,7 +390,7 @@ export function reml(X0, y, random, { columns, assign, terms, level = 0.95 } = {
     coef, se, seKR, dfKR, dfContainment: dfCont, pKR, t: coef.map((b, j) => b / seKR[j]),
     beta: e.beta, vcov: Phi, vcovKR: PhiA, W, gamma, sigma2, varcomp, REML, converged: fit.converged, iterations: fit.iterations,
     boundary: random.filter((_, k) => gamma[k] === 0).map(r => r.name), nested, strata: cont ? [...order.map(k => random[k].name), 'Residual'].map((name, t) => ({ name, df: cont.dfs[t] })) : null,
-    terms: termTests, Py: e.Py,
+    terms: termTests, Py: e.Py, _kr: { Phi, PhiA, Pm, W, beta: e.beta, keep },
   };
 }
 
@@ -413,7 +482,8 @@ export function randomEffects(rows, requested = 'auto') {
  * Returns the reml() result plus { kind: 'mixed', response, model, factors, rows, random, naive },
  * naive being least squares on the same observations as if they were all independent.
  */
-export function fitMixedModel(study, formula, opts = {}) {
+// the pieces of a mixed model for a formula: rows, position terms, block term, random effects, X, y
+function buildMixed(study, formula, opts) {
   const response = opts.response ?? (String(formula).includes('~') ? String(formula).slice(0, String(formula).indexOf('~')).trim() : null);
   if (!response) throw new Error('name the response: "y ~ …"');
   const rows00 = observationTable(study, response);
@@ -421,11 +491,20 @@ export function fitMixedModel(study, formula, opts = {}) {
   // position terms (radius2, edge, slot …) become factors when the formula uses them
   const pos = withPositionTerms(study, formula, rows00);
   const parsed = parseFormula(formula, pos.factors);
-  const rows0 = pos.rows;
-  const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, rows0, opts);
+  const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, pos.rows, opts);
   const random = randomEffects(b.rows, opts.random ?? 'auto');
   const mmx = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
-  const y = b.rows.map(r => r.y);
+  return { response, pos, b, random, mmx, y: b.rows.map(r => r.y) };
+}
+
+/** Maximum-likelihood fit of a formula to a study (for AICc comparisons): mlFit's result plus the model. */
+export function fitMixedML(study, formula, opts = {}) {
+  const { response, b, random, mmx, y } = buildMixed(study, formula, opts);
+  return { ...mlFit(mmx.X, y, random.map(r => ({ name: r.name, labels: r.labels }))), response, model: b.model, random };
+}
+
+export function fitMixedModel(study, formula, opts = {}) {
+  const { response, pos, b, random, mmx, y } = buildMixed(study, formula, opts);
   const fit = reml(mmx.X, y, random.map(r => ({ name: r.name, labels: r.labels })), { columns: mmx.columns, assign: mmx.assign, terms: b.model.terms, level: opts.level ?? 0.95 });
   const naive = fitOLS(mmx, y);
   const naiveAnova = naive.dfRes > 0 ? anova(naive, 3) : [];
@@ -433,6 +512,67 @@ export function fitMixedModel(study, formula, opts = {}) {
   // marginal fitted values Xβ̂ and residuals y − Xβ̂ (random effects not removed)
   const fitted = mmx.X.map(r => r.reduce((acc, v, j) => acc + (Number.isFinite(fit.coef[j]) ? v * fit.coef[j] : 0), 0));
   return { kind: 'mixed', ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, naive, positionTerms: pos.used, fitted, residuals: y.map((v, i) => v - fitted[i]) };
+}
+
+// ---------------------------------------------------------------- predictions
+
+/**
+ * Predictions from a mixed-model fit (fitMixedModel) at settings (natural units).
+ *   fit, se:   x β̂ and its Kenward–Roger standard error √(xᵀ Φ_A x); CI with the KR df for x.
+ *   predSe:    for a new observation of the kind described by `weights`: √(se² + Σ c_k σ_k²), where
+ *              c_k is the weight of component k ('wholePlot', 'run', 'wafer', 'site', 'lot', and
+ *              'residual'); default 1 for every component (one new reading from a new furnace run,
+ *              run, wafer …). For the mean of several readings, pass the fractions, e.g. a run of 2
+ *              wafers × 9 sites: { wafer: 1/2, residual: 1/18 }. PI df by Satterthwaite:
+ *              2V² / (gᵀ W g), g_k = xᵀΦ P_k Φx + c_k (W: asymptotic covariance of the components).
+ * Position terms not given in the settings are averaged over the positions in the data (a run mean).
+ * Returns [{ fit, se, df, lower, upper, predSe, predDf, predLower, predUpper }].
+ */
+export function predictMixed(m, settings, { level = 0.95, weights = {} } = {}) {
+  const { Phi, PhiA, Pm, W, beta, keep } = m._kr;
+  const pos = m.positionTerms ?? [];
+  const posRows = pos.length ? [...new Map(m.rows.map(r => { const v = Object.fromEntries(pos.map(id => [id, r.settings[id]])); return [JSON.stringify(v), v]; })).values()] : [{}];
+  const xOf = (st) => {
+    const missing = pos.filter(id => st[id] === undefined);
+    const rows = missing.length ? posRows.map(v => ({ ...st, ...Object.fromEntries(missing.map(id => [id, v[id]])) })) : [st];
+    const X = modelMatrix(m.model, m.factors, rows).X;
+    return keep.map(j => X.reduce((a, r) => a + r[j], 0) / X.length);
+  };
+  const c = [...m.random.map(r => weights[r.id] ?? 1), weights.residual ?? 1];
+  const comps = m.varcomp.map(v => v.variance);
+  return settings.map(st => {
+    const x = xOf(st);
+    const fit = x.reduce((a, v, i) => a + v * beta[i], 0);
+    const quad = (M) => x.reduce((a, v, i) => a + v * M[i].reduce((b, w, j) => b + w * x[j], 0), 0);
+    const se2 = quad(PhiA), kr = kenwardRoger([x], beta, Phi, PhiA, Pm, W);
+    const t = studentT.ppf(1 - (1 - level) / 2, kr.ddf);
+    const V = se2 + c.reduce((a, ck, k) => a + ck * comps[k], 0);
+    const PhiX = Phi.map(r => r.reduce((a, w, j) => a + w * x[j], 0));               // Φ x
+    const g = Pm.map((P, k) => PhiX.reduce((a, v, i) => a + v * P[i].reduce((b, w, j) => b + w * PhiX[j], 0), 0) + c[k]);
+    const gWg = g.reduce((a, gi, i) => a + gi * g.reduce((b, gj, j) => b + W[i][j] * gj, 0), 0);
+    const predDf = 2 * V * V / gWg, tp = studentT.ppf(1 - (1 - level) / 2, predDf);
+    return { fit, se: Math.sqrt(se2), df: kr.ddf, lower: fit - t * Math.sqrt(se2), upper: fit + t * Math.sqrt(se2),
+      predSe: Math.sqrt(V), predDf, predLower: fit - tp * Math.sqrt(V), predUpper: fit + tp * Math.sqrt(V) };
+  });
+}
+
+/**
+ * Readings per run in the data, per random level: the weights that turn a single-reading
+ * prediction variance into one for the mean of a run measured like the others (and of `runs` such
+ * runs; inOneWholePlot: they share one new whole plot, e.g. one furnace load).
+ */
+export function runMeanWeights(m, { runs = 1, inOneWholePlot = true } = {}) {
+  const byRun = new Map();
+  m.rows.forEach((r, i) => { if (!byRun.has(r.run)) byRun.set(r.run, []); byRun.get(r.run).push(i); });
+  const avg = (f) => [...byRun.values()].reduce((a, idx) => a + f(idx), 0) / byRun.size;
+  const w = {};
+  for (const re of m.random) {
+    // distinct groups of this component within a run (1 for whole plot and run)
+    const per = avg(idx => new Set(idx.map(i => re.labels[i])).size);
+    w[re.id] = (re.id === 'wholePlot' && inOneWholePlot ? 1 : 1 / runs) / per;
+  }
+  w.residual = 1 / (runs * avg(idx => idx.length));
+  return w;
 }
 
 export { containment as _containment, nestOrder as _nestOrder, indexGroups as _indexGroups };

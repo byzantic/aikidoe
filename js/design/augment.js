@@ -17,6 +17,8 @@ import { cubeBlockAlpha, rotatableAlpha } from './rsm.js';
 import { optimalDesign } from './optimal.js';
 import { rng } from './rng.js';
 import { predict } from '../model/ols.js';
+import { predictMixed, runMeanWeights } from '../model/mixed.js';
+import { observationsOf } from '../model/sites.js';
 import { studentT } from '../dist.js';
 
 const runs = (study) => study.design?.runs ?? (() => { throw new Error('the study has no design yet'); })();
@@ -75,17 +77,27 @@ export function optimalAugment(study, opts = {}) {
  * `replicates` times, with the fitted model's predictions and 95% prediction intervals stored in
  * the stage, so the results can later be checked against what was predicted.
  */
-export function confirmationRuns(study, fit, settings, { replicates = 1, level = 0.95 } = {}) {
+export function confirmationRuns(study, fit, settings, { replicates = 1, level = 0.95, inOneWholePlot = true } = {}) {
   if (!settings.length) throw new Error('give at least one setting to confirm');
   const full = settings.map(s => Object.fromEntries(study.factors.map(f => {
     const v = s[f.id];
     if (v === undefined) throw new Error(`confirmation setting is missing ${f.id}`);
     return [f.id, v];
   })));
+  const X = [], runKind = [], wholePlot = [];
+  const split = runs(study).some(r => r.wholePlot !== undefined);
+  full.forEach((s, j) => { for (let i = 0; i < replicates; i++) { X.push(codedRow(study, { settings: s })); runKind.push('confirm'); wholePlot.push(inOneWholePlot ? j + 1 : j * replicates + i + 1); } });
+  if (fit.kind === 'mixed') {
+    // mixed model: intervals for the mean of one run measured like the others, and for the mean
+    // of the planned replicate runs (in one new whole plot, or each in its own)
+    const one = predictMixed(fit, full, { level, weights: runMeanWeights(fit, { runs: 1 }) });
+    const all = predictMixed(fit, full, { level, weights: runMeanWeights(fit, { runs: replicates, inOneWholePlot }) });
+    return { kind: 'confirm', X, runKind, ...(split ? { wholePlot } : {}), note: `${X.length} confirmation run(s) for ${fit.response} (mixed model)`,
+      params: { response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.filter(t => !t.block).map(t => t.label).join(' + ') || '1'}`, level, mixed: true, replicates, inOneWholePlot,
+        predictions: full.map((s, i) => ({ settings: s, fit: one[i].fit, se: one[i].se, predLower: one[i].predLower, predUpper: one[i].predUpper, meanLower: all[i].predLower, meanUpper: all[i].predUpper, n: replicates })) } };
+  }
   const pred = predict(fit, full, { level });
-  const X = [], runKind = [];
-  for (const s of full) for (let i = 0; i < replicates; i++) { X.push(codedRow(study, { settings: s })); runKind.push('confirm'); }
-  return { kind: 'confirm', X, runKind, note: `${X.length} confirmation run(s) for ${fit.response}`,
+  return { kind: 'confirm', X, runKind, ...(split ? { wholePlot } : {}), note: `${X.length} confirmation run(s) for ${fit.response}`,
     params: { response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.filter(t => !t.block).map(t => t.label).join(' + ') || '1'}`, level,
       sigma: fit.sigma, df: fit.dfRes,
       predictions: full.map((s, i) => ({ settings: s, fit: pred[i].fit, se: pred[i].se, predLower: pred[i].predLower, predUpper: pred[i].predUpper })) } };
@@ -110,8 +122,22 @@ export function appendStage(study, stage, { seed } = {}) {
     if (f.type !== 'categorical') return [f.id, decode(f, row[j])];
     return [f.id, f.levels[f.levels.length === 2 ? (row[j] + 1) / 2 : row[j]]];
   }));
-  const order = g.shuffle(stage.X.map((_, i) => i));
-  const added = stage.X.map((row, i) => ({ run: n0 + 1 + i, order: o0 + 1 + order.indexOf(i), block: nextBlock, kind: stage.runKind[i], settings: settingsOf(row) }));
+  let added = stage.X.map((row, i) => ({ run: n0 + 1 + i, block: nextBlock, kind: stage.runKind[i], settings: settingsOf(row) }));
+  let order;
+  if (old.some(r => r.wholePlot !== undefined)) {
+    // split-plot study: the new runs go into new whole plots — stage.wholePlot if given, else one
+    // per distinct setting of the hard-to-change factors — run whole plot by whole plot
+    const htc = study.factors.filter(f => f.htc).map(f => f.id);
+    const wps = old.map(r => Number(r.wholePlot)).filter(Number.isFinite), w0 = wps.length ? Math.max(...wps) : 0;
+    const keyMap = new Map();
+    added = added.map((r, i) => {
+      let w = stage.wholePlot?.[i];
+      if (w === undefined) { const k = JSON.stringify(htc.map(id => r.settings[id])); if (!keyMap.has(k)) keyMap.set(k, keyMap.size + 1); w = keyMap.get(k); }
+      return { ...r, wholePlot: w0 + w };
+    });
+    order = g.shuffle([...new Set(added.map(r => r.wholePlot))]).flatMap(w => g.shuffle(added.map((r, i) => (r.wholePlot === w ? i : -1)).filter(i => i >= 0)));
+  } else order = g.shuffle(stage.X.map((_, i) => i));
+  added = added.map((r, i) => ({ ...r, order: o0 + 1 + order.indexOf(i) }));
   const first = study.design.kind === 'sequential' ? null : { kind: study.design.kind, params: study.design.params };
   const stages = study.design.kind === 'sequential' ? study.design.params.stages : [first];
   const { design: _d, ...stageParams } = stage.params ?? {};
@@ -164,13 +190,18 @@ export function checkConfirmation(study, response) {
       const eq = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b)) : a === b);
       const same = (r) => study.factors.every(f => eq(r.settings[f.id], p.settings[f.id]));
       const ids = h.runs.filter(id => same(runs(study).find(r => r.run === id)));
-      const vals = study.observations.filter(o => o.response === response && ids.includes(o.run) && o.value !== null).map(o => o.value);
-      const n = vals.length, mean = n ? vals.reduce((a, b) => a + b, 0) / n : null;
-      // interval for the mean of n new observations: ŷ ± t · √(se² + σ²/n)
+      // observed: the mean of the run means (each run may have several readings: wafers, sites)
+      const runMeans = ids.map(id => observationsOf(study, response).filter(o => o.run === id && o.value !== null).map(o => o.value)).filter(v => v.length).map(v => v.reduce((a, b) => a + b, 0) / v.length);
+      const n = runMeans.length, mean = n ? runMeans.reduce((a, b) => a + b, 0) / n : null;
       let lo = p.predLower, hi = p.predUpper;
-      if (n > 1) { const t = studentT.ppf(1 - (1 - h.params.level) / 2, h.params.df), w = t * Math.sqrt(p.se ** 2 + h.params.sigma ** 2 / n); lo = p.fit - w; hi = p.fit + w; }
+      if (h.params.mixed) {
+        // stored at planning time: one run, or the mean of the planned replicates
+        if (n === p.n && n > 1) { lo = p.meanLower; hi = p.meanUpper; }
+      } else if (n > 1) {
+        // interval for the mean of n new observations: ŷ ± t · √(se² + σ²/n)
+        const t = studentT.ppf(1 - (1 - h.params.level) / 2, h.params.df), w = t * Math.sqrt(p.se ** 2 + h.params.sigma ** 2 / n); lo = p.fit - w; hi = p.fit + w; }
       out.push({ settings: p.settings, predicted: p.fit, lower: lo, upper: hi, n, observed: mean,
-        inside: mean === null ? null : mean >= lo && mean <= hi, formula: h.params.formula });
+        inside: mean === null ? null : mean >= lo && mean <= hi, formula: h.params.formula, ...(h.params.mixed && n > 1 && n !== p.n ? { note: `${n} of ${p.n} planned runs: interval for one run` } : {}) });
     }
   });
   return out;
