@@ -7,3 +7,4 @@ rsm
 daewr
 skpr
 AlgDesign
+pwr
