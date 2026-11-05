@@ -38,6 +38,9 @@
 //        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
 //   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
 //        best settings by overall desirability over the fitted models
+//   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
+//        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
+//        propagation of error and dual-response optimisation (mean on target, minimum s)
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
 //
@@ -62,6 +65,7 @@ import { fitMixedModel, observationTable, randomEffects, predictMixed, runMeanWe
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
 import { fittedModels, optimiseDesirability, dValue } from '../js/model/desirability.js';
+import { propagationOfError, dualResponse } from '../js/model/robust.js';
 import { parseCSV } from '../js/io/csv.js';
 import { num, pval, stars, table } from '../js/format.js';
 
@@ -594,6 +598,46 @@ function cmdOptimise({ pos, opt }) {
   if (o.D === 0) out('D = 0: no settings in the region meet every response\'s acceptable range');
 }
 
+function cmdRobust({ pos, opt }) {
+  let study = load(pos[0]);
+  const kv = (t) => Object.fromEntries(String(t).split(',').map(x => { const [k, v] = x.split('=').map(y => y.trim()); if (!study.factors.some(f => f.id === k)) fail(`unknown factor "${k}"`); return [k, Number(v)]; }));
+  // noise and tolerance given here override the study's (for this run only)
+  const noise = opt.noise ? kv(opt.noise) : {}, tol = opt.tolerance ? kv(opt.tolerance) : {};
+  study = { ...study, factors: study.factors.map(f => ({ ...f, ...(noise[f.id] !== undefined ? { noise: { sd: noise[f.id], ...(f.noise?.mean !== undefined ? { mean: f.noise.mean } : {}) } } : {}), ...(tol[f.id] !== undefined ? { tolerance: tol[f.id] } : {}) })) };
+  if (!opt.model) fail('robust: give --model "y ~ …" (the mean model)');
+  const formula = String(opt.model), rid = formula.slice(0, formula.indexOf('~')).trim();
+  const { models } = fittedModels(study, { formulas: { [rid]: formula }, only: [rid], all: true, ols: !!opt.ols });
+  const m = models[0] ?? fail(`no fitted model for ${rid}`);
+  let sdModel = null;
+  if (opt['sd-model']) {
+    const f2 = String(opt['sd-model']), r2 = f2.slice(0, f2.indexOf('~')).trim();
+    sdModel = fittedModels(study, { formulas: { [r2]: f2 }, only: [r2], all: true, ols: true }).models[0] ?? fail(`no fitted model for ${r2}`);
+  }
+  const sigma = m.sigma;
+  const poe = (s) => propagationOfError(study, m.predict, s, { sigma });
+  const mu = (s) => poe(s).mean, sd = sdModel ? (s) => 10 ** sdModel.predict(s) : (s) => poe(s).sd;
+  const sources = study.factors.filter(f => f.noise || f.tolerance).map(f => f.noise ? `${f.id} noise sd ${f.noise.sd}` : `${f.id} tolerance sd ${f.tolerance}`);
+  out(`mean model: ${m.formula}${m.fit.kind === 'mixed' ? ' (mixed)' : ''}; residual sd ${num(sigma)}`);
+  out(sdModel ? `sd model: s = 10^(${sdModel.formula.split('~')[1].trim()}) from ${sdModel.id}` : `sd by propagation of error: ${sources.join(', ') || 'no noise factors or tolerances — only the residual'}`);
+  const fixed = opt.fix ? Object.fromEntries(String(opt.fix).split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); return [k, study.factors.find(f => f.id === k)?.type === 'categorical' ? v : Number(v)]; })) : {};
+  let at;
+  if (opt.at) at = { ...Object.fromEntries(study.factors.map(f => [f.id, f.noise ? f.noise.mean ?? decodeMid(f) : f.type === 'categorical' ? f.levels[0] : decodeMid(f)])), ...parseSettingsLoose(study, String(opt.at)) };
+  else {
+    const goal = opt.goal ? String(opt.goal) : 'target';
+    const r = dualResponse(study, mu, sd, { goal, ...(opt.target !== undefined ? { target: Number(opt.target) } : {}), ...(opt['max-sd'] !== undefined ? { maxSd: Number(opt['max-sd']) } : {}),
+      ...(opt.region ? { region: String(opt.region) } : {}), ...(opt.radius !== undefined ? { radius: Number(opt.radius) } : {}), fixed, seed: study.seed });
+    out(`\n${{ target: `minimum sd with the mean on target ${opt.target}`, mse: `minimum (mean − ${opt.target})² + sd²`, maximize: `maximum mean with sd ≤ ${opt['max-sd'] ?? '∞'}`, minimize: `minimum mean with sd ≤ ${opt['max-sd'] ?? '∞'}` }[goal]}:`);
+    out(`settings: ${showSettings(Object.fromEntries(Object.entries(r.settings).filter(([k]) => !study.factors.find(f => f.id === k)?.noise)))}${r.feasible ? '' : '  (the constraint cannot be met in the region: closest found)'}`);
+    at = r.settings;
+  }
+  const p = poe(at);
+  out(`mean ${num(mu(at))}, sd ${num(sd(at))}${sdModel ? '' : ` (transmitted ${num(Math.sqrt(p.transmitted))}, residual ${num(sigma)})`}`);
+  if (!sdModel && p.parts.length) out(table([{ key: 'id', label: 'source', align: 'left' }, { key: 'sd', label: 'sd' }, { key: 'slope', label: 'slope ∂y/∂x' }, { key: 'pct', label: '% of variance' }],
+    [...p.parts.map(q => ({ ...q, pct: 100 * q.contribution / p.var })), ...(p.curvature > 1e-12 ? [{ id: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { id: 'residual', sd: sigma, slope: '', pct: 100 * p.residual / p.var }]));
+}
+const decodeMid = (f) => (f.low + f.high) / 2;
+function parseSettingsLoose(study, text) { return Object.fromEntries(text.split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? fail(`unknown factor "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })); }
+
 function cmdInfo({ pos }) {
   const s = load(pos[0]);
   out(`${s.name}  (seed ${s.seed})`);
@@ -612,13 +656,13 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 46).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 49).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];

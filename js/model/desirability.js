@@ -188,14 +188,14 @@ export function desirabilityGrid(study, models, at, fx, fy, { n = 41 } = {}) {
 /**
  * Fitted models of the responses that have a desirability goal: { formulas: { responseId: formula } }
  * (default: defaultFormula). Split-plot / nested readings use the mixed model (unless ols: true).
- * Each model: { id, spec, formula, fit, predict(settings) → ŷ, predictBand(settings) → { fit, lower, upper } (95% CI) }.
+ * all: include responses without a goal (spec null). Each model: { id, spec, formula, fit, sigma (residual sd), predict(settings) → ŷ, predictBand(settings) → { fit, lower, upper } (95% CI) }.
  * Responses without results are skipped and listed in `missing`.
  */
-export function fittedModels(study, { formulas = {}, ols = false, only = null } = {}) {
+export function fittedModels(study, { formulas = {}, ols = false, only = null, all = false } = {}) {
   const models = [], missing = [];
   for (const r of study.responses) {
     const spec = responseDesirability(r);
-    if (!spec || (only && !only.includes(r.id))) continue;
+    if ((!spec && !all) || (only && !only.includes(r.id))) continue;
     const formula = formulas[r.id] ?? defaultFormula(study, r.id);
     let mixed = false;
     try { mixed = !ols && randomEffects(observationTable(study, r.id)).length > 0; } catch { /* no data */ }
@@ -207,11 +207,11 @@ export function fittedModels(study, { formulas = {}, ols = false, only = null } 
       const pos = fit.positionTerms ?? [];
       // position terms are averaged over the sites (predictMixed does it for the band)
       const predictOne = pos.length ? (st) => predictMixed(fit, [st])[0].fit : xb;
-      models.push({ id: r.id, spec, formula, fit, predict: predictOne, predictBand: (st) => { const p = predictMixed(fit, [st])[0]; return { fit: p.fit, lower: p.lower, upper: p.upper }; } });
+      models.push({ id: r.id, spec, formula, fit, sigma: Math.sqrt(fit.varcomp.reduce((a, v) => a + v.variance, 0)), predict: predictOne, predictBand: (st) => { const p = predictMixed(fit, [st])[0]; return { fit: p.fit, lower: p.lower, upper: p.upper }; } });
     } else {
       const coefIdx = fit.coef.map((c, j) => (Number.isFinite(c) ? j : -1)).filter(j => j >= 0);
       const xb = (st) => { const x = modelMatrix(fit.model, fit.factors, [st]).X[0]; return coefIdx.reduce((a, j) => a + x[j] * fit.coef[j], 0); };
-      models.push({ id: r.id, spec, formula, fit, predict: xb, predictBand: (st) => { const p = predict(fit, [st])[0]; return { fit: p.fit, lower: p.lower, upper: p.upper }; } });
+      models.push({ id: r.id, spec, formula, fit, sigma: fit.sigma, predict: xb, predictBand: (st) => { const p = predict(fit, [st])[0]; return { fit: p.fit, lower: p.lower, upper: p.upper }; } });
     }
   }
   return { models, missing };

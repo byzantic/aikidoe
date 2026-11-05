@@ -5,6 +5,7 @@ import { fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { ccd } from '../js/design/rsm.js';
 import { rng } from '../js/design/rng.js';
 import { splitPlotFull } from '../js/design/splitplot.js';
+import { fullFactorial } from '../js/design/factorial.js';
 import { siteScheme, sitePositions } from '../js/model/sites.js';
 
 const reactor = () => ({
@@ -77,6 +78,19 @@ export const EXAMPLES = [
         }
       }
       return createStudy({ ...s, design, observations });
+    } },
+  { id: 'filtration', title: 'Filtration rate: robust design (Montgomery)', step: 'analyse',
+    blurb: 'The pilot-plant filtration-rate 2⁴ factorial from Montgomery’s Design and Analysis of Experiments (temperature, pressure, formaldehyde concentration, stirring rate). Temperature is hard to control in the plant: treat it as a noise factor and find concentration and stirring settings that keep the rate high and insensitive to it.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Filtration rate (robust design)', seed: 6,
+        description: 'Montgomery, Design and Analysis of Experiments, example 6.2 (filtration rate, gal/h; coded units), reused in the robust-design chapter with temperature as a noise variable (σ_z = 1 coded).',
+        factors: [{ id: 'A', name: 'Temperature', low: -1, high: 1, noise: { sd: 1, mean: 0 } }, { id: 'B', name: 'Pressure', low: -1, high: 1 },
+          { id: 'C', name: 'Concentration', low: -1, high: 1 }, { id: 'D', name: 'Stirring rate', low: -1, high: 1 }],
+        responses: [{ id: 'rate', name: 'Filtration rate', units: 'gal/h', goal: 'maximize', lower: 60, target: 75 }] });
+      const y = [45, 71, 48, 65, 68, 60, 80, 65, 43, 100, 45, 104, 75, 86, 70, 96];   // standard order, A fastest
+      const design = toStudyDesign(s, fullFactorial([2, 2, 2, 2]));
+      const idx = (st) => ['A', 'B', 'C', 'D'].reduce((a, id, b) => a + (st[id] > 0 ? 1 << b : 0), 0);
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'rate', value: y[idx(r.settings)] })) });
     } },
   { id: 'gate-oxide', title: 'Gate oxide anneal (split-plot)', step: 'run', url: 'examples/gate-oxide-anneal.aikidoe.json',
     blurb: 'The spec §4 example: furnace temperature and ambient set per run, drop-in sites, a missing value.' },
