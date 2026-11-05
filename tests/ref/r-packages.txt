@@ -12,3 +12,4 @@ lme4
 pbkrtest
 Matrix
 SixSigma
+desirability

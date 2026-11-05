@@ -26,7 +26,9 @@ sites; **Design** — compare candidate designs (fractions, Plackett–Burman, f
 central composite, Box–Behnken, definitive screening, optimal) with their aliasing,
 prediction-variance and power diagnostics (power of each term for an effect Δ/σ), then create
 one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
-printable sheet; **Analyse** — fit a formula, reduce it (backward elimination by p-value or AICc, hierarchy kept), ANOVA with lack of fit, Lenth's method with a
+printable sheet; **Optimise** — desirability goals for the responses, the best settings, a prediction profiler and a two-factor overlay.
+
+**Analyse** — fit a formula, reduce it (backward elimination by p-value or AICc, hierarchy kept), ANOVA with lack of fit, Lenth's method with a
 half-normal plot, residual plots and Box–Cox, predictions with confidence and prediction
 intervals, and confirmation runs checked against them. Once a design exists, **Design** also
 offers a **Next stage**: fold-over, axial points (turning a fraction into a central composite)
@@ -89,6 +91,8 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `sites STUDY --scheme 5\|9 [--diameter 200]` or `--site id:x:y …` | drop-in site scheme; position terms `radius2`, `edge`, `waferX`, `waferY`, `slot`, `slotZone` in mixed-model formulas |
 | `summary STUDY RESPONSE --stats mean,sd,logsd,rangemean` | per-wafer summaries as derived responses |
 | `gauge DATA.csv [--tolerance T] [--design …] [--into STUDY --response R]` | gauge R&R by ANOVA (crossed, nested, repeatability-only); `--into` keeps σ_meas on the response for `power --response R [--sigma-process σp]` |
+| `goal STUDY RESPONSE --maximize\|--minimize\|--target\|--range [--lower] [--target] [--upper] [--weight] [--importance]` | desirability goal of a response |
+| `optimise STUDY [--model "y ~ …" …] [--region cube\|sphere] [--radius r] [--fix "A=1"]` | best settings by overall desirability, with predictions and CIs |
 | `predict STUDY "y ~ formula" --at "A=…,B=…"` | predictions with 95% confidence and prediction intervals |
 | `power STUDY [--model …] [--delta Δ \| "A=3,default=2"] [--sigma σ] [--alpha α]` | power of each term, and the Δ detectable with 80% power |
 | `fit … --reduce p\|aicc [--alpha-out 0.1] [--keep A,B]` | backward elimination keeping hierarchy, then the fit |

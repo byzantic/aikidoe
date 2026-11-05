@@ -102,3 +102,11 @@ svg.plot .pt.t2 { fill: var(--trace-2); } svg.plot .pt.t3 { fill: var(--trace-3)
 svg.plot .pt.t5 { fill: var(--trace-5); } svg.plot .pt.t6 { fill: var(--trace-6); }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 #gauge textarea { width: 100%; font: 12px/1.4 var(--mono, ui-monospace, monospace); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px; box-sizing: border-box; }
+svg.plot .ribbon { fill: var(--accent); opacity: .15; stroke: none; }
+/* Optimise step */
+.profiler { display: grid; gap: 4px; overflow-x: auto; } .profiler .cell svg.plot { width: 100%; max-width: 260px; height: auto; }
+.profiler .rowhead { font-size: 12px; align-self: center; } .profiler .colhead { font-size: 12px; text-align: center; }
+.heat { display: block; width: 100%; max-width: 400px; height: auto; } .heat rect { shape-rendering: crispEdges; } .heat .infeasible { fill: var(--line); opacity: .55; }
+.dbar { display: inline-block; width: 60px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; } .dbar > span { display: block; height: 100%; background: var(--accent); }
+svg.plot .ref.cur { stroke: var(--ink); stroke-dasharray: none; opacity: .5; } svg.plot .ref.lim { stroke: var(--muted, #888); }
+#opt-result table input.num { max-width: 9em; }

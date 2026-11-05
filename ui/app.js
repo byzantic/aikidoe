@@ -10,12 +10,14 @@ import * as Define from './define.js';
 import * as Design from './design.js';
 import * as Run from './run.js';
 import * as Analyse from './analyse.js';
+import * as Optimise from './optimise.js';
 
 const STEPS = [
   { id: 'define', label: 'Define', mod: Define, enabled: () => true },
   { id: 'design', label: 'Design', mod: Design, enabled: (s) => !!s.study },
   { id: 'run', label: 'Run', mod: Run, enabled: (s) => !!s.study?.design },
   { id: 'analyse', label: 'Analyse', mod: Analyse, enabled: (s) => !!s.study?.observations.some(o => o.value !== null) },
+  { id: 'optimise', label: 'Optimise', mod: Optimise, enabled: (s) => !!s.study?.observations.some(o => o.value !== null) },
 ];
 const STORE = 'aikidoe:doc';
 const state = { doc: null, study: null, errors: [], warnings: [], step: 'define', ui: {} };

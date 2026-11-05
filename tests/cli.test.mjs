@@ -183,6 +183,17 @@ try {
   r = run('fit', 'anneal.aikidoe.json', 'Rs ~ T*t*dose + radius2 + T:radius2');
   check('mixed fit lists the confirmation runs', /confirmation runs \(left out of the fit\)/.test(r.out) && /no result yet/.test(r.out), r.out + r.err);
 
+  section('desirability (issue #18)');
+  writeFileSync(join(dir, 'ccd.aikidoe.json'), serializeStudy(EXAMPLES.find(e => e.id === 'ccd-results').build()));
+  r = run('goal', 'ccd.aikidoe.json', 'bypr', '--minimize', '--target', '2', '--upper', '5', '--weight', '2');
+  check('goal: sets a response goal', r.code === 0 && /bypr: minimize, target 2, upper 5, weight 2/.test(r.out), r.out + r.err);
+  r = run('optimise', 'ccd.aikidoe.json', '--model', 'conv ~ quadratic', '--model', 'bypr ~ T + time + I(T^2)');
+  check('optimise: best settings, D, predictions with CIs and d', r.code === 0 && /best settings: T=\d/.test(r.out) && /overall desirability D = 0\.\d/.test(r.out) && /^bypr\s.*min \(2 ← 5\)/m.test(r.out), r.out + r.err);
+  r = run('optimise', 'ccd.aikidoe.json', '--fix', 'T=150');
+  check('optimise --fix', r.code === 0 && /held: T=150/.test(r.out) && /best settings: T=150,/.test(r.out), r.out + r.err);
+  r = run('optimise', 'ccd.aikidoe.json', '--region', 'sphere');
+  check('optimise --region sphere (default radius √k)', r.code === 0 && /region: sphere/.test(r.out), r.out + r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');

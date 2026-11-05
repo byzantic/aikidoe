@@ -37,17 +37,20 @@ export const EXAMPLES = [
       return createStudy({ ...s, description: 'Five process factors screened for their effect on yield (simulated data).', design, observations });
     } },
   { id: 'ccd-results', title: 'Response surface: CCD with results', step: 'analyse',
-    blurb: 'Rotatable central composite design in temperature and time (log scale), simulated conversion; fit a quadratic.',
+    blurb: 'Rotatable central composite design in temperature and time (log scale), simulated conversion and by-product; fit quadratics, then trade them off on Optimise.',
     build: () => {
       const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Conversion optimisation', seed: 21,
         description: 'Rotatable CCD, two factors; simulated data with a maximum inside the region.',
         factors: [{ id: 'T', name: 'Temperature', units: '°C', low: 150, high: 170 }, { id: 'time', name: 'Time', units: 'min', low: 20, high: 80, transform: 'log' }],
-        responses: [{ id: 'conv', name: 'Conversion', units: '%', goal: 'maximize' }] });
+        responses: [{ id: 'conv', name: 'Conversion', units: '%', goal: 'maximize', lower: 74, target: 80 }, { id: 'bypr', name: 'By-product', units: '%', goal: 'minimize', target: 2, upper: 6 }] });
       const design = toStudyDesign(s, ccd(2)), g = rng(5);
       const observations = design.runs.map(r => {
         const x1 = code(s.factors[0], r.settings.T), x2 = code(s.factors[1], r.settings.time);
         return { run: r.run, response: 'conv', value: +(78 + 3.5 * x1 + 2 * x2 - 4 * x1 * x1 - 2.5 * x2 * x2 + 1.5 * x1 * x2 + 0.6 * noise(g)).toFixed(2) };
       });
+      // a by-product that rises with temperature: the two goals pull apart (desirability, #18)
+      for (const r of design.runs) { const x1 = code(s.factors[0], r.settings.T), x2 = code(s.factors[1], r.settings.time);
+        observations.push({ run: r.run, response: 'bypr', value: +(3.5 + 1.6 * x1 + 0.4 * x2 + 0.5 * x1 * x1 + 0.2 * noise(g)).toFixed(2) }); }
       return createStudy({ ...s, design, observations });
     } },
   { id: 'anneal-results', title: 'Furnace anneal: split-plot with wafers and sites', step: 'analyse',
@@ -58,7 +61,7 @@ export const EXAMPLES = [
         sites: siteScheme(9, { diameter: 200 }),
         factors: [{ id: 'T', name: 'Anneal temperature', units: '°C', low: 900, high: 1000, htc: true }, { id: 't', name: 'Anneal time', units: 'min', low: 10, high: 30 },
           { id: 'dose', name: 'Implant dose', units: 'cm-2', low: 1e15, high: 5e15, transform: 'log' }],
-        responses: [{ id: 'Rs', name: 'Sheet resistance', units: 'Ω/sq', goal: 'target', target: 60, levels: ['run', 'wafer', 'site'] }] });
+        responses: [{ id: 'Rs', name: 'Sheet resistance', units: 'Ω/sq', goal: 'target', lower: 55, target: 60, upper: 65, levels: ['run', 'wafer', 'site'] }] });
       const P = sitePositions(s);
       const design = toStudyDesign(s, splitPlotFull([2, 2, 2], [true, false, false], { replicates: 3 })), g = rng(17);
       const furnace = {}, observations = [];
