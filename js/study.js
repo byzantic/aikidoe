@@ -34,10 +34,10 @@ const LEVELS = ['lot', 'run', 'wholePlot', 'wafer', 'site'];
 const TRANSFORMS = ['none', 'log'];
 
 const KEYS = {
-  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'history'],
+  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'simulator', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
-  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'note'],
+  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
   design: ['kind', 'params', 'randomisation', 'runs'],
   run: ['run', 'order', 'wholePlot', 'block', 'kind', 'settings'],
@@ -258,7 +258,14 @@ function normFactor(f, i, errors) {
   // robust design (§8): tolerance = standard deviation of the actual value about its setting
   // (natural units); noise = a factor varied in the experiment but random in production:
   // { sd (natural units), mean (default: centre of the range) }
-  if (f.tolerance !== undefined) { if (!isNum(f.tolerance) || f.tolerance < 0) errors.push(`${path}.tolerance: must be a non-negative number (a standard deviation in the factor's units)`); else out.tolerance = f.tolerance; }
+  // (a number = normal sd, or { sd, dist: normal | uniform | truncated, at } for yield, §10)
+  if (f.tolerance !== undefined) {
+    const t = f.tolerance;
+    if (isNum(t)) { if (t < 0) errors.push(`${path}.tolerance: must be a non-negative number (a standard deviation in the factor's units)`); else out.tolerance = t; }
+    else if (isObj(t) && isNum(t.sd) && t.sd >= 0 && ['normal', 'uniform', 'truncated', undefined].includes(t.dist) && (t.at === undefined || (isNum(t.at) && t.at > 0)) && Object.keys(t).every(k => ['sd', 'dist', 'at'].includes(k)))
+      out.tolerance = { sd: t.sd, dist: t.dist ?? 'normal', ...(t.at !== undefined ? { at: t.at } : {}) };
+    else errors.push(`${path}.tolerance: must be a standard deviation, or { sd, dist: normal | uniform | truncated, at? }`);
+  }
   if (f.noise !== undefined) {
     if (!isObj(f.noise) || !isNum(f.noise.sd) || !(f.noise.sd > 0) || (f.noise.mean !== undefined && !isNum(f.noise.mean))) errors.push(`${path}.noise: must be { sd: positive number, mean?: number } (natural units)`);
     else out.noise = { sd: f.noise.sd, ...(f.noise.mean !== undefined ? { mean: f.noise.mean } : {}) };
@@ -313,6 +320,14 @@ function normResponse(r, i, errors) {
         errors.push(`${path}.measurement.data: must be a list of { part, operator?, value }`);
       out.measurement = { ...m };
     }
+  }
+  if (r.spec !== undefined) {
+    // specification limits for yield (§10): pass when lower ≤ y ≤ upper (either may be absent)
+    const sp = r.spec;
+    if (!isObj(sp) || Object.keys(sp).some(k => !['lower', 'upper'].includes(k)) || (sp.lower !== undefined && !isNum(sp.lower)) || (sp.upper !== undefined && !isNum(sp.upper)) || (sp.lower === undefined && sp.upper === undefined))
+      errors.push(`${path}.spec: must be { lower?, upper? } with at least one limit`);
+    else if (isNum(sp.lower) && isNum(sp.upper) && !(sp.upper > sp.lower)) errors.push(`${path}.spec: upper must be greater than lower`);
+    else out.spec = { ...sp };
   }
   if (r.note !== undefined) out.note = String(r.note);
   return out;
@@ -503,6 +518,11 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   const sites = normSites(d.sites, errors);
   if (sites) study.sites = sites;
   study.history = normHistory(d.history, design, errors);
+  // the simulator that runs the design (§10): { adapter: name, ...its options }, kept as given
+  if (d.simulator !== undefined) {
+    if (!isObj(d.simulator) || typeof d.simulator.adapter !== 'string') errors.push('simulator: must be { adapter: name, … }');
+    else study.simulator = JSON.parse(JSON.stringify(d.simulator));
+  }
 
   if (design && !errors.length && study.constraints.length) {
     for (const r of design.runs) if (!feasible(study, r.settings)) warnings.push(`design.runs: run ${r.run} violates a constraint`);

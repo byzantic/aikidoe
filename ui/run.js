@@ -3,6 +3,8 @@ import { h, messages, download, toast } from './dom.js';
 import { num } from '../js/format.js';
 import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
 import { parseNumber } from '../js/io/csv.js';
+import { studyAdapter } from '../js/sim/adapters.js';
+import { runOnSimulator } from '../js/sim/adapter.js';
 
 export function render({ state, update, setDoc, setUI, go }) {
   const study = state.study, ui = state.ui.run ??= {};
@@ -25,6 +27,14 @@ export function render({ state, update, setDoc, setUI, go }) {
       h('button', { class: 'btn', onclick: () => download(`${base}-run-sheet.csv`, runSheetCSV(study), 'text/csv') }, 'Download CSV'),
       h('button', { class: 'btn', onclick: () => { const w = window.open(URL.createObjectURL(new Blob([runSheetHTML(study)], { type: 'text/html' })), '_blank'); if (!w) toast('Allow pop-ups to open the printable sheet'); } }, 'Printable sheet'),
       h('button', { class: 'btn', onclick: () => fileIn.click() }, 'Import results…'), fileIn,
+      study.simulator ? h('button', { class: 'btn primary', id: 'run-simulator', onclick: async (e) => {
+        const b = e.target; b.disabled = true; const label = b.textContent;
+        try {
+          const ad = await studyAdapter(study);
+          const next = await runOnSimulator(study, ad, { all: done.size === runs.length, onProgress: (n, t) => { b.textContent = `Simulating… ${n}/${t}`; } });
+          setDoc(structuredClone(next)); toast(`Simulated ${runs.length - (done.size === runs.length ? 0 : done.size)} runs (${ad.name})`);
+        } catch (err) { toast(`Simulator: ${err.message}`); b.disabled = false; b.textContent = label; }
+      } }, done.size === runs.length ? 'Re-run on the simulator' : `Run on the simulator (${study.simulator.adapter})`) : null,
       done.size ? h('button', { class: 'btn primary', onclick: () => go('analyse') }, 'Analyse →') : null),
     h('p', { class: 'muted small' }, 'Run in the order shown. Type results into the sheet, or fill in the CSV and import it. Leave a cell blank if it was not measured; type NA if the measurement failed.'));
 

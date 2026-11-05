@@ -41,6 +41,17 @@
 //   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
 //        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
 //        propagation of error and dual-response optimisation (mean on target, minimum s)
+//   design STUDY --lhs [--runs N]        maximin Latin hypercube (computer experiments; default 10 runs per factor)
+//   simulator STUDY (--expression "y=…" … | --module FILE.mjs [--export run])   the study's simulator
+//        (FILE.mjs exports async run(settingsList) → [{ response: value }], or simulate(settings))
+//   simulate STUDY [--all] [--batch n]   run the design's runs on the study's simulator
+//   tolerance STUDY "A=sd" "B=uniform:sd" "C=truncated:sd:at" …   tolerance of each factor's actual value
+//   spec STUDY RESPONSE [--lower L] [--upper U] | --none    specification limits for yield
+//   yield STUDY [--model "y ~ …" …] [--at "A=…"] [--tolerance "A=sd,…"] [--n 20000] [--check M]
+//        Monte Carlo yield on the surrogate (quadratic by default), with its CV error and a trust check;
+//        --check M runs M samples on the simulator directly and compares
+//   sensitivity STUDY [--model …] [--over range|tolerance] [--n 16384] [--at …]
+//        Sobol first-order and total indices of each surrogate
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
 //
@@ -67,6 +78,12 @@ import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
 import { fittedModels, optimiseDesirability, dValue } from '../js/model/desirability.js';
 import { propagationOfError, dualResponse } from '../js/model/robust.js';
 import { parseCSV } from '../js/io/csv.js';
+import { lhsDesign, fitSurrogates, surrogateYield, surrogateSensitivity, directYieldCheck } from '../js/sim/surrogate.js';
+import { runOnSimulator } from '../js/sim/adapter.js';
+import { studyAdapter, registerAdapter } from '../js/sim/adapters.js';
+import { toleranceSd } from '../js/sim/sample.js';
+import { dirname, resolve as resolvePath } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { num, pval, stars, table } from '../js/format.js';
 
 // ---------------------------------------------------------------- arguments
@@ -160,8 +177,9 @@ function cmdDesign({ pos, opt }) {
   } else if (opt.bbd) d = boxBehnken(k, { ...(centreOpt !== undefined ? { centre: centreOpt } : {}), blocks: !!opt.blocks });
   else if (opt.pb) d = plackettBurman(k, opt.runs ? { runs: int(opt.runs, 'runs') } : {});
   else if (opt.generators) d = fractionalFactorial(k, { generators: String(opt.generators), ...common });
-  else if (opt.runs) d = fractionalFactorial(k, { runs: int(opt.runs, 'runs'), ...common });
+  else if (opt.runs && !opt.lhs) d = fractionalFactorial(k, { runs: int(opt.runs, 'runs'), ...common });
   else if (opt.full) d = fullFactorial(study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels ? f.levels.length : 2)), common);
+  else if (opt.lhs) d = lhsDesign(study, { ...(opt.runs ? { runs: int(opt.runs, 'runs') } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
   else fail('design: choose --full, --runs N, --generators …, --pb, --ccd or --bbd');
   const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
   const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed, ...(opt['no-split-plot'] && htc.some(Boolean) ? { randomise: 'complete' } : {}) }), observations: [] });
@@ -193,6 +211,7 @@ function cmdDesign({ pos, opt }) {
     const p = d.params;
     out(`${p.criterion}-optimal for ${p.model}: D-efficiency ${num(p.dEfficiency, 4)}%, A ${num(p.aEfficiency, 4)}%, G ${num(p.gEfficiency, 4)}%, average prediction variance ${num(p.averageVariance, 4)} (${p.restarts} starts)`);
   }
+  if (d.kind === 'lhs') out(`maximin Latin hypercube: smallest distance between runs ${num(d.params.minDist, 4)} (coded units); default model: quadratic`);
   if (d.kind === 'definitive-screening') out(`conference matrix of order ${d.params.order} (${d.params.fake} dropped column${d.params.fake === 1 ? '' : 's'}); ${d.params.centrePoints} centre run(s)`);
   if (d.kind === 'ccd' || d.kind === 'box-behnken') {
     const p = varianceProfile(d.X, { block: d.block, radii: [0, 0.5, 1, Math.max(...d.X.map(r => Math.hypot(...r)))] });
@@ -616,7 +635,7 @@ function cmdRobust({ pos, opt }) {
   const sigma = m.sigma;
   const poe = (s) => propagationOfError(study, m.predict, s, { sigma });
   const mu = (s) => poe(s).mean, sd = sdModel ? (s) => 10 ** sdModel.predict(s) : (s) => poe(s).sd;
-  const sources = study.factors.filter(f => f.noise || f.tolerance).map(f => f.noise ? `${f.id} noise sd ${f.noise.sd}` : `${f.id} tolerance sd ${f.tolerance}`);
+  const sources = study.factors.filter(f => f.noise || f.tolerance).map(f => f.noise ? `${f.id} noise sd ${f.noise.sd}` : `${f.id} tolerance ${showTol(f.tolerance)}`);
   out(`mean model: ${m.formula}${m.fit.kind === 'mixed' ? ' (mixed)' : ''}; residual sd ${num(sigma)}`);
   out(sdModel ? `sd model: s = 10^(${sdModel.formula.split('~')[1].trim()}) from ${sdModel.id}` : `sd by propagation of error: ${sources.join(', ') || 'no noise factors or tolerances — only the residual'}`);
   const fixed = opt.fix ? Object.fromEntries(String(opt.fix).split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); return [k, study.factors.find(f => f.id === k)?.type === 'categorical' ? v : Number(v)]; })) : {};
@@ -636,6 +655,128 @@ function cmdRobust({ pos, opt }) {
     [...p.parts.map(q => ({ ...q, pct: 100 * q.contribution / p.var })), ...(p.curvature > 1e-12 ? [{ id: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { id: 'residual', sd: sigma, slope: '', pct: 100 * p.residual / p.var }]));
 }
 const decodeMid = (f) => (f.low + f.high) / 2;
+
+// ---------------------------------------------------------------- simulation (§10)
+
+// a Node module as a simulator: exports run(settingsList) (batched) or simulate(settings)
+registerAdapter('module', async (study, o, env) => {
+  if (!o.path) throw new Error('the module simulator needs a path');
+  const mod = await import(pathToFileURL(resolvePath(env.dir ?? '.', o.path)).href);
+  const fn = mod[o.export ?? 'run'], one = mod.simulate;
+  if (typeof fn !== 'function' && typeof one !== 'function') throw new Error(`${o.path} exports neither ${o.export ?? 'run'}(settingsList) nor simulate(settings)`);
+  return { name: `module ${o.path}`, factors: () => study.factors, responses: () => study.responses,
+    run: typeof fn === 'function' ? async (list) => fn(list) : async (list) => Promise.all(list.map(x => one(x))) };
+});
+const adapterFor = (file, study) => studyAdapter(study, { dir: dirname(resolvePath(file)) });
+
+function cmdSimulator({ pos, opt }) {
+  const file = pos[0], study = load(file);
+  let sim;
+  if (opt.expression) {
+    const responses = {};
+    for (const e of list(opt.expression)) { const t = String(e), k = t.indexOf('='); if (k < 1) fail(`--expression "${t}": give response=formula`); responses[t.slice(0, k).trim()] = t.slice(k + 1).trim(); }
+    for (const id of Object.keys(responses)) if (!study.responses.some(r => r.id === id)) fail(`no response "${id}"`);
+    sim = { adapter: 'expression', responses };
+  } else if (opt.module) sim = { adapter: 'module', path: String(opt.module), ...(opt.export ? { export: String(opt.export) } : {}) };
+  else fail('simulator: give --expression "y=…" … or --module FILE.mjs');
+  save(file, createStudy({ ...study, simulator: sim }));
+  out(`${file}: simulator ${sim.adapter}${sim.path ? ' ' + sim.path : ''}`);
+}
+
+async function cmdSimulate({ pos, opt }) {
+  const file = pos[0], study = load(file);
+  const ad = await adapterFor(file, study);
+  const t0 = Date.now();
+  const next = await runOnSimulator(study, ad, { all: !!opt.all, ...(opt.batch ? { batch: int(opt.batch, 'batch') } : {}) });
+  save(file, next);
+  const n = new Set(next.observations.map(o => o.run)).size - (opt.all ? 0 : new Set(study.observations.map(o => o.run)).size);
+  out(`${file}: ran ${n} runs on ${ad.name} in ${((Date.now() - t0) / 1000).toFixed(2)} s`);
+  const bad = next.observations.filter(o => o.value === null).length;
+  if (bad) out(`note: ${bad} results were not finite numbers and were left empty`);
+}
+
+function parseTolerance(t) {
+  const p = String(t).split(':');
+  if (p.length === 1) return Number(p[0]);
+  const [dist, sd, at] = p;
+  if (!['normal', 'uniform', 'truncated'].includes(dist)) fail(`tolerance "${t}": give sd, normal:sd, uniform:sd or truncated:sd[:at]`);
+  return { sd: Number(sd), dist, ...(at !== undefined ? { at: Number(at) } : {}) };
+}
+const kvTol = (study, text) => Object.fromEntries(String(text).split(',').map(x => { const [k, v] = x.split('=').map(y => y.trim()); if (!study.factors.some(f => f.id === k)) fail(`unknown factor "${k}"`); return [k, parseTolerance(v)]; }));
+const showTol = (t) => (typeof t === 'number' ? `sd ${num(t, 4)}` : `${t.dist} sd ${num(t.sd, 4)}${t.dist === 'uniform' ? ` (±${num(t.sd * Math.sqrt(3), 4)})` : t.dist === 'truncated' ? ` cut at ±${t.at ?? 2} sd (actual sd ${num(toleranceSd(t), 4)})` : ''}`);
+
+function cmdTolerance({ pos, opt }) {
+  const [file, ...specs] = pos, study = load(file);
+  if (!specs.length && !opt.clear) fail('tolerance: give "A=sd" … (or --clear A,B)');
+  const set = specs.length ? kvTol(study, specs.join(',')) : {}, clear = opt.clear ? String(opt.clear).split(',') : [];
+  const factors = study.factors.map(f => { const g = { ...f }; if (clear.includes(f.id)) delete g.tolerance; if (set[f.id] !== undefined) g.tolerance = set[f.id]; return g; });
+  const next = createStudy({ ...study, factors });
+  save(file, next);
+  for (const f of next.factors) if (f.tolerance !== undefined) out(`${f.id}: ${showTol(f.tolerance)}${f.units ? ' ' + f.units : ''}`);
+}
+
+function cmdSpec({ pos, opt }) {
+  const [file, rid] = pos, study = load(file);
+  const i = study.responses.findIndex(r => r.id === rid);
+  if (i < 0) fail(`no response "${rid}"`);
+  const r = { ...study.responses[i] };
+  if (opt.none) delete r.spec;
+  else r.spec = { ...(opt.lower !== undefined ? { lower: Number(opt.lower) } : {}), ...(opt.upper !== undefined ? { upper: Number(opt.upper) } : {}) };
+  const responses = study.responses.slice(); responses[i] = r;
+  save(file, createStudy({ ...study, responses }));
+  out(r.spec ? `${rid}: spec ${r.spec.lower ?? '−∞'} … ${r.spec.upper ?? '∞'}` : `${rid}: no spec limits`);
+}
+
+function surrogatesFor(study, opt, only) {
+  const formulas = {};
+  for (const m of list(opt.model)) { const f = String(m); const id = f.slice(0, f.indexOf('~')).trim(); if (!f.includes('~') || !id) fail(`--model "${f}": give "response ~ terms"`); formulas[id] = f; }
+  const { models, missing } = fitSurrogates(study, { formulas, only });
+  for (const m of missing) out(`note: ${m.id} left out (${m.reason})`);
+  if (!models.length) fail('no response has a fitted surrogate: run the design first (simulate) or import results');
+  out(table([{ key: 'id', label: 'surrogate', align: 'left' }, { key: 'formula', label: 'model', align: 'left' }, { key: 'n', label: 'runs' }, { key: 'r2', label: 'R²' }, { key: 'predR2', label: 'pred R²' }, { key: 'rmse', label: 'RMSE' }, { key: 'cvRmse', label: 'RMSE_cv (LOO)' }], models));
+  return models;
+}
+
+async function cmdYield({ pos, opt }) {
+  const file = pos[0], study = load(file);
+  const specIds = study.responses.filter(r => r.spec).map(r => r.id);
+  if (!specIds.length) fail('no response has spec limits: set them with "doe spec STUDY RESPONSE --lower L --upper U"');
+  const models = surrogatesFor(study, opt, specIds);
+  const settings = opt.at ? parseSettingsLoose(study, String(opt.at)) : {};
+  const tolerances = opt.tolerance ? kvTol(study, opt.tolerance) : {};
+  const N = opt.n ? int(opt.n, 'n') : 20000;
+  const y = surrogateYield(study, models, { settings, tolerances, N, seed: study.seed >>> 0 });
+  out(`\nnominal: ${showSettings(y.nominal)}`);
+  out(`tolerances: ${Object.entries(y.tolerances).map(([k, t]) => `${k} ${showTol(t)}`).join(', ')}`);
+  out(table([{ key: 'id', label: 'response', align: 'left' }, { key: 'spec', label: 'spec', align: 'left' }, { key: 'nominal', label: 'at nominal' }, { key: 'margin', label: 'margin' }, { key: 'cvError', label: 'RMSE_cv' }, { key: 'below', label: '% below' }, { key: 'above', label: '% above' }],
+    y.margins.map((m, i) => ({ ...m, spec: `${y.specs[i].lower ?? '−∞'} … ${y.specs[i].upper ?? '∞'}`, below: 100 * y.perResponse[i].below, above: 100 * y.perResponse[i].above }))));
+  out(`\nyield ${num(100 * y.yield, 4)} %  (95% CI ${num(100 * y.lower, 4)} … ${num(100 * y.upper, 4)} %, ${N} samples of the surrogate)`);
+  if (y.bounds) out(`with every limit moved by ±2·RMSE_cv: ${num(100 * y.bounds.strict, 4)} … ${num(100 * y.bounds.loose, 4)} %`);
+  if (!y.trustworthy) out('warning: the surrogate\'s cross-validated error is comparable to the margins to the spec limits — the yield depends on the surrogate more than on the sampling. Check on the simulator (--check M), add runs near the limits, or fit a better model.');
+  if (opt.check) {
+    const ad = await adapterFor(file, study);
+    const M = int(opt.check, 'check');
+    const d = await directYieldCheck(study, models, ad, { settings, tolerances, M, seed: (study.seed + 1) >>> 0 });
+    out(`\ndirect check on ${ad.name}: yield ${num(100 * d.yield, 4)} % (95% CI ${num(100 * d.lower, 4)} … ${num(100 * d.upper, 4)} %, ${M} runs)`);
+    out(`surrogate vs simulator at those points: RMS error ${Object.entries(d.rmse).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}; same pass/fail for ${num(100 * d.agree, 4)} %`);
+    const overlap = d.lower <= y.upper && y.lower <= d.upper;
+    out(overlap ? 'the two yield intervals overlap' : 'warning: the direct yield disagrees with the surrogate\'s');
+  }
+}
+
+function cmdSensitivity({ pos, opt }) {
+  const study = load(pos[0]);
+  const models = surrogatesFor(study, opt, null);
+  const over = opt.over ? String(opt.over) : 'range';
+  const res = surrogateSensitivity(study, models, { over, settings: opt.at ? parseSettingsLoose(study, String(opt.at)) : {}, ...(opt.n ? { N: int(opt.n, 'n') } : {}), seed: study.seed >>> 0 });
+  for (const r of res) {
+    out(`\n${r.id}: Sobol indices over ${over === 'range' ? 'the factor ranges (uniform)' : 'the tolerances about nominal'}; variance ${num(r.V, 4)}, ${r.evaluations} surrogate evaluations`);
+    out(table([{ key: 'f', label: 'factor', align: 'left' }, { key: 's', label: 'first-order S' }, { key: 'sci', label: '95% CI', align: 'left' }, { key: 't', label: 'total ST' }, { key: 'tci', label: '95% CI', align: 'left' }],
+      r.factors.map((f, i) => ({ f, s: r.first[i].S, sci: `${num(r.first[i].lower, 3)} … ${num(r.first[i].upper, 3)}`, t: r.total[i].S, tci: `${num(r.total[i].lower, 3)} … ${num(r.total[i].upper, 3)}` }))));
+    const inter = 1 - r.first.reduce((a, x) => a + x.S, 0);
+    if (inter > 0.05) out(`interactions account for about ${num(100 * inter, 3)} % of the variance (1 − ΣS)`);
+  }
+}
 function parseSettingsLoose(study, text) { return Object.fromEntries(text.split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? fail(`unknown factor "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })); }
 
 function cmdInfo({ pos }) {
@@ -656,18 +797,18 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
-function main(argv) {
+async function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 49).map(l => l.slice(3)).join('\n'));
+    const head = src.split('\n').filter(l => l.startsWith('//')); out(head.slice(1, head.findIndex(l => l.includes('STUDY is a')) + 1).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];
   if (!f) { process.stderr.write(`unknown command "${cmd}" (try: ${Object.keys(COMMANDS).join(', ')})\n`); return 2; }
-  try { f(parseArgs(rest)); return 0; }
+  try { await f(parseArgs(rest)); return 0; }
   catch (e) {
     if (e instanceof CliError) process.stderr.write(`error: ${e.message}\n`);
     else if (e instanceof StudyError) process.stderr.write(`error: ${e.message}\n`);
@@ -678,4 +819,4 @@ function main(argv) {
 
 // output piped into head and the like: stop quietly when the reader goes away
 process.stdout.on('error', (e) => { if (e.code === 'EPIPE') process.exit(0); throw e; });
-process.exitCode = main(process.argv.slice(2));
+main(process.argv.slice(2)).then(c => { process.exitCode = c; });

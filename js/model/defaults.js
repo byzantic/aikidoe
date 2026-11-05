@@ -7,6 +7,7 @@ export function defaultFormula(study, response) {
   const d = study.design, k = study.factors.length;
   if (!d) return `${response} ~ main`;
   if (d.kind === 'ccd' || d.kind === 'box-behnken') return `${response} ~ quadratic`;
+  if (d.kind === 'lhs') return `${response} ~ quadratic`;
   if (d.kind === 'plackett-burman') return `${response} ~ main`;
   if (d.kind === 'fractional-factorial') return `${response} ~ ${d.params.resolution >= 5 ? '2fi' : 'main'}`;
   if (d.kind === 'sequential') {
