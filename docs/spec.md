@@ -128,11 +128,25 @@ Formula language similar to R/Wilkinson notation in coded factor ids: `Rs ~ (T +
 
 ### 6.3 Model reduction
 
-Stepwise by p-value or AICc with hierarchy preserved; the user always sees and can override the chosen model.
+Backward elimination by p-value (partial F test, drop while p > 0.10) or AICc (k = rank + 1, as
+R's `AIC`), with hierarchy preserved (a term stays while an interaction or power containing it is
+in the model; block terms and terms the user marks to keep never go). The steps are shown and the
+user can undo or edit the result. Forward and bidirectional stepwise selection are not provided:
+with designed experiments the full model is usually estimable and backward elimination from it
+is the standard practice.
 
 ### 6.4 Power
 
 Power to detect an effect of size Δ given σ (or Δ/σ) for each term in the chosen model, by the non-central t / F. Shown at design time, before money is spent.
+
+Convention (as skpr's `effectsize`): Δ is the change in the response from the low to the high
+coded setting, so every column of a term has anticipated coefficient Δ/2; λ = bᵀ(V_SS)⁻¹b/σ² with
+V = (XᵀX)⁻¹. Term power is the F test of all its columns (effect power), coefficient power the
+two-sided t test (parameter power). Blocks are fixed nuisance terms. The smallest Δ/σ detectable
+with 80% power is shown alongside. Coded units are aikidoe's (factor low/high at ±1); skpr instead
+rescales each column of an imported design to ±1, which differs for designs with points outside
+the cube (CCD axial points). σ comes from the user for now; the measurement-system study (#17)
+will supply σ_meas when it lands.
 
 ## 7. Variance structure and mixed models
 

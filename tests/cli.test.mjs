@@ -94,6 +94,16 @@ try {
   r = run('predict', 'seq.aikidoe.json', 'y ~ main', '--at', 'A=1,B=2');
   check('predict: incomplete settings rejected', r.code !== 0 && /does not give C/.test(r.err), r.err);
 
+  section('power and reduction');
+  r = run('power', 'seq.aikidoe.json', '--model', 'main + I(B^2)', '--delta', '1', '--sigma', '0.5');
+  check('power: table with detectable Δ, blocks noted', r.code === 0 && /^A\s+1\s+1\s+0\.99/m.test(r.out) && /Δ for 80%/.test(r.out) && /blocks fitted/.test(r.out), r.out + r.err);
+  r = run('power', 'seq.aikidoe.json', '--delta', 'A=3,default=0.1', '--alpha', '0.1');
+  check('power: Δ per term', r.code === 0 && /^A\s+1\s+3\s/m.test(r.out) && /^B\s+1\s+0\.1\s/m.test(r.out), r.out + r.err);
+  r = run('fit', 'seq.aikidoe.json', 'y ~ quadratic', '--reduce', 'p');
+  check('fit --reduce p: steps and a reduced model containing A and I(B^2)', r.code === 0 && /drop /.test(r.out) && /reduced model: y ~ .*A.*I\(B\^2\)/.test(r.out), r.out + r.err);
+  r = run('fit', 'seq.aikidoe.json', 'y ~ quadratic', '--reduce', 'aicc', '--keep', 'C');
+  check('fit --reduce aicc --keep C', r.code === 0 && /reduced model: y ~ [^\n]*\bC\b/.test(r.out), r.out + r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');

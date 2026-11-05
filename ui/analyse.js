@@ -6,6 +6,7 @@ import { fitModel, anova, lackOfFit, boxCox, lenth, halfNormal, twoLevelEffects 
 import { hierarchyViolations } from '../js/model/formula.js';
 import { normal } from '../js/dist.js';
 import { confirmPanel } from './augment.js';
+import { reduceModel } from '../js/model/reduce.js';
 
 /** A sensible first model for the study's design. */
 export function defaultFormula(study, response) {
@@ -22,6 +23,16 @@ export function defaultFormula(study, response) {
   }
   const twoLevel = study.factors.every(f => f.type === 'continuous' || f.levels.length === 2);
   return `${response} ~ ${twoLevel && d.runs.length >= 1 + k + k * (k - 1) / 2 ? '2fi' : 'main'}`;
+}
+
+function reduction(r, response, undoTo, close) {
+  if (!r || r.response !== response) return null;
+  if (r.error) return h('div', { class: 'msg warning', id: 'reduction' }, r.error, ' ', h('button', { class: 'btn small', onclick: close }, 'ok'));
+  return h('div', { class: 'msg', id: 'reduction' },
+    h('div', {}, h('b', {}, `Reduced ${r.method === 'p' ? 'by p-value (drop while p > 0.10)' : 'by AICc'}`), ', hierarchy kept: ',
+      r.steps.length ? r.steps.map((st, i) => [i ? ', ' : '', h('span', { class: 'mono' }, st.drop), r.method === 'p' ? ` (p ${pval(st.p)})` : '']) : 'nothing to remove', '.'),
+    h('div', { class: 'row small', style: 'margin-top:6px' }, 'This is a suggestion: edit the formula to put a term back.',
+      h('button', { class: 'btn small', onclick: () => undoTo(r.start) }, 'undo'), h('button', { class: 'btn small', onclick: close }, 'hide')));
 }
 
 export function render(ctx) {
@@ -41,8 +52,14 @@ export function render(ctx) {
       withData.length > 1 ? h('label', { class: 'inline' }, 'response', select(withData.map(r => ({ value: r.id, label: r.name })), resp.id, (v) => set({ response: v }), { 'aria-label': 'response' })) : h('span', {}, h('b', {}, resp.name), resp.units ? ` (${resp.units})` : ''),
       ['main', '2fi', 'quadratic'].map(s => h('button', { class: 'btn', onclick: () => setFormula(`${resp.id} ~ ${s}`), title: { main: 'main effects', '2fi': 'main effects and two-factor interactions', quadratic: 'full quadratic (response surface)' }[s] }, s)),
       h('button', { class: 'btn', onclick: () => setFormula(defaultFormula(study, resp.id)) }, 'reset'),
+      ['p', 'aicc'].map(m => h('button', { class: 'btn', id: `reduce-${m}`, title: m === 'p' ? 'backward elimination: drop the least significant term while p > 0.10, keeping the model hierarchical' : 'backward elimination by AICc, keeping the model hierarchical',
+        onclick: () => {
+          try { const r = reduceModel(study, formula, { method: m }); ui.reduce = { response: resp.id, method: m, start: formula, steps: r.steps }; setFormula(r.formula); }
+          catch (e) { set({ reduce: { response: resp.id, error: e.message } }); }
+        } }, m === 'p' ? 'reduce (p)' : 'reduce (AICc)')),
       h('label', { class: 'inline' }, 'ANOVA', select([{ value: 1, label: 'type I (sequential)' }, { value: 2, label: 'type II' }, { value: 3, label: 'type III' }], ui.anovaType ?? 1, (v) => set({ anovaType: Number(v) }), { 'aria-label': 'ANOVA type' }))),
     fIn,
+    reduction(ui.reduce, resp.id, (f) => set({ formulas: { ...(ui.formulas ?? {}), [resp.id]: f }, reduce: null }), () => set({ reduce: null })),
     h('p', { class: 'muted small' }, 'R-style formula over factor ids: ', h('span', { class: 'mono' }, 'A*B'), ' = A + B + A:B, ', h('span', { class: 'mono' }, '(A+B+C)^2'), ', ', h('span', { class: 'mono' }, 'I(T^2)'), ', ', h('span', { class: 'mono' }, '- A:B'), '. Coefficients are in coded units (−1 … +1).'));
 
   let fit;
