@@ -168,7 +168,8 @@ Measurements usually come from a few drop-in test die (process control monitor s
 
 - a site scheme: named positions with (x, y) in mm from wafer centre, and derived radius r;
 - site as a random effect (within-wafer variance), or **position as fixed effects** — centre vs edge, or a radial term in r² — when the pattern is systematic (e.g. bowl-shaped Rs after anneal);
-- per-wafer summaries (mean, standard deviation, range/mean, log s) as derived responses for robust design (§8).
+- per-wafer summaries (mean, standard deviation, range/mean, log s) as derived responses for robust design (§8): declared as `{ "derived": { "from": "Rs", "stat": "logsd" } }`, computed from the readings whenever needed (never stored), analysed like any response.
+- Implementation (#16): presets `dropin-5` (centre + 4 at 0.8 R) and `dropin-9` (centre, 4 at 0.45 R, 4 diagonal at 0.8 R — three radii, so curvature in r is estimable) for a given wafer diameter, or custom positions; position terms usable in mixed-model formulas: `radius2` (ρ², coded centre → edge), `edge` (ρ ≥ 0.5), `waferX`, `waferY` (tilt), `slot` (linear) and `slotZone` (three equal zones, as a block); a study factor with the same id takes precedence. Site (with repeats at a site) can be a random effect. A wafer plot shows site means (or within-wafer residuals) as dots on the wafer outline, with the readings against r/R.
 
 Per-die wafer maps are out of scope for v1 (§14) but the observation format (§4.2) already allows any number of sites.
 
@@ -185,7 +186,7 @@ Per-die wafer maps are out of scope for v1 (§14) but the observation format (§
 
 ### 7.4 Boat / slot position
 
-Furnace boat or cassette slot can be entered per wafer and used as a fixed covariate or block — load-end effects are common and otherwise confound with treatments.
+Furnace boat or cassette slot can be entered per wafer and used as a fixed covariate (`slot`) or block (`slotZone`) — load-end effects are common and otherwise confound with treatments. Slot is constant within a wafer, so it is tested in the wafer stratum.
 
 ## 8. Multiple responses and robust design
 

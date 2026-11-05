@@ -86,6 +86,8 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `import STUDY RESULTS.csv [--dry-run] [--mode append]` | read a filled sheet or long-format results, with checks |
 | `fit STUDY "y ~ formula" [--anova 1\|2\|3] [--lenth] [--boxcox]` | coefficients, fit statistics, ANOVA with lack of fit, Lenth, Box–Cox; for split-plot or wafer/site data a REML mixed model with variance components and Kenward–Roger tests (`--compare`, `--df containment`, `--random …`, `--ols`) |
 | `augment STUDY --foldover [--factor F] \| --axial \| --optimal --runs n --model … \| --confirm "A=…,B=…" --formula …` | add a stage of runs as a new block |
+| `sites STUDY --scheme 5\|9 [--diameter 200]` or `--site id:x:y …` | drop-in site scheme; position terms `radius2`, `edge`, `waferX`, `waferY`, `slot`, `slotZone` in mixed-model formulas |
+| `summary STUDY RESPONSE --stats mean,sd,logsd,rangemean` | per-wafer summaries as derived responses |
 | `predict STUDY "y ~ formula" --at "A=…,B=…"` | predictions with 95% confidence and prediction intervals |
 | `power STUDY [--model …] [--delta Δ \| "A=3,default=2"] [--sigma σ] [--alpha α]` | power of each term, and the Δ detectable with 80% power |
 | `fit … --reduce p\|aicc [--alpha-out 0.1] [--keep A,B]` | backward elimination keeping hierarchy, then the fit |

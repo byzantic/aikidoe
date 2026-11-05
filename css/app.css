@@ -92,3 +92,9 @@ details > summary { cursor: pointer; color: var(--muted); }
 :root[data-theme="dark"] .low-power { color: #e3b341; }
 .vbar { display: inline-block; width: 80px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
 .vbar > span { display: block; height: 100%; background: var(--accent); }
+/* wafer plots (drop-in sites) */
+figure.wafer { margin: 0; } .waferplot { display: block; max-width: 100%; height: auto; }
+.wafer-outline { fill: none; stroke: var(--line); stroke-width: 1.5; } .wafer-notch { stroke: var(--panel); stroke-width: 4; }
+.site-dot { stroke: var(--ink); stroke-width: 1; } .site-dot.empty { stroke-dasharray: 2 2; }
+.site-label { font-size: 10px; text-anchor: middle; fill: var(--muted); }
+.wafers { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }

@@ -20,14 +20,14 @@ import { createStudy } from '../study.js';
 const META = ['lot', 'wafer', 'slot', 'operator', 'repeat'];
 const sortedRuns = (study) => (study.design?.runs ?? []).slice().sort((a, b) => a.order - b.order);
 const has = (study, key) => (study.design?.runs ?? []).some(r => r[key] !== undefined);
-const nested = (study, level) => study.responses.some(r => r.levels.includes(level));
+const nested = (study, level) => study.responses.some(r => !r.derived && r.levels.includes(level));
 const siteIds = (study) => (study.sites?.positions ?? []).map(p => String(p.id));
 const usesSites = (study, r) => r.levels.includes('site') && siteIds(study).length > 0;
 
 /** Result columns: [{ header, response, site }] */
 function resultColumns(study) {
   const out = [];
-  for (const r of study.responses) {
+  for (const r of study.responses.filter(x => !x.derived)) {
     if (usesSites(study, r)) for (const s of study.sites.positions) out.push({ header: `${r.id}@${s.id}`, response: r.id, site: s.id });
     else out.push({ header: r.id, response: r.id });
   }
@@ -164,7 +164,7 @@ function mapColumns(study, header, given = {}) {
     for (const x of items) for (const k of new Set([norm(x.id), norm(x.name)])) { loose.set(k, x); count.set(k, (count.get(k) || 0) + 1); }
     return { has: (h) => exact.has(h.trim()) || count.get(norm(h)) === 1, get: (h) => exact.get(h.trim()) ?? loose.get(norm(h)) };
   };
-  const resp = lookup(study.responses), fac = lookup(study.factors);
+  const resp = lookup(study.responses.filter(x => !x.derived)), fac = lookup(study.factors);
   for (const h of header) {
     if (given[h] !== undefined) { mapping[h] = given[h]; continue; }
     const k = norm(h);
@@ -239,8 +239,9 @@ export function importResults(study, text, opts = {}) {
     if (long) {
       const ir = col('response'), iv = col('value'), is = col('site');
       const rid = r[ir].trim();
-      const resp = study.responses.find(x => x.id === rid) ?? (study.responses.filter(x => norm(x.name) === norm(rid) || norm(x.id) === norm(rid)).length === 1
-        ? study.responses.find(x => norm(x.name) === norm(rid) || norm(x.id) === norm(rid)) : undefined);
+      const own = study.responses.filter(x => !x.derived);
+      const resp = own.find(x => x.id === rid) ?? (own.filter(x => norm(x.name) === norm(rid) || norm(x.id) === norm(rid)).length === 1
+        ? own.find(x => norm(x.name) === norm(rid) || norm(x.id) === norm(rid)) : undefined);
       if (!resp) { if (rid) err(line, header[ir], `unknown response "${rid}"`); return; }
       add({ response: resp.id, site: is >= 0 && r[is].trim() !== '' ? label(r[is]) : undefined }, iv);
     } else roles.forEach((role, j) => { if (role?.result) add(role.result, j); });
