@@ -84,3 +84,6 @@ svg.plot .band { fill: var(--sel); opacity: .7; }
   padding: 8px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; }
 #toast.show { opacity: .95; }
 details > summary { cursor: pointer; color: var(--muted); }
+
+/* a heading between panels (e.g. Design: "Or start again …" below the Next stage panel) */
+.section-title { font-size: 14px; font-weight: 600; color: var(--muted, inherit); margin: 22px 0 8px; }

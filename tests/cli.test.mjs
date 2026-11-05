@@ -71,6 +71,29 @@ try {
   r = run('design', 'ccd.aikidoe.json', '--optimal', '--runs', '12', '--model', 'quadratic', '--criterion', 'I', '--restarts', '5', '--force');
   check('design --optimal: I-optimal quadratic, efficiencies printed', r.code === 0 && /optimal, 12 runs/.test(r.out) && /I-optimal for quadratic: D-efficiency/.test(r.out), r.out + r.err);
 
+  section('augmentation');
+  run('init', 'seq.aikidoe.json', '--seed', '4', '--factor', 'A:0:1', '--factor', 'B:0:1', '--factor', 'C:0:1', '--factor', 'D:0:1', '--factor', 'E:0:1', '--response', 'y');
+  run('design', 'seq.aikidoe.json', '--runs', '8');
+  r = run('augment', 'seq.aikidoe.json', '--foldover');
+  check('augment --foldover: 8 runs as block 2', r.code === 0 && /8 runs added as block 2/.test(r.out), r.out + r.err);
+  r = run('alias', 'seq.aikidoe.json');
+  check('alias on a sequential design: no main effect in a chain', r.code === 0 && /fractional-factorial → foldover/.test(r.out) && !/(^|= )[A-E]( =|$)/m.test(r.out), r.out + r.err);
+  r = run('augment', 'seq.aikidoe.json', '--axial', '--centre', '2');
+  check('augment --axial: 12 runs as block 3', r.code === 0 && /12 runs added as block 3/.test(r.out) && /28 runs in all/.test(r.out), r.out + r.err);
+  const seqS = parseStudy(readFileSync(join(dir, 'seq.aikidoe.json'), 'utf8'));
+  writeFileSync(join(dir, 'seq.csv'), 'run,y\n' + seqS.design.runs.map(x => `${x.run},${(10 + 3 * x.settings.A - 2 * (x.settings.B - 0.5) ** 2 + x.block + 0.05 * Math.sin(x.run)).toFixed(4)}`).join('\n') + '\n');
+  r = run('import', 'seq.aikidoe.json', 'seq.csv');
+  r = run('fit', 'seq.aikidoe.json', 'y ~ main + I(B^2)');
+  check('fit on the sequence: Block row in the ANOVA', r.code === 0 && /^Block\s+2\s/m.test(r.out), r.out + r.err);
+  r = run('predict', 'seq.aikidoe.json', 'y ~ main + I(B^2)', '--at', 'A=0.5,B=0.5,C=0.5,D=0.5,E=0.5');
+  check('predict: value with CI and PI, average block', r.code === 0 && /95% PI/.test(r.out) && /average block/.test(r.out), r.out + r.err);
+  r = run('augment', 'seq.aikidoe.json', '--confirm', 'A=1,B=0.5,C=0.5,D=0.5,E=0.5', '--formula', 'y ~ main + I(B^2)', '--replicates', '2');
+  check('augment --confirm: prediction printed, 2 confirmation runs as block 4', r.code === 0 && /predicted y at A=1/.test(r.out) && /2 runs added as block 4/.test(r.out), r.out + r.err);
+  r = run('fit', 'seq.aikidoe.json', 'y ~ main + I(B^2)');
+  check('fit lists the confirmation runs (no result yet)', r.code === 0 && /no result yet/.test(r.out), r.out + r.err);
+  r = run('predict', 'seq.aikidoe.json', 'y ~ main', '--at', 'A=1,B=2');
+  check('predict: incomplete settings rejected', r.code !== 0 && /does not give C/.test(r.err), r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');

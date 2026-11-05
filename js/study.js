@@ -43,7 +43,7 @@ const KEYS = {
   observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'operator', 'repeat', 'note'],
   sites: ['scheme', 'positions'],
   position: ['id', 'x', 'y'],
-  stage: ['stage', 'runs', 'date', 'note'],
+  stage: ['stage', 'runs', 'date', 'note', 'params'],
   constraint: ['expr', 'units'],
 };
 
@@ -428,6 +428,7 @@ function normHistory(h, design, errors) {
     }
     if (s.date !== undefined) out.date = String(s.date);
     if (s.note !== undefined) out.note = String(s.note);
+    if (s.params !== undefined) { if (!isObj(s.params)) errors.push(`${path}.params: must be an object`); out.params = s.params; }
     return out;
   }).filter(Boolean);
 }

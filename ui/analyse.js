@@ -5,6 +5,7 @@ import { num, pval } from '../js/format.js';
 import { fitModel, anova, lackOfFit, boxCox, lenth, halfNormal, twoLevelEffects } from '../js/model/ols.js';
 import { hierarchyViolations } from '../js/model/formula.js';
 import { normal } from '../js/dist.js';
+import { confirmPanel } from './augment.js';
 
 /** A sensible first model for the study's design. */
 export function defaultFormula(study, response) {
@@ -13,11 +14,18 @@ export function defaultFormula(study, response) {
   if (d.kind === 'ccd' || d.kind === 'box-behnken') return `${response} ~ quadratic`;
   if (d.kind === 'plackett-burman') return `${response} ~ main`;
   if (d.kind === 'fractional-factorial') return `${response} ~ ${d.params.resolution >= 5 ? '2fi' : 'main'}`;
+  if (d.kind === 'sequential') {
+    // the largest standard model the combined runs support (block included)
+    const tries = d.params.stages.some(s => s.kind === 'axial') ? ['quadratic', '2fi', 'main'] : ['2fi', 'main'];
+    for (const t of tries) { try { const f = fitModel(study, `${response} ~ ${t}`); if (!f.aliased.length && f.dfRes >= 1) return `${response} ~ ${t}`; } catch { /* try a smaller model */ } }
+    return `${response} ~ main`;
+  }
   const twoLevel = study.factors.every(f => f.type === 'continuous' || f.levels.length === 2);
   return `${response} ~ ${twoLevel && d.runs.length >= 1 + k + k * (k - 1) / 2 ? '2fi' : 'main'}`;
 }
 
-export function render({ state, setUI }) {
+export function render(ctx) {
+  const { state, setUI } = ctx;
   const study = state.study, ui = state.ui.analyse ??= {};
   const withData = study.responses.filter(r => study.observations.some(o => o.response === r.id && o.value !== null));
   const resp = withData.find(r => r.id === ui.response) ?? withData[0];
@@ -44,7 +52,8 @@ export function render({ state, setUI }) {
   if (fit.rows.some(r => r.n > 1)) notes.push('Repeated observations of a run (wafers, sites, repeats) are averaged: this least-squares fit uses run means. Mixed models for nested measurements come in a later version.');
   for (const v of hierarchyViolations(fit.model)) notes.push(`${v.term} is in the model without ${v.missing.join(', ')}.`);
   if (fit.aliased.length) notes.push(`Not estimable (aliased with earlier terms): ${fit.aliased.join(', ')}.`);
-  const missingRuns = study.design.runs.length - fit.n;
+  const missingRuns = study.design.runs.filter(r => r.kind !== 'confirm').length - fit.n;
+  if (fit.model.terms[0]?.block) notes.push(`The design has ${fit.factors.find(f => f.block).levels.length} blocks (stages); a block term is fitted first so shifts between them do not bias the effects.`);
   if (missingRuns) notes.push(`${missingRuns} run(s) have no result yet and are left out.`);
 
   // ---------------------------------------------------------------- summary and coefficients
@@ -75,7 +84,8 @@ export function render({ state, setUI }) {
 
   // ---------------------------------------------------------------- effects (two-level)
   let effectsPanel = null;
-  const twoLevel = study.factors.every(f => f.type === 'continuous' || f.levels.length === 2) && !['ccd', 'box-behnken'].includes(study.design.kind) && !fit.model.terms.some(t => t.comps.some(c => c.I));
+  const twoLevel = study.factors.every(f => f.type === 'continuous' || f.levels.length === 2) && !['ccd', 'box-behnken'].includes(study.design.kind) && !fit.model.terms.some(t => t.comps.some(c => c.I))
+    && !(study.design.kind === 'sequential' && study.design.params.stages.some(s => s.kind === 'axial'));
   const eff = twoLevelEffects(fit);
   if (twoLevel && eff.length >= 3) {
     const L = lenth(eff.map(e => e.effect)), hn = halfNormal(eff.map(e => e.effect));
@@ -112,5 +122,5 @@ export function render({ state, setUI }) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics'), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, controls, summary, anovaPanel, effectsPanel, diag);
+  return h('div', {}, controls, summary, anovaPanel, effectsPanel, diag, confirmPanel(ctx, fit));
 }

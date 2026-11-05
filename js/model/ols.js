@@ -81,21 +81,65 @@ export function responseTable(study, responseId, { aggregate = 'mean' } = {}) {
   if (!study.responses.some(r => r.id === responseId)) throw new Error(`no response "${responseId}" in the study`);
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
   const obs = study.observations.filter(o => o.response === responseId && o.value !== null);
-  if (aggregate === 'none') return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1, order: runs.get(o.run).order }));
+  const meta = (r) => ({ order: r.order, kind: r.kind, ...(r.block !== undefined ? { block: r.block } : {}) });
+  if (aggregate === 'none') return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1, ...meta(runs.get(o.run)) }));
   const by = new Map();
   for (const o of obs) { if (!by.has(o.run)) by.set(o.run, []); by.get(o.run).push(o.value); }
-  return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([run, v]) => ({ run, settings: runs.get(run).settings, y: sum(v) / v.length, n: v.length, order: runs.get(run).order }));
+  return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([run, v]) => ({ run, settings: runs.get(run).settings, y: sum(v) / v.length, n: v.length, ...meta(runs.get(run)) }));
 }
 
-/** Fit a formula to a study's data. opts: response (default: formula's left side), aggregate, rows. */
+/** Id for the block pseudo-factor that does not clash with the study's ids. */
+const blockId = (study) => { let id = 'Block'; const taken = new Set([...study.factors, ...study.responses].map(x => x.id)); while (taken.has(id)) id += '_'; return id; };
+
+/**
+ * Fit a formula to a study's data. opts: response (default: the formula's left side), aggregate,
+ * rows, blocks ('auto' | false), includeConfirm.
+ *
+ * Blocks: when the runs used fall in more than one block (blocked designs, or stages added by
+ * augmentation), a categorical Block term is added first in the model (effect coded, so
+ * predictions are for the average block), unless blocks: false.
+ * Confirmation runs (kind 'confirm') are left out unless includeConfirm, so they can be
+ * checked against a model fitted without them.
+ */
 export function fitModel(study, formula, opts = {}) {
-  const model = parseFormula(formula, study.factors);
-  const response = opts.response ?? model.response;
+  const parsed = parseFormula(formula, study.factors);
+  const response = opts.response ?? parsed.response;
   if (!response) throw new Error('name the response: "y ~ …" or { response }');
-  const rows = opts.rows ?? responseTable(study, response, opts);
-  const mm = modelMatrix(model, study.factors, rows.map(r => r.settings));
+  let rows = opts.rows ?? responseTable(study, response, opts);
+  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
+  if (!rows.length) throw new Error(`no results for ${response} yet`);
+  const labels = [...new Set(rows.map(r => (r.block === undefined ? '' : String(r.block))))].sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
+  let factors = study.factors, model = parsed;
+  if (opts.blocks !== false && labels.length > 1) {
+    const id = blockId(study);
+    factors = [...study.factors, { id, name: 'Block', type: 'categorical', levels: labels, block: true }];
+    model = { ...parsed, terms: [{ label: id, comps: [{ f: id }], degree: 1, block: true }, ...parsed.terms] };
+    rows = rows.map(r => ({ ...r, settings: { ...r.settings, [id]: r.block === undefined ? '' : String(r.block) } }));
+  }
+  const mm = modelMatrix(model, factors, rows.map(r => r.settings));
   const fit = fitOLS(mm, rows.map(r => r.y));
-  return { ...fit, response, rows };
+  return { ...fit, response, rows, factors };
+}
+
+/**
+ * Predictions with intervals at new settings (natural units): [{ fit, se, lower, upper,
+ * predLower, predUpper }] — confidence interval for the mean and prediction interval for a
+ * single new observation, at the given level (default 0.95). With a Block term, predictions are
+ * for the average block. Aliased (NaN) coefficients contribute nothing, as in R's predict.lm.
+ */
+export function predict(fit, rows, { level = 0.95 } = {}) {
+  const mm = modelMatrix(fit.model, fit.factors, rows);
+  const t = fit.dfRes > 0 ? studentT.ppf(1 - (1 - level) / 2, fit.dfRes) : NaN;
+  return mm.X.map(x => {
+    let yhat = 0, v = 0;
+    for (let i = 0; i < x.length; i++) {
+      if (Number.isNaN(fit.coef[i])) continue;
+      yhat += x[i] * fit.coef[i];
+      for (let j = 0; j < x.length; j++) if (!Number.isNaN(fit.coef[j])) v += x[i] * fit.covUnscaled[i][j] * x[j];
+    }
+    const se = Math.sqrt(v * fit.sigma2), sp = Math.sqrt((v + 1) * fit.sigma2);
+    return { fit: yhat, se, lower: yhat - t * se, upper: yhat + t * se, predLower: yhat - t * sp, predUpper: yhat + t * sp };
+  });
 }
 
 // ---------------------------------------------------------------- ANOVA
@@ -246,5 +290,7 @@ export function halfNormal(effects) {
  * intercept, with names. For use with lenth() and halfNormal().
  */
 export function twoLevelEffects(fit) {
-  return fit.columns.map((c, j) => ({ name: c, effect: 2 * fit.coef[j] })).filter((e, j) => fit.assign[j] !== -1 && Number.isFinite(e.effect));
+  // factor effects only: not the intercept, not the block term
+  return fit.columns.map((c, j) => ({ name: c, effect: 2 * fit.coef[j] }))
+    .filter((e, j) => fit.assign[j] !== -1 && !fit.model.terms[fit.assign[j]].block && Number.isFinite(e.effect));
 }
