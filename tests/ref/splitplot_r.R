@@ -37,9 +37,15 @@ opt <- list(
 )
 for (o in opt) safe(o$name, list(kind = "optimal", model = o$aikidoe, wholePlots = o$W, perWholePlot = o$m, eta = o$eta, levels = o$levels), function() {
   wp <- gen_design(o$wpc, o$wpm, trials = o$W, repeats = 20)
-  d <- gen_design(o$spc, o$model, trials = o$W * o$m, splitplotdesign = wp, blocksizes = o$m, varianceratio = o$eta, repeats = 50,
-                  contrast = if ("G" %in% names(o$spc)) contr.sum else NULL)
+  args <- list(candidateset = o$spc, model = o$model, trials = o$W * o$m, splitplotdesign = wp, blocksizes = o$m, varianceratio = o$eta, repeats = 50)
+  if ("G" %in% names(o$spc)) args$contrast <- contr.sum
+  d <- tryCatch(do.call(gen_design, args), error = function(e) {
+    # some skpr versions want the whole-plot columns in the candidate set as well
+    message("retrying with whole-plot columns in the candidate set: ", conditionMessage(e))
+    args$candidateset <- merge(o$wpc, o$spc); do.call(gen_design, args)
+  })
   d <- as.data.frame(d)
+  message("skpr split-plot columns: ", paste(names(d), collapse = ", "))
   wpid <- d[[grep("^Block", names(d))[1]]]
   vars <- setdiff(names(d), grep("^Block", names(d), value = TRUE))
   if ("G" %in% vars) d$G <- factor(as.character(d$G), levels = c("b", "c", "a"))
