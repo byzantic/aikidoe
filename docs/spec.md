@@ -202,6 +202,7 @@ Furnace boat or cassette slot can be entered per wafer and used as a fixed covar
 - ANOVA method with variance components: repeatability, reproducibility, operator × part, part-to-part; %contribution, %study variation, %tolerance; number of distinct categories (ndc).
 - Also for a single instrument with no operators (repeatability only), common in fabs where the tool is automated.
 - Recommended before any experiment whose effects of interest are near the measurement noise; the planner links σ_meas into the power calculation (§6.4).
+- Implementation (#17): balanced designs by the expected-mean-square formulas; the crossed operator × part interaction is pooled into repeatability when p > 0.05 (as SixSigma::ss.rr); negative components set to 0; study variation k·σ with k = 6 (5.15 selectable); ndc = max(1, ⌊√2 σ_part/σ_GRR⌋); verdict by AIAG bands (< 10 %, 10–30 %, > 30 % of study variation). The result is kept on the response (`measurement: { sigma, design, pctGRR, ndc, tolerance, data }`, readings included so it can be re-analysed); power then uses σ = √(σ_process² + σ_meas²), or σ_meas alone as an upper bound. Unbalanced gauge studies are not handled yet.
 
 ## 10. Simulator adapters and yield
 

@@ -88,6 +88,7 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `augment STUDY --foldover [--factor F] \| --axial \| --optimal --runs n --model … \| --confirm "A=…,B=…" --formula …` | add a stage of runs as a new block |
 | `sites STUDY --scheme 5\|9 [--diameter 200]` or `--site id:x:y …` | drop-in site scheme; position terms `radius2`, `edge`, `waferX`, `waferY`, `slot`, `slotZone` in mixed-model formulas |
 | `summary STUDY RESPONSE --stats mean,sd,logsd,rangemean` | per-wafer summaries as derived responses |
+| `gauge DATA.csv [--tolerance T] [--design …] [--into STUDY --response R]` | gauge R&R by ANOVA (crossed, nested, repeatability-only); `--into` keeps σ_meas on the response for `power --response R [--sigma-process σp]` |
 | `predict STUDY "y ~ formula" --at "A=…,B=…"` | predictions with 95% confidence and prediction intervals |
 | `power STUDY [--model …] [--delta Δ \| "A=3,default=2"] [--sigma σ] [--alpha α]` | power of each term, and the Δ detectable with 80% power |
 | `fit … --reduce p\|aicc [--alpha-out 0.1] [--keep A,B]` | backward elimination keeping hierarchy, then the fit |

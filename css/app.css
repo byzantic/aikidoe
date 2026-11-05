@@ -98,3 +98,7 @@ figure.wafer { margin: 0; } .waferplot { display: block; max-width: 100%; height
 .site-dot { stroke: var(--ink); stroke-width: 1; } .site-dot.empty { stroke-dasharray: 2 2; }
 .site-label { font-size: 10px; text-anchor: middle; fill: var(--muted); }
 .wafers { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+svg.plot .pt.t2 { fill: var(--trace-2); } svg.plot .pt.t3 { fill: var(--trace-3); } svg.plot .pt.t4 { fill: var(--trace-4); }
+svg.plot .pt.t5 { fill: var(--trace-5); } svg.plot .pt.t6 { fill: var(--trace-6); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+#gauge textarea { width: 100%; font: 12px/1.4 var(--mono, ui-monospace, monospace); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px; box-sizing: border-box; }

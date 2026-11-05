@@ -271,6 +271,19 @@ function powerSection(study, d, cand, ui, set) {
     h('label', { class: 'inline' }, 'α', select([0.01, 0.05, 0.1], alpha, (v) => setP({ alpha: Number(v) }), { 'aria-label': 'power alpha' })),
     d.wholePlot ? h('label', { class: 'inline', title: 'assumed ratio of whole-plot variance to run-to-run variance' }, 'η = σ²wp/σ²',
       h('input', { class: 'num', type: 'number', min: 0, step: 0.5, value: pw.eta ?? 1, 'aria-label': 'power eta', onchange: (e) => setP({ eta: Number(e.target.value) }) })) : null);
+  // from a gauge study: Δ in the response's units, σ = √(σ_process² + σ_meas²)
+  const measured = study.responses.filter(r => r.measurement);
+  let units = null;
+  if (measured.length) {
+    const r = measured.find(x => x.id === pw.response) ?? measured[0], sm = r.measurement.sigma;
+    const apply = (patch) => { const q = { ...pw, response: r.id, ...patch }; const sig = Math.sqrt((q.sigmaProcess ?? 0) ** 2 + sm ** 2); setP({ ...q, ratio: q.deltaUnits > 0 ? +(q.deltaUnits / sig).toPrecision(3) : pw.ratio }); };
+    units = h('div', { class: 'row small', id: 'power-units' },
+      measured.length > 1 ? select(measured.map(x => x.id), r.id, (v) => setP({ response: v }), { 'aria-label': 'power response' }) : h('span', {}, r.id),
+      `: σ_meas = ${num(sm, 4)} from its gauge study${r.measurement.pctGRR !== undefined ? ` (GRR ${num(r.measurement.pctGRR, 3)} %)` : ''}.`,
+      h('label', { class: 'inline' }, `Δ (${r.units ?? 'units'})`, h('input', { class: 'num', type: 'number', min: 0, step: 'any', value: pw.deltaUnits ?? '', 'aria-label': 'delta in units', onchange: (e) => apply({ deltaUnits: Number(e.target.value) }) })),
+      h('label', { class: 'inline', title: 'run-to-run process variation beyond the measurement' }, 'σ process', h('input', { class: 'num', type: 'number', min: 0, step: 'any', value: pw.sigmaProcess ?? '', 'aria-label': 'sigma process', onchange: (e) => apply({ sigmaProcess: Number(e.target.value) }) })),
+      h('span', { class: 'muted' }, pw.deltaUnits > 0 ? `→ Δ/σ = ${num(pw.deltaUnits / Math.sqrt((pw.sigmaProcess ?? 0) ** 2 + sm ** 2), 3)}${pw.sigmaProcess ? '' : ' (measurement noise only: an upper bound on power)'}` : 'sets Δ/σ'));
+  }
   let res, err = null;
   try { res = designPower(study, d.X, { model, block: d.block, delta: ratio, alpha, ...(d.wholePlot ? { wholePlot: d.wholePlot, eta: pw.eta ?? 1 } : {}) }); } catch (e) { err = e.message; }
   let body;
@@ -287,7 +300,7 @@ function powerSection(study, d, cand, ui, set) {
       h('p', { class: 'muted small' }, `${res.strata ? `Split-plot: whole-plot terms are tested against the whole-plot error (${res.strata[0].df} df), the others against the residual (${res.strata[1].df} df), with σ²wp = η σ². ` : `${res.dfRes} residual df. `}${res.terms.some(t => t.block) ? 'Blocks fitted. ' : ''}Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
         'Power below 0.8 is marked; Δ/σ for 80% is the smallest effect this design would usually find.'));
   }
-  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, body);
+  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, units, body);
 }
 
 function optimalOptions(study, ui, set, split = false) {
