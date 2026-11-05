@@ -27,6 +27,9 @@
 //                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
 //        adds a stage of runs to the design as a new block
 //   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
+//   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
+//   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
+//        (position terms in mixed-model formulas: radius2, edge, waferX, waferY, slot, slotZone)
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
 //
@@ -48,6 +51,7 @@ import { hierarchyViolations } from '../js/model/formula.js';
 import { studyPower, detectableEffect } from '../js/model/power.js';
 import { reduceModel } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
+import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { num, pval, stars, table } from '../js/format.js';
 
 // ---------------------------------------------------------------- arguments
@@ -436,13 +440,43 @@ function cmdAlias({ pos, opt }) {
 const nm = (names, i) => (names ? names[i] : T.factorName(i));
 const maskNames = (m, names) => { const p = []; for (let i = 0; m >> i; i++) if (m >> i & 1) p.push(nm(names, i)); return p.join(names ? ':' : ''); };
 
+function cmdSites({ pos, opt }) {
+  const file = pos[0], study = load(file);
+  let sites;
+  if (opt.scheme) sites = siteScheme(String(opt.scheme).replace(/^(\d+)$/, 'dropin-$1'), { diameter: opt.diameter !== undefined ? Number(opt.diameter) : 200 });
+  else if (opt.site) sites = { scheme: 'custom', ...(opt.diameter !== undefined ? { diameter: Number(opt.diameter) } : {}), positions: list(opt.site).map(t => { const [id, x, y] = String(t).split(':'); return { id, x: Number(x), y: Number(y) }; }) };
+  if (sites) {
+    const used = new Set(study.observations.filter(o => o.site !== undefined).map(o => String(o.site)));
+    const missing = [...used].filter(id => !sites.positions.some(p => String(p.id) === id));
+    if (missing.length && !opt.force) fail(`the observations use sites ${missing.join(', ')}, not in the new scheme (--force to set it anyway)`);
+    const next = createStudy({ ...study, sites });
+    save(file, next);
+    study.sites = next.sites;
+  }
+  if (!study.sites) { out('no site scheme (set one with --scheme 5|9 or --site id:x:y …)'); return; }
+  const P = sitePositions(study);
+  out(`${study.sites.scheme}${study.sites.diameter ? `, ${study.sites.diameter} mm wafer` : ''}: ${P.size} sites`);
+  out(table([{ key: 'id', label: 'site', align: 'left' }, { key: 'x', label: 'x (mm)' }, { key: 'y', label: 'y (mm)' }, { key: 'r', label: 'r (mm)' }, { key: 'rho', label: 'r / R' }],
+    [...P].map(([id, p]) => ({ id, ...p }))));
+}
+
+function cmdSummary({ pos, opt }) {
+  const [file, resp] = pos, study = load(file);
+  if (!resp) fail('summary: give the response to summarise per wafer');
+  const stats = String(opt.stats ?? 'mean,sd').split(',').map(x => x.trim()).filter(Boolean);
+  const next = createStudy(addSummaries(study, resp, stats));
+  save(file, next);
+  for (const st of stats) out(`${resp}_${st}: per-wafer ${SUMMARY_STATS[st].name} of ${resp} (computed from the readings; fit it like any response)`);
+}
+
 function cmdInfo({ pos }) {
   const s = load(pos[0]);
   out(`${s.name}  (seed ${s.seed})`);
   const named = s.factors.some(f => f.name !== f.id);
   out(table([{ key: 'id', label: 'factor', align: 'left' }, ...(named ? [{ key: 'name', label: 'name', align: 'left' }] : []), { key: 'range', label: 'range / levels', align: 'left' }, { key: 'note', label: '', align: 'left' }],
-    s.factors.map(f => ({ ...f, range: f.type === 'categorical' ? f.levels.join(', ') : `${f.low} … ${f.high}${f.units ? ' ' + f.units : ''}`, note: [f.transform === 'log' ? 'log' : '', f.htc ? 'hard to change' : ''].filter(Boolean).join(', ') }))));
-  out(`responses: ${s.responses.map(r => r.id + (r.units ? ` (${r.units})` : '')).join(', ') || 'none'}`);
+    s.factors.map(f => ({ ...f, range: f.type === 'categorical' ? f.levels.join(', ') : `${num(f.low, 6)} … ${num(f.high, 6)}${f.units ? ' ' + f.units : ''}`, note: [f.transform === 'log' ? 'log' : '', f.htc ? 'hard to change' : ''].filter(Boolean).join(', ') }))));
+  out(`responses: ${s.responses.map(r => r.id + (r.units ? ` (${r.units})` : '') + (r.derived ? ` [wafer ${r.derived.stat} of ${r.derived.from}]` : '')).join(', ') || 'none'}`);
+  if (s.sites) out(`sites: ${s.sites.scheme}, ${s.sites.positions.length} positions${s.sites.diameter ? `, ${s.sites.diameter} mm wafer` : ''}`);
   if (!s.design) { out('no design yet'); return; }
   const runs = s.design.runs, done = new Set(s.observations.filter(o => o.value !== null).map(o => o.run));
   out(`design: ${s.design.kind}, ${runs.length} runs, randomisation ${s.design.randomisation}; results for ${done.size} of ${runs.length} runs`);
@@ -453,13 +487,13 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 34).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 37).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];

@@ -13,6 +13,7 @@
 // sequential sums of squares are those of R's lm() and anova().
 import { qr, solveUpper } from '../linalg.js';
 import { studentT, fDist, chi2, normal } from '../dist.js';
+import { observationsOf } from './sites.js';
 import { parseFormula, modelMatrix, containedIn } from './formula.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
@@ -80,7 +81,7 @@ export function fitOLS(mm, y, { names } = {}) {
 export function responseTable(study, responseId, { aggregate = 'mean' } = {}) {
   if (!study.responses.some(r => r.id === responseId)) throw new Error(`no response "${responseId}" in the study`);
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
-  const obs = study.observations.filter(o => o.response === responseId && o.value !== null);
+  const obs = observationsOf(study, responseId).filter(o => o.value !== null);
   const meta = (r) => ({ order: r.order, kind: r.kind, ...(r.block !== undefined ? { block: r.block } : {}) });
   if (aggregate === 'none') return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1, ...meta(runs.get(o.run)) }));
   const by = new Map();
@@ -102,7 +103,12 @@ const blockId = (study) => { let id = 'Block'; const taken = new Set([...study.f
  * checked against a model fitted without them.
  */
 export function fitModel(study, formula, opts = {}) {
-  const parsed = parseFormula(formula, study.factors);
+  let parsed;
+  try { parsed = parseFormula(formula, study.factors); } catch (e) {
+    const m = /unknown factor "(radius2|edge|waferX|waferY|slot|slotZone)"/.exec(e.message);
+    if (m) throw new Error(`${m[1]} is a position term: it varies within runs, so it needs a model of the individual readings (the mixed model), not of run means`);
+    throw e;
+  }
   const response = opts.response ?? parsed.response;
   if (!response) throw new Error('name the response: "y ~ …" or { response }');
   let rows = opts.rows ?? responseTable(study, response, opts);

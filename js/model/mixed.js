@@ -25,6 +25,7 @@ import { chol, cholInverse, cholLogdet, cholSolve, qr } from '../linalg.js';
 import { fDist, chi2 } from '../dist.js';
 import { parseFormula, modelMatrix } from './formula.js';
 import { withBlockTerm, fitOLS, anova } from './ols.js';
+import { observationsOf, withPositionTerms } from './sites.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
 
@@ -360,9 +361,10 @@ function kenwardRoger(L, beta, Phi, PhiA, Pm, W) {
 export function observationTable(study, response) {
   if (!study.responses.some(r => r.id === response)) throw new Error(`no response "${response}" in the study`);
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
-  return study.observations.filter(o => o.response === response && o.value !== null && runs.get(o.run)?.kind !== 'confirm').map(o => {
+  return observationsOf(study, response).filter(o => o.value !== null && runs.get(o.run)?.kind !== 'confirm').map(o => {
     const r = runs.get(o.run);
-    return { run: o.run, order: r.order, kind: r.kind, settings: r.settings, y: o.value,
+    return { run: o.run, order: r.order, kind: r.kind, settings: r.settings, y: o.value, obs: o,
+      ...(o.wafer !== undefined && o.site !== undefined ? { site: `${o.run}|${o.wafer}|${o.site}` } : {}),
       ...(r.wholePlot !== undefined ? { wholePlot: String(r.wholePlot) } : {}), ...(r.block !== undefined ? { block: r.block } : {}),
       ...(o.wafer !== undefined ? { wafer: `${o.run}|${o.wafer}` } : {}), ...(o.lot !== undefined ? { lot: String(o.lot) } : {}) };
   });
@@ -372,6 +374,7 @@ const RANDOM = {
   wholePlot: { name: 'Whole plot', label: (r) => r.wholePlot },
   run: { name: 'Run', label: (r) => String(r.run) },
   wafer: { name: 'Wafer', label: (r) => r.wafer },
+  site: { name: 'Site', label: (r) => r.site },
   lot: { name: 'Lot', label: (r) => r.lot },
 };
 
@@ -386,9 +389,9 @@ const RANDOM = {
 export function randomEffects(rows, requested = 'auto') {
   const n = rows.length;
   const nGroups = (f) => new Set(rows.map(f)).size;
-  const ids = requested === 'auto' ? ['wholePlot', 'run', 'wafer'].filter(id => rows.every(r => RANDOM[id].label(r) !== undefined)) : requested;
+  const ids = requested === 'auto' ? ['wholePlot', 'run', 'wafer', 'site'].filter(id => rows.every(r => RANDOM[id].label(r) !== undefined)) : requested;
   for (const id of ids) {
-    if (!RANDOM[id]) throw new Error(`unknown random effect "${id}" (use wholePlot, run, wafer or lot)`);
+    if (!RANDOM[id]) throw new Error(`unknown random effect "${id}" (use wholePlot, run, wafer, site or lot)`);
     if (rows.some(r => RANDOM[id].label(r) === undefined)) throw new Error(`random effect ${id}: some observations have no ${id}`);
   }
   const out = [], seen = [];
@@ -411,12 +414,15 @@ export function randomEffects(rows, requested = 'auto') {
  * naive being least squares on the same observations as if they were all independent.
  */
 export function fitMixedModel(study, formula, opts = {}) {
-  const parsed = parseFormula(formula, study.factors);
-  const response = opts.response ?? parsed.response;
+  const response = opts.response ?? (String(formula).includes('~') ? String(formula).slice(0, String(formula).indexOf('~')).trim() : null);
   if (!response) throw new Error('name the response: "y ~ …"');
-  const rows0 = observationTable(study, response);
-  if (!rows0.length) throw new Error(`no results for ${response} yet`);
-  const b = withBlockTerm(study, parsed, rows0, opts);
+  const rows00 = observationTable(study, response);
+  if (!rows00.length) throw new Error(`no results for ${response} yet`);
+  // position terms (radius2, edge, slot …) become factors when the formula uses them
+  const pos = withPositionTerms(study, formula, rows00);
+  const parsed = parseFormula(formula, pos.factors);
+  const rows0 = pos.rows;
+  const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, rows0, opts);
   const random = randomEffects(b.rows, opts.random ?? 'auto');
   const mmx = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   const y = b.rows.map(r => r.y);
@@ -424,7 +430,9 @@ export function fitMixedModel(study, formula, opts = {}) {
   const naive = fitOLS(mmx, y);
   const naiveAnova = naive.dfRes > 0 ? anova(naive, 3) : [];
   fit.terms.forEach(t => { const a = naiveAnova.find(x => x.term === t.term); if (a) { t.naiveF = a.F; t.naiveDf = naive.dfRes; t.naiveP = a.p; } });
-  return { kind: 'mixed', ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, naive };
+  // marginal fitted values Xβ̂ and residuals y − Xβ̂ (random effects not removed)
+  const fitted = mmx.X.map(r => r.reduce((acc, v, j) => acc + (Number.isFinite(fit.coef[j]) ? v * fit.coef[j] : 0), 0));
+  return { kind: 'mixed', ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, naive, positionTerms: pos.used, fitted, residuals: y.map((v, i) => v - fitted[i]) };
 }
 
 export { containment as _containment, nestOrder as _nestOrder, indexGroups as _indexGroups };

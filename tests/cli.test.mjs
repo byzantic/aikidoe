@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { section, check, done } from './lib/check.mjs';
 import { parseCSV, writeCSV } from '../js/io/csv.js';
-import { parseStudy } from '../js/study.js';
+import { parseStudy, serializeStudy } from '../js/study.js';
+import { EXAMPLES } from '../ui/examples.js';
 
 const DOE = fileURLToPath(new URL('../tools/doe.mjs', import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), 'aikidoe-cli-'));
@@ -143,6 +144,20 @@ try {
   check('--reduce asks for --ols on mixed-model data', r.code !== 0 && /add --ols/.test(r.err), r.err);
   r = run('power', 'sp.aikidoe.json', '--model', 'T + P + t + G + F', '--eta', '2');
   check('power on a split-plot: GLS with η, per-term error df', r.code === 0 && /η = 2/.test(r.out) && /^T\s+1\s+1\s/m.test(r.out), r.out + r.err);
+
+  section('sites, position terms and summaries (issue #16)');
+  const ex = EXAMPLES.find(e => e.id === 'anneal-results').build();
+  writeFileSync(join(dir, 'anneal.aikidoe.json'), serializeStudy(ex));
+  r = run('sites', 'anneal.aikidoe.json');
+  check('sites: lists the 9-site scheme with radii', r.code === 0 && /dropin-9, 200 mm wafer: 9 sites/.test(r.out) && /^NE\s.*0\.8\s*$/m.test(r.out), r.out + r.err);
+  r = run('sites', 'anneal.aikidoe.json', '--scheme', '5');
+  check('changing to a scheme without the sites in use is refused', r.code !== 0 && /not in the new scheme/.test(r.err), r.err);
+  r = run('fit', 'anneal.aikidoe.json', 'Rs ~ T*t*dose + radius2 + T:radius2 + slot');
+  check('fit with position terms: radius2 tested within wafers, slot in the wafer stratum', r.code === 0 && /^radius2\s.*residual/m.test(r.out) && /^slot\s.*wafer/m.test(r.out) && /Wafer\s/.test(r.out), r.out + r.err);
+  r = run('summary', 'anneal.aikidoe.json', 'Rs', '--stats', 'sd,logsd');
+  check('summary adds derived responses', r.code === 0 && /Rs_sd: per-wafer standard deviation/.test(r.out) && /Rs_sd .*\[wafer sd of Rs\]/.test(run('info', 'anneal.aikidoe.json').out), r.out + r.err);
+  r = run('fit', 'anneal.aikidoe.json', 'Rs_logsd ~ T + t + dose');
+  check('fit a per-wafer summary (wafers within runs: run random effect)', r.code === 0 && /48 readings from 24 runs/.test(r.out), r.out + r.err);
 
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');

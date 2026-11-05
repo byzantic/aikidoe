@@ -1,5 +1,6 @@
 // Define step: factors, responses, constraints, measurement structure (spec §12 step 1).
 import { h, select, messages } from './dom.js';
+import { siteScheme, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 
 const MEASURED = [
   { value: 'run', label: 'once per run', levels: ['run'] },
@@ -68,14 +69,16 @@ export function render({ state, update, go }) {
       h('td', {}, select(['none', 'maximize', 'minimize', 'target', 'range'], goal, (v) => set(o => { o.goal = v; }), { 'aria-label': 'goal' })),
       ['lower', 'target', 'upper'].map(k => h('td', {}, h('input', { class: 'num', value: r[k] ?? '', 'aria-label': k, disabled: goal === 'none' || (k === 'target' && goal !== 'target'),
         onchange: (e) => set(o => numOrDelete(o, k, e.target.value)) }))),
-      h('td', {}, select(MEASURED, measuredKey(r.levels), (v) => set(o => { o.levels = MEASURED.find(m => m.value === v).levels; }), { 'aria-label': 'measured' })),
+      r.derived ? h('td', { class: 'muted small' }, `wafer ${SUMMARY_STATS[r.derived.stat]?.name ?? r.derived.stat} of ${r.derived.from}`)
+        : h('td', {}, select(MEASURED, measuredKey(r.levels), (v) => set(o => { o.levels = MEASURED.find(m => m.value === v).levels; }), { 'aria-label': 'measured' })),
       h('td', {}, h('button', { class: 'btn', title: 'remove response', disabled: (d.observations ?? []).some(o => o.response === r.id), onclick: () => update(x => { x.responses.splice(i, 1); }) }, '✕')));
   });
   const responses = h('section', { class: 'panel' }, h('h2', {}, 'Responses'),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
       h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'goal', 'lower', 'target', 'upper', 'measured', ''].map(t => h('th', {}, t)))), h('tbody', {}, rRows))),
     h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn', onclick: () => update(x => { x.responses ??= []; x.responses.push({ id: nextId(x.responses.map(r => r.id), 'y'), name: 'Response' }); }) }, '+ response'),
-      h('span', { class: 'muted small' }, 'Responses measured per wafer or site are averaged per run for least-squares fits; mixed models come later.')));
+      siteResponses(d, update),
+      h('span', { class: 'muted small' }, 'Responses measured per wafer or site are analysed reading by reading with a mixed model (whole plots, runs and wafers as random effects).')));
 
   // ---------------------------------------------------------------- sites
   const sites = anySite ? sitePanel(d, update) : null;
@@ -96,16 +99,23 @@ export function render({ state, update, go }) {
   return h('div', {}, errs, warns, factors, responses, sites, cons, desc, next);
 }
 
+// per-wafer summaries of site-measured responses, as derived responses
+function siteResponses(d, update) {
+  const src = (d.responses ?? []).filter(r => !r.derived && ((r.levels ?? []).includes('site') || (r.levels ?? []).includes('wafer')));
+  if (!src.length) return null;
+  return h('span', { class: 'row small' }, 'per-wafer summaries of', src.map(r => h('span', {}, ` ${r.id}: `,
+    Object.keys(SUMMARY_STATS).map(st => h('button', { class: 'btn small', 'data-summary': `${r.id}_${st}`, disabled: (d.responses ?? []).some(x => x.id === `${r.id}_${st}`),
+      title: `add ${r.id}_${st}: the ${SUMMARY_STATS[st].name} of each wafer's readings, computed from the data`, onclick: () => update(x => { Object.assign(x, addSummaries(x, r.id, [st])); }) }, st)))));
+}
+
 function sitePanel(d, update) {
   const pos = d.sites?.positions ?? [];
-  const preset = (n) => update(x => {
-    const r = 40, p = [{ id: 'C', x: 0, y: 0 }, { id: 'N', x: 0, y: r }, { id: 'E', x: r, y: 0 }, { id: 'S', x: 0, y: -r }, { id: 'W', x: -r, y: 0 }];
-    if (n === 9) p.push({ id: 'NE', x: r / Math.SQRT2, y: r / Math.SQRT2 }, { id: 'SE', x: r / Math.SQRT2, y: -r / Math.SQRT2 }, { id: 'SW', x: -r / Math.SQRT2, y: -r / Math.SQRT2 }, { id: 'NW', x: -r / Math.SQRT2, y: r / Math.SQRT2 });
-    x.sites = { scheme: `dropin-${n}`, positions: p.map(q => ({ ...q, x: +q.x.toFixed(2), y: +q.y.toFixed(2) })) };
-  });
+  const preset = (n) => update(x => { x.sites = siteScheme(n, { diameter: x.sites?.diameter ?? 200 }); });
   return h('section', { class: 'panel' }, h('h2', {}, 'Drop-in sites'),
     h('p', { class: 'muted small' }, 'Positions of the test structures on the wafer (mm from the centre). Responses measured per site get one result column per site on the run sheet.'),
     h('div', { class: 'row', style: 'margin-bottom:8px' }, h('button', { class: 'btn', onclick: () => preset(5) }, '5-site preset'), h('button', { class: 'btn', onclick: () => preset(9) }, '9-site preset'),
+      h('label', { class: 'inline' }, 'wafer diameter (mm)', h('input', { class: 'num', type: 'number', min: 1, value: d.sites?.diameter ?? '', placeholder: '—', 'aria-label': 'wafer diameter',
+        onchange: (e) => update(x => { x.sites ??= { scheme: 'custom', positions: [] }; if (e.target.value) x.sites.diameter = Number(e.target.value); else delete x.sites.diameter; }) })),
       h('span', { class: 'muted small' }, pos.length ? `${pos.length} sites (${d.sites.scheme})` : 'no sites yet')),
     pos.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'data', style: 'max-width:420px' },
       h('thead', {}, h('tr', {}, ['site', 'x (mm)', 'y (mm)', ''].map(t => h('th', {}, t)))),

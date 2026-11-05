@@ -37,11 +37,11 @@ const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
-  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'levels', 'note'],
+  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'levels', 'derived', 'note'],
   design: ['kind', 'params', 'randomisation', 'runs'],
   run: ['run', 'order', 'wholePlot', 'block', 'kind', 'settings'],
   observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'operator', 'repeat', 'note'],
-  sites: ['scheme', 'positions'],
+  sites: ['scheme', 'diameter', 'positions'],
   position: ['id', 'x', 'y'],
   stage: ['stage', 'runs', 'date', 'note', 'params'],
   constraint: ['expr', 'units'],
@@ -281,6 +281,13 @@ function normResponse(r, i, errors) {
     const idx = out.levels.map(l => LEVELS.indexOf(l));
     if (idx.some((v, j) => j && v <= idx[j - 1])) errors.push(`${path}.levels: must be in nesting order (${LEVELS.join(' > ')})`);
   }
+  if (r.derived !== undefined) {
+    // a per-wafer summary of another response (sites.js), computed from its readings
+    if (!isObj(r.derived) || typeof r.derived.from !== 'string' || !['mean', 'sd', 'logsd', 'rangemean'].includes(r.derived.stat))
+      errors.push(`${path}.derived: must be { from: response id, stat: mean | sd | logsd | rangemean }`);
+    else out.derived = { from: r.derived.from, stat: r.derived.stat };
+    if (r.levels === undefined) out.levels = ['run', 'wafer'];
+  }
   if (r.note !== undefined) out.note = String(r.note);
   return out;
 }
@@ -397,6 +404,7 @@ function normSites(s, errors) {
   if (!isObj(s)) { errors.push('sites: must be an object'); return undefined; }
   checkKeys(s, KEYS.sites, 'sites', errors);
   const out = { scheme: s.scheme ?? 'custom', positions: [] };
+  if (s.diameter !== undefined) { if (!isNum(s.diameter) || !(s.diameter > 0)) errors.push('sites.diameter: must be a positive number (mm)'); else out.diameter = s.diameter; }
   if (!Array.isArray(s.positions)) { errors.push('sites.positions: must be a list'); return out; }
   const ids = new Set();
   s.positions.forEach((p, i) => {
@@ -451,6 +459,11 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   study.factors = (Array.isArray(d.factors) ? d.factors : []).map((f, i) => normFactor(f, i, errors)).filter(Boolean);
   study.responses = (Array.isArray(d.responses) ? d.responses : []).map((r, i) => normResponse(r, i, errors)).filter(Boolean);
   if (d.responses !== undefined && !Array.isArray(d.responses)) errors.push('responses: must be a list');
+  for (const r of study.responses) if (r.derived) {
+    const src = study.responses.find(x => x.id === r.derived.from);
+    if (!src) errors.push(`responses (${r.id}).derived.from: unknown response ${JSON.stringify(r.derived.from)}`);
+    else if (src.derived) errors.push(`responses (${r.id}).derived.from: ${src.id} is itself derived`);
+  }
   const ids = [...study.factors, ...study.responses].map(x => x.id).filter(Boolean);
   for (const id of new Set(ids)) if (ids.filter(x => x === id).length > 1) errors.push(`id "${id}" is used more than once (factor and response ids must all differ)`);
 
@@ -460,6 +473,7 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   const design = normDesign(d.design, study.factors, errors, warnings);
   if (design) study.design = design;
   study.observations = normObservations(d.observations, design, study.responses, errors);
+  for (const o of study.observations) if (study.responses.find(r => r.id === o.response)?.derived) { errors.push(`observations: ${o.response} is a derived (summary) response; its values are computed, not entered`); break; }
   const sites = normSites(d.sites, errors);
   if (sites) study.sites = sites;
   study.history = normHistory(d.history, design, errors);

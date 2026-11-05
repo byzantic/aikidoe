@@ -8,6 +8,8 @@ import { normal } from '../js/dist.js';
 import { confirmPanel } from './augment.js';
 import { reduceModel } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
+import { observationsOf, availablePositionTerms, sitePositions } from '../js/model/sites.js';
+import { waferPlot } from './wafer.js';
 
 /** A sensible first model for the study's design. */
 export function defaultFormula(study, response) {
@@ -39,7 +41,7 @@ function reduction(r, response, undoTo, close) {
 export function render(ctx) {
   const { state, setUI } = ctx;
   const study = state.study, ui = state.ui.analyse ??= {};
-  const withData = study.responses.filter(r => study.observations.some(o => o.response === r.id && o.value !== null));
+  const withData = study.responses.filter(r => observationsOf(study, r.id).some(o => o.value !== null));
   const resp = withData.find(r => r.id === ui.response) ?? withData[0];
   const formula = ui.formulas?.[resp.id] ?? defaultFormula(study, resp.id);
   const set = (patch) => setUI({ analyse: { ...ui, ...patch } });
@@ -66,8 +68,8 @@ export function render(ctx) {
     reduction(ui.reduce, resp.id, (f) => set({ formulas: { ...(ui.formulas ?? {}), [resp.id]: f }, reduce: null }), () => set({ reduce: null })),
     h('p', { class: 'muted small' }, 'R-style formula over factor ids: ', h('span', { class: 'mono' }, 'A*B'), ' = A + B + A:B, ', h('span', { class: 'mono' }, '(A+B+C)^2'), ', ', h('span', { class: 'mono' }, 'I(T^2)'), ', ', h('span', { class: 'mono' }, '- A:B'), '. Coefficients are in coded units (−1 … +1).'));
 
-  let fit;
-  try { fit = fitModel(study, formula); } catch (e) { return h('div', {}, controls, h('div', { class: 'msg error' }, e.message)); }
+  let fit = null, fitErr = null;
+  try { fit = fitModel(study, formula); } catch (e) { fitErr = e; }
 
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)
   let rand = [];
@@ -75,10 +77,15 @@ export function render(ctx) {
   if (rand.length && !ui.ols) {
     let m;
     try { m = fitMixedModel(study, formula); } catch (e) { return h('div', {}, controls, h('div', { class: 'msg error' }, e.message)); }
-    return h('div', {}, controls, mixedPanel(m, ui, set), confirmPanel(ctx, fit));
+    const avail = availablePositionTerms(study, observationsOf(study, resp.id).filter(o => o.value !== null));
+    const used = new Set(formula.match(/[A-Za-z_][A-Za-z0-9_]*/g));
+    const chips = avail.length ? h('div', { class: 'row small', id: 'position-terms', style: 'margin-top:6px' }, 'position terms:',
+      avail.map(t => h('button', { class: 'btn small', disabled: used.has(t.id), title: t.name, onclick: () => setFormula(`${formula} + ${t.id}`) }, `+ ${t.id}`))) : null;
+    return h('div', {}, controls, chips, mixedPanel(m, ui, set), sitesPanel(study, m, ui, set), fit ? confirmPanel(ctx, fit) : null);
   }
   const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
     h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;
+  if (fitErr) return h('div', {}, controls, olsNote, h('div', { class: 'msg error' }, fitErr.message));
 
   const notes = [];
   if (fit.rows.some(r => r.n > 1)) notes.push('Repeated observations of a run (wafers, sites, repeats) are averaged: this least-squares fit uses run means. Mixed models for nested measurements come in a later version.');
@@ -155,6 +162,33 @@ export function render(ctx) {
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
   return h('div', {}, controls, olsNote, summary, anovaPanel, effectsPanel, diag, confirmPanel(ctx, fit));
+}
+
+// site values on a wafer outline, and against radius (issue #16)
+function sitesPanel(study, m, ui, set) {
+  const P = sitePositions(study);
+  if (!P.size || !m.rows.every(r => r.obs.site !== undefined)) return null;
+  const view = ui.waferView ?? 'mean';
+  // within-wafer deviations: the site pattern without the furnace, run and wafer offsets
+  const wkey = (r) => `${r.run}|${r.obs.wafer ?? ''}`;
+  const within = (v) => { const g = new Map(); m.rows.forEach((r, i) => { const k = wkey(r); if (!g.has(k)) g.set(k, []); g.get(k).push(v[i]); });
+    const mean = new Map([...g].map(([k, x]) => [k, x.reduce((a, b) => a + b, 0) / x.length])); return v.map((x, i) => x - mean.get(wkey(m.rows[i]))); };
+  const vals = view === 'residual' ? within(m.residuals) : m.rows.map(r => r.y);
+  const dev = view === 'residual' ? vals : within(vals);
+  const by = new Map();
+  m.rows.forEach((r, i) => { const k = String(r.obs.site); if (!by.has(k)) by.set(k, []); by.get(k).push(vals[i]); });
+  const means = new Map([...by].map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length]));
+  const radial = m.rows.map((r, i) => ({ x: P.get(String(r.obs.site))?.rho, y: dev[i] })).filter(p => Number.isFinite(p.x));
+  return h('section', { class: 'panel', id: 'sites' }, h('h2', {}, 'Sites'),
+    h('div', { class: 'row small', style: 'margin-bottom:8px' }, h('label', { class: 'inline' }, 'show', select([{ value: 'mean', label: `${m.response}, mean at each site` }, { value: 'residual', label: 'residual from the model, within wafer' }],
+      view, (v) => set({ waferView: v }), { 'aria-label': 'wafer view' }))),
+    h('div', { class: 'wafers' },
+      waferPlot({ sites: P, values: means, title: view === 'residual' ? 'Mean within-wafer residual at each site' : `Mean ${m.response} at each site` }),
+      h('figure', { style: 'flex:1; min-width:260px' }, h('figcaption', {}, `${view === 'residual' ? 'Residuals' : m.response} within each wafer (reading − wafer mean) against r / R`),
+        plot({ xLabel: 'r / R (centre → edge)', yLabel: view === 'residual' ? 'residual − wafer mean' : 'reading − wafer mean', height: 220, hlines: [{ y: 0 }], series: [{ points: radial }] }))),
+    h('p', { class: 'muted small' }, view === 'residual'
+      ? 'A pattern left in the residuals (a bowl, a tilt) means the position terms in the model do not capture it: try radius2, edge, waferX or waferY.'
+      : 'Readings from every wafer, averaged per site. A systematic radial pattern belongs in the model as radius2 (or edge); random site-to-site scatter is the residual.'));
 }
 
 function mixedPanel(m, ui, set) {
