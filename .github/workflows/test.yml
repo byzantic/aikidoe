@@ -12,3 +12,5 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - name: Minimum-aberration catalogue is reproduced by the search
+        run: node tools/build-catalogue.mjs --check
