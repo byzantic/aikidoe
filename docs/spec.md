@@ -93,17 +93,17 @@ Continuous factors are coded to [−1, +1] after the optional transform (`log` �
 
 | Design | Notes | Issue |
 |---|---|---|
-| Full factorial 2^k and mixed-level | with centre points, replicates, blocking | #design-core |
-| Regular fractional 2^(k−p) | generators chosen from minimum-aberration catalogue (k ≤ 15, up to 128 runs); user generators allowed; defining relation, resolution, full alias table to 2- or 3-factor interactions | #design-core |
-| Fold-over | full and single-factor, for de-aliasing (U7) | #augment |
-| Plackett–Burman | N = 12, 20, 24, 28, … 48; partial alias (correlation) table | #design-core |
-| Definitive screening (DSD) | Jones–Nachtsheim conference-matrix construction, 2k+1 (or 2k+3) runs; categorical 2-level extension | #dsd-optimal |
-| CCD | circumscribed / inscribed / face-centred; α for rotatability or orthogonal blocking | #rsm |
-| Box–Behnken | k = 3…7 standard tables | #rsm |
-| D-, I-optimal | coordinate exchange over a candidate set or continuous region, linear constraints, fixed runs to augment, multiple random starts; reports D-, A-, G-efficiency and the fraction-of-design-space (FDS) curve | #dsd-optimal |
-| Split-plot | from a factorial or optimal design: htc factors grouped into whole plots; optimal split-plot by coordinate exchange on the GLS information matrix with an assumed variance ratio η | #split-plot |
-| Latin hypercube | maximin, for simulators (U6) | #sim-adapter |
-| Gauge R&R layout | parts × operators × repeats, crossed or nested | #msa |
+| Full factorial 2^k and mixed-level | with centre points, replicates, blocking | #5 |
+| Regular fractional 2^(k−p) | generators chosen from minimum-aberration catalogue (k ≤ 15, up to 128 runs); user generators allowed; defining relation, resolution, full alias table to 2- or 3-factor interactions | #5 |
+| Fold-over | full and single-factor, for de-aliasing (U7) | #11 |
+| Plackett–Burman | N = 12, 20, 24, 28, … 48; partial alias (correlation) table | #5 |
+| Definitive screening (DSD) | Jones–Nachtsheim conference-matrix construction, 2k+1 (or 2k+3) runs; categorical 2-level extension | #10 |
+| CCD | circumscribed / inscribed / face-centred; α for rotatability or orthogonal blocking | #9 |
+| Box–Behnken | k = 3…7 standard tables | #9 |
+| D-, I-optimal | coordinate exchange over a candidate set or continuous region, linear constraints, fixed runs to augment, multiple random starts; reports D-, A-, G-efficiency and the fraction-of-design-space (FDS) curve | #10 |
+| Split-plot | from a factorial or optimal design: htc factors grouped into whole plots; optimal split-plot by coordinate exchange on the GLS information matrix with an assumed variance ratio η | #14 |
+| Latin hypercube | maximin, for simulators (U6) | #20 |
+| Gauge R&R layout | parts × operators × repeats, crossed or nested | #17 |
 
 **Randomisation.** Complete randomisation by default; restricted when there are whole plots (randomise whole-plot order, then sub-plot order within each) or blocks. The run sheet always states which randomisation was used, so the analysis can match it.
 
