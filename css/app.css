@@ -87,3 +87,6 @@ details > summary { cursor: pointer; color: var(--muted); }
 
 /* a heading between panels (e.g. Design: "Or start again …" below the Next stage panel) */
 .section-title { font-size: 14px; font-weight: 600; color: var(--muted, inherit); margin: 22px 0 8px; }
+.low-power { color: #9a6700; font-weight: 600; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .low-power { color: #e3b341; } }
+:root[data-theme="dark"] .low-power { color: #e3b341; }

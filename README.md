@@ -23,9 +23,10 @@ npm run ui        # → http://localhost:8080/
 
 Four steps, each usable on its own: **Define** factors, responses, constraints and drop-in
 sites; **Design** — compare candidate designs (fractions, Plackett–Burman, full factorial,
-central composite, Box–Behnken) with their aliasing or prediction-variance diagnostics, then
-create one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
-printable sheet; **Analyse** — fit a formula, ANOVA with lack of fit, Lenth's method with a
+central composite, Box–Behnken, definitive screening, optimal) with their aliasing,
+prediction-variance and power diagnostics (power of each term for an effect Δ/σ), then create
+one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
+printable sheet; **Analyse** — fit a formula, reduce it (backward elimination by p-value or AICc, hierarchy kept), ANOVA with lack of fit, Lenth's method with a
 half-normal plot, residual plots and Box–Cox, predictions with confidence and prediction
 intervals, and confirmation runs checked against them. Once a design exists, **Design** also
 offers a **Next stage**: fold-over, axial points (turning a fraction into a central composite)
@@ -85,6 +86,8 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `fit STUDY "y ~ formula" [--anova 1\|2\|3] [--lenth] [--boxcox]` | coefficients, fit statistics, ANOVA with lack of fit, Lenth, Box–Cox |
 | `augment STUDY --foldover [--factor F] \| --axial \| --optimal --runs n --model … \| --confirm "A=…,B=…" --formula …` | add a stage of runs as a new block |
 | `predict STUDY "y ~ formula" --at "A=…,B=…"` | predictions with 95% confidence and prediction intervals |
+| `power STUDY [--model …] [--delta Δ \| "A=3,default=2"] [--sigma σ] [--alpha α]` | power of each term, and the Δ detectable with 80% power |
+| `fit … --reduce p\|aicc [--alpha-out 0.1] [--keep A,B]` | backward elimination keeping hierarchy, then the fit |
 | `alias STUDY` or `alias --factors k --runs N` | alias structure |
 | `info STUDY` | summary |
 

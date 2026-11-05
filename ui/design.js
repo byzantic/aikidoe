@@ -13,6 +13,7 @@ import { definitiveScreening, dsdOrder } from '../js/design/dsd.js';
 import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
 import { parseFormula } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
+import { designPower, detectableEffect } from '../js/model/power.js';
 
 // the optimal-design search runs in a worker; one search at a time
 let worker = null, searchId = 0;
@@ -124,7 +125,7 @@ export function render(ctx) {
   let body;
   if (err) body = h('div', { class: 'msg error' }, err);
   else if (!d) body = h('div', { class: 'msg' }, ui.searching ? 'Searching… (several random starts of a coordinate-exchange search)' : 'Set the model, runs and criterion, then search.');
-  else body = diagnostics(study, d, cand.kind === 'dsd' ? 'quadratic' : null);
+  else body = h('div', {}, diagnostics(study, d, cand.kind === 'dsd' ? 'quadratic' : null), powerSection(study, d, cand, ui, set));
   const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label), options, body);
   if (!d) err = err ?? 'not searched';
 
@@ -194,6 +195,47 @@ function diagnostics(study, d, modelFor) {
         h('figure', {}, h('figcaption', {}, 'Correlations between model terms'), correlationMap(g.correlations))));
   }
   return h('div', {}, parts);
+}
+
+/** The model a design is meant for, as a starting point for its power table. */
+function intendedModel(study, d) {
+  if (d.kind === 'optimal') return d.params.model;
+  if (d.kind === 'ccd' || d.kind === 'box-behnken') return 'quadratic';
+  if (d.params.resolution >= 5) return '2fi';
+  if (d.kind === 'full-factorial') {
+    const k = study.factors.length;
+    return d.X.length > 1 + k + k * (k - 1) / 2 ? '2fi' : 'main';
+  }
+  return 'main';
+}
+
+function powerSection(study, d, cand, ui, set) {
+  const pw = ui.power ?? {}, model = pw.models?.[cand.id] ?? intendedModel(study, d);
+  const ratio = pw.ratio ?? 2, alpha = pw.alpha ?? 0.05;
+  const setP = (patch) => set({ power: { ...pw, ...patch } });
+  const controls = h('div', { class: 'row' },
+    h('label', { class: 'inline' }, 'model', h('input', { type: 'text', class: 'formula', style: 'width:16em', value: model, 'aria-label': 'power model',
+      onchange: (e) => setP({ models: { ...(pw.models ?? {}), [cand.id]: e.target.value.replace(/^.*~/, '').trim() || 'main' } }) })),
+    h('label', { class: 'inline', title: 'the change in the response from the low to the high setting that matters, in units of the run-to-run standard deviation σ' }, 'effect Δ/σ',
+      h('input', { class: 'num', type: 'number', min: 0.1, step: 0.1, value: ratio, 'aria-label': 'effect size', onchange: (e) => setP({ ratio: Number(e.target.value) }) })),
+    h('label', { class: 'inline' }, 'α', select([0.01, 0.05, 0.1], alpha, (v) => setP({ alpha: Number(v) }), { 'aria-label': 'power alpha' })));
+  let res, err = null;
+  try { res = designPower(study, d.X, { model, block: d.block, delta: ratio, alpha }); } catch (e) { err = e.message; }
+  let body;
+  if (err) body = h('div', { class: 'msg error' }, err);
+  else if (res.dfRes < 1) body = h('div', { class: 'msg warning' }, `${res.n} runs for ${res.rank} coefficients: no residual degrees of freedom, so no test and no power for this model. Add centre points or replicates, use a smaller model, or rely on Lenth’s method.`);
+  else {
+    const det = Object.fromEntries(detectableEffect(res, { power: 0.8 }).map(x => [x.term, x.ratio]));
+    const rows = res.terms.filter(t => !t.block);
+    body = h('div', {},
+      dataTable([{ key: 'term', label: 'term' }, { key: 'df', label: 'df', cls: 'n' },
+        { key: 'power', label: `power at Δ/σ = ${ratio}`, cls: 'n', fmt: (v) => (Number.isNaN(v) ? h('span', { class: 'muted' }, 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
+        { key: 'det', label: 'Δ/σ for 80%', cls: 'n', fmt: (v) => (Number.isFinite(v) ? num(v, 3) : '') }],
+      rows.map(t => ({ ...t, det: det[t.term] })), { rowAttrs: () => ({ 'data-power': '' }) }),
+      h('p', { class: 'muted small' }, `${res.dfRes} residual df${res.terms.some(t => t.block) ? '; blocks fitted' : ''}. Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
+        'Power below 0.8 is marked; Δ/σ for 80% is the smallest effect this design would usually find.'));
+  }
+  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, body);
 }
 
 function optimalOptions(study, ui, set) {

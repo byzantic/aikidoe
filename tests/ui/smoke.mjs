@@ -40,6 +40,11 @@ try {
   check('example opens on Design with candidates', (await page.locator('tr[data-design]').count()) >= 5);
   await page.click('tr[data-design="frac-16"]'); await settle();
   check('2^(5−1) selected: no aliasing message, generator in factor ids', /Conc = F:Cat:RPM:T/.test(await page.textContent('main')) && /No aliasing among main effects/.test(await page.textContent('main')));
+  check('power table for the 2^(5−1) with its 2fi model: saturated, no power', /no residual degrees of freedom/.test(await page.textContent('#power')));
+  await page.fill('input[aria-label="power model"]', 'main'); await page.keyboard.press('Tab'); await settle();
+  check('power for main effects: 5 terms, values shown', (await page.locator('tr[data-power]').count()) === 5 && /0\.\d{2}/.test(await page.textContent('#power')));
+  await page.fill('input[aria-label="effect size"]', '0.5'); await page.keyboard.press('Tab'); await settle();
+  check('small effect: low power flagged', (await page.locator('#power .low-power').count()) === 5);
   await page.click('tr[data-design="frac-8"]'); await settle();
   check('2^(5−2): alias chains listed', (await page.textContent('[data-aliases]')).includes('='));
   await page.click('tr[data-design="ccd"]'); await settle();
@@ -88,6 +93,12 @@ try {
   await page.fill('#formula', 'yield ~ F*T + Conc'); await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); await settle();
   const stats = await page.textContent('#fit-stats');
   check('reduced model: residual df, R², ANOVA and diagnostics', /11 residual df/.test(stats) && /R² = 0\.99/.test(stats) && /ANOVA/.test(await page.textContent('main')) && (await page.locator('svg.plot').count()) >= 4, stats);
+  await page.fill('#formula', 'yield ~ (F+Cat+RPM+T+Conc)^2 - Cat:RPM - Cat:T - Cat:Conc - RPM:T - RPM:Conc - T:Conc'); await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); await settle();
+  await page.click('#reduce-p'); await settle();
+  check('reduce (p): Cat and RPM go, F, T, Conc and F:T remain', /^yield ~ F \+ T \+ Conc \+ F:T\b/.test(await page.inputValue('#formula')) && !/Cat|RPM/.test(await page.inputValue('#formula')) && /Reduced by p-value/.test(await page.textContent('#reduction')), await page.inputValue('#formula'));
+  await page.click('#reduction >> text=undo'); await settle();
+  check('undo restores the starting model', /- T:Conc$/.test(await page.inputValue('#formula')) && (await page.locator('#reduction').count()) === 0);
+  await page.fill('#formula', 'yield ~ F*T + Conc'); await page.keyboard.press('Enter'); await page.keyboard.press('Tab'); await settle();
   await page.click('button[title="remove Conc from the model"]'); await settle();
   check('removing a term edits the formula', /- Conc/.test(await page.inputValue('#formula')));
   await shot('4-analyse');

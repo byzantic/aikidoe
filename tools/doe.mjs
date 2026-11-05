@@ -16,6 +16,8 @@
 //   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
 //   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
 //   fit STUDY "y ~ formula"  [--anova 1|2|3] [--lenth] [--boxcox] [--aggregate mean|none]
+//        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
+//   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8]
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
 //                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
@@ -38,6 +40,8 @@ import { runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io
 import { fitModel, anova, lackOfFit, boxCox, lenth, twoLevelEffects, predict } from '../js/model/ols.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { hierarchyViolations } from '../js/model/formula.js';
+import { studyPower, detectableEffect } from '../js/model/power.js';
+import { reduceModel } from '../js/model/reduce.js';
 import { num, pval, stars, table } from '../js/format.js';
 
 // ---------------------------------------------------------------- arguments
@@ -171,7 +175,16 @@ function cmdFit({ pos, opt }) {
   const [file, formula] = pos;
   const study = load(file);
   if (!formula) fail('fit: give a formula, e.g. "y ~ (A+B+C)^2"');
-  const fit = fitModel(study, formula, { aggregate: opt.aggregate ?? 'mean' });
+  let fit = fitModel(study, formula, { aggregate: opt.aggregate ?? 'mean' });
+  if (opt.reduce) {
+    const r = reduceModel(study, formula, { method: opt.reduce === true ? 'p' : String(opt.reduce), aggregate: opt.aggregate ?? 'mean',
+      ...(opt['alpha-out'] !== undefined ? { alphaOut: Number(opt['alpha-out']) } : {}), keep: list(opt.keep).flatMap(k => String(k).split(',')).filter(Boolean) });
+    out(`model reduction (${r.method === 'p' ? `backward, p > ${opt['alpha-out'] ?? 0.1}` : 'backward, AICc'}; hierarchy kept), from ${r.start.formula}:`);
+    if (!r.steps.length) out('  nothing to remove');
+    for (const st of r.steps) out(`  drop ${st.drop.padEnd(10)} ${r.method === 'p' ? `F = ${num(st.F, 4)}, p = ${pval(st.p)}` : ''}  AICc → ${num(st.aicc, 6)}`);
+    out(`reduced model: ${r.formula}   (a suggestion: put a term back by editing the formula)\n`);
+    fit = r.fit;
+  }
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
   out(`${fit.n} runs, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.rows.some(r => r.n > 1) ? '; per-run means of repeated observations' : ''}`);
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
@@ -278,6 +291,25 @@ function cmdPredict({ pos, opt }) {
   if (fit.model.terms[0]?.block) out('(for the average block)');
 }
 
+function cmdPower({ pos, opt }) {
+  const study = load(pos[0]);
+  let delta = 2;
+  if (opt.delta !== undefined) {
+    const d = String(opt.delta);
+    delta = d.includes('=') ? Object.fromEntries(d.split(',').map(x => { const [k, v] = x.split('='); return [k.trim(), Number(v)]; })) : Number(d);
+  }
+  const model = opt.model ? String(opt.model).replace(/^.*~/, '').trim() : 'main';
+  const sigma = opt.sigma !== undefined ? Number(opt.sigma) : 1, alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target = opt.target !== undefined ? Number(opt.target) : 0.8;
+  const p = studyPower(study, { model, delta, sigma, alpha });
+  out(`power for ${model}: ${p.n} runs, ${p.rank} coefficients, ${p.dfRes} residual df; α = ${alpha}, σ = ${sigma}${typeof delta === 'number' ? `, Δ = ${delta} (low → high)` : ''}`);
+  if (p.dfRes < 1) { out('no residual degrees of freedom: power is not defined (add runs, or a smaller model)'); return; }
+  const det = Object.fromEntries(detectableEffect(p, { power: target }).map(d => [d.term, d]));
+  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'delta', label: 'Δ' }, { key: 'power', label: 'power' }, { key: 'det', label: `Δ for ${target * 100}%` }, { key: 'ratio', label: 'Δ/σ' }],
+    p.terms.filter(t => !t.block).map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: det[t.term].delta, ratio: det[t.term].ratio }))));
+  if (p.terms.some(t => t.block)) out('(blocks fitted as fixed effects)');
+  out('Δ: change in the response from the low to the high setting of a factor (for a quadratic term, 2 × its coefficient)');
+}
+
 function cmdAlias({ pos, opt }) {
   let d, label, names;
   if (pos[0]) {
@@ -338,13 +370,13 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 27).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 30).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];
