@@ -30,6 +30,9 @@
 //   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
 //   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
 //        (position terms in mixed-model formulas: radius2, edge, waferX, waferY, slot, slotZone)
+//   gauge DATA.csv [--tolerance T | --lsl L --usl U] [--design crossed|nested|repeatability] [--k 6]
+//        [--into STUDY --response R]   gauge R&R (columns part, operator, value); --into stores σ_meas
+//   power … [--response R [--sigma-process σp]]   σ from the response's gauge study: √(σp² + σ_meas²)
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
 //
@@ -52,6 +55,8 @@ import { studyPower, detectableEffect } from '../js/model/power.js';
 import { reduceModel } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
+import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
+import { parseCSV } from '../js/io/csv.js';
 import { num, pval, stars, table } from '../js/format.js';
 
 // ---------------------------------------------------------------- arguments
@@ -349,7 +354,16 @@ function cmdPower({ pos, opt }) {
     delta = d.includes('=') ? Object.fromEntries(d.split(',').map(x => { const [k, v] = x.split('='); return [k.trim(), Number(v)]; })) : Number(d);
   }
   const model = opt.model ? String(opt.model).replace(/^.*~/, '').trim() : 'main';
-  const sigma = opt.sigma !== undefined ? Number(opt.sigma) : 1, alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target = opt.target !== undefined ? Number(opt.target) : 0.8;
+  let sigma = opt.sigma !== undefined ? Number(opt.sigma) : 1;
+  if (opt.response && opt.sigma === undefined) {
+    const r = study.responses.find(x => x.id === String(opt.response)) ?? fail(`no response "${opt.response}"`);
+    if (!r.measurement) fail(`${r.id} has no gauge study (doe gauge … --into ${pos[0]} --response ${r.id}), so give --sigma`);
+    const sm = r.measurement.sigma, sp = opt['sigma-process'] !== undefined ? Number(opt['sigma-process']) : 0;
+    sigma = Math.sqrt(sp * sp + sm * sm);
+    out(sp ? `σ = √(σ_process² + σ_meas²) = √(${num(sp)}² + ${num(sm)}²) = ${num(sigma)} (σ_meas from the gauge study of ${r.id})`
+      : `σ = σ_meas = ${num(sm)} (gauge study of ${r.id}) only: the process varies too, so this power is an upper bound — add --sigma-process`);
+  }
+  const alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target = opt.target !== undefined ? Number(opt.target) : 0.8;
   const p = studyPower(study, { model, delta, sigma, alpha, ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}) });
   if (p.strata) out(`split-plot: whole-plot terms tested against the whole-plot error (assumed σ²_wp/σ² = η = ${p.eta}; --eta to change), subplot terms against the residual`);
   out(`power for ${model}: ${p.n} runs, ${p.rank} coefficients, ${p.dfRes} residual df; α = ${alpha}, σ = ${sigma}${typeof delta === 'number' ? `, Δ = ${delta} (low → high)` : ''}`);
@@ -469,13 +483,43 @@ function cmdSummary({ pos, opt }) {
   for (const st of stats) out(`${resp}_${st}: per-wafer ${SUMMARY_STATS[st].name} of ${resp} (computed from the readings; fit it like any response)`);
 }
 
+function cmdGauge({ pos, opt }) {
+  const file = pos[0];
+  if (!file || !existsSync(file)) fail('gauge: give the CSV of gauge readings (columns part, operator, value)');
+  const t = parseCSV(readFileSync(file, 'utf8'));
+  const rows = gaugeRowsFromTable(t.header, t.rows);
+  const tolerance = opt.tolerance !== undefined ? Number(opt.tolerance) : opt.usl !== undefined && opt.lsl !== undefined ? Number(opt.usl) - Number(opt.lsl) : undefined;
+  const k = opt.k !== undefined ? Number(opt.k) : 6;
+  const g = gaugeRR(rows, { design: opt.design ?? 'auto', tolerance, k });
+  out(`gauge R&R (${g.kind}, ANOVA method): ${g.parts} parts${g.operators ? `, ${g.operators} operators` : ''}, ${g.repeats} repeats, ${g.N} readings`);
+  out(table([{ key: 'source', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ss', label: 'sum of sq.' }, { key: 'ms', label: 'mean sq.' }, { key: 'F', label: 'F' }, { key: 'p', label: 'p', fmt: pval }], g.anova));
+  if (g.kind === 'crossed') out(g.pooled ? `operator × part interaction not significant (p = ${pval(g.interactionP)} > 0.05): pooled into repeatability` : `operator × part interaction significant (p ${pval(g.interactionP)}): kept`);
+  out('');
+  out(table([{ key: 'source', label: 'source', align: 'left' }, { key: 'variance', label: 'variance' }, { key: 'contribution', label: '% contribution' }, { key: 'sd', label: 'std. dev.' },
+    { key: 'studyVar', label: `study var (${k}σ)` }, { key: 'pctStudyVar', label: '% study var' }, ...(tolerance > 0 ? [{ key: 'pctTolerance', label: '% tolerance' }] : [])], g.components));
+  out(`\nnumber of distinct categories: ${g.ndc}${g.ndc < 5 ? ' (fewer than 5: the gauge cannot separate the parts well)' : ''}`);
+  out(`gauge R&R = ${num(g.pctGRR, 3)} % of study variation${tolerance > 0 ? `, ${num(g.pctTolerance, 3)} % of tolerance` : ''}: ${g.verdict} (AIAG: < 10 % good, 10–30 % marginal)`);
+  out(`σ_meas = ${num(g.sigmaMeas)}`);
+  if (opt.into) {
+    const study = load(String(opt.into));
+    const rid = String(opt.response ?? fail('--into needs --response R (the response this gauge measures)'));
+    const i = study.responses.findIndex(r => r.id === rid);
+    if (i < 0) fail(`no response "${rid}" in ${opt.into}`);
+    const responses = study.responses.slice();
+    responses[i] = { ...responses[i], measurement: { sigma: g.sigmaMeas, method: 'gauge R&R (ANOVA)', design: g.kind, parts: g.parts, operators: g.operators, repeats: g.repeats,
+      ...(tolerance > 0 ? { tolerance } : {}), pctGRR: g.pctGRR, ndc: g.ndc, data: rows } };
+    save(String(opt.into), createStudy({ ...study, responses }));
+    out(`${opt.into}: σ_meas of ${rid} recorded (used by power: doe power ${opt.into} --response ${rid})`);
+  }
+}
+
 function cmdInfo({ pos }) {
   const s = load(pos[0]);
   out(`${s.name}  (seed ${s.seed})`);
   const named = s.factors.some(f => f.name !== f.id);
   out(table([{ key: 'id', label: 'factor', align: 'left' }, ...(named ? [{ key: 'name', label: 'name', align: 'left' }] : []), { key: 'range', label: 'range / levels', align: 'left' }, { key: 'note', label: '', align: 'left' }],
     s.factors.map(f => ({ ...f, range: f.type === 'categorical' ? f.levels.join(', ') : `${num(f.low, 6)} … ${num(f.high, 6)}${f.units ? ' ' + f.units : ''}`, note: [f.transform === 'log' ? 'log' : '', f.htc ? 'hard to change' : ''].filter(Boolean).join(', ') }))));
-  out(`responses: ${s.responses.map(r => r.id + (r.units ? ` (${r.units})` : '') + (r.derived ? ` [wafer ${r.derived.stat} of ${r.derived.from}]` : '')).join(', ') || 'none'}`);
+  out(`responses: ${s.responses.map(r => r.id + (r.units ? ` (${r.units})` : '') + (r.derived ? ` [wafer ${r.derived.stat} of ${r.derived.from}]` : '') + (r.measurement ? ` [σ_meas ${num(r.measurement.sigma, 3)}${r.measurement.pctGRR !== undefined ? `, GRR ${num(r.measurement.pctGRR, 3)} %` : ''}]` : '')).join(', ') || 'none'}`);
   if (s.sites) out(`sites: ${s.sites.scheme}, ${s.sites.positions.length} positions${s.sites.diameter ? `, ${s.sites.diameter} mm wafer` : ''}`);
   if (!s.design) { out('no design yet'); return; }
   const runs = s.design.runs, done = new Set(s.observations.filter(o => o.value !== null).map(o => o.run));
@@ -487,13 +531,13 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 37).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 41).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];

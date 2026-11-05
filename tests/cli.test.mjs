@@ -159,6 +159,19 @@ try {
   r = run('fit', 'anneal.aikidoe.json', 'Rs_logsd ~ T + t + dose');
   check('fit a per-wafer summary (wafers within runs: run random effect)', r.code === 0 && /48 readings from 24 runs/.test(r.out), r.out + r.err);
 
+  section('gauge R&R (issue #17)');
+  const gc = JSON.parse(readFileSync(new URL('./fixtures/msa-r.json', import.meta.url), 'utf8')).cases[0];
+  writeFileSync(join(dir, 'gauge.csv'), 'Part,Appraiser,Measurement\n' + gc.input.rows.map(x => [x.part, x.operator, x.value].join(',')).join('\n') + '\n');
+  r = run('gauge', 'gauge.csv', '--lsl', '2', '--usl', '10');
+  check('gauge: crossed ANOVA, components, %tolerance, ndc, verdict', r.code === 0 && /gauge R&R \(crossed, ANOVA method\): 10 parts, 3 operators, 3 repeats, 90 readings/.test(r.out)
+    && /^Total gauge R&R\s+0\.1108\s+10\.26/m.test(r.out) && /distinct categories: 4/.test(r.out) && /32 % of study variation, 25 % of tolerance: not acceptable/.test(r.out), r.out + r.err);
+  r = run('gauge', 'gauge.csv', '--tolerance', '8', '--into', 'seq.aikidoe.json', '--response', 'y');
+  check('gauge --into: σ_meas stored on the response', r.code === 0 && /σ_meas of y recorded/.test(r.out) && /σ_meas 0\.333, GRR 32/.test(run('info', 'seq.aikidoe.json').out), r.out + r.err);
+  r = run('power', 'seq.aikidoe.json', '--model', 'main', '--response', 'y');
+  check('power --response: σ = σ_meas as an upper bound', r.code === 0 && /σ = σ_meas = 0\.3328 .*upper bound/.test(r.out), r.out + r.err);
+  r = run('power', 'seq.aikidoe.json', '--model', 'main', '--response', 'y', '--sigma-process', '0.5');
+  check('power --sigma-process: combined σ', r.code === 0 && /= 0\.6006 \(σ_meas from the gauge study of y\)/.test(r.out), r.out + r.err);
+
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');
   r = run('import', S, 'bad.csv');

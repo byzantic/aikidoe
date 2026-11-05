@@ -3,7 +3,7 @@
 // Walks a study through Define → Design → Run → Analyse the way a user would (typing results
 // cell by cell with Tab), imports a CSV, saves, shares a link, and fails on any page error.
 import { createRequire } from 'node:module';
-import { mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, writeFileSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { serve } from '../../tools/serve.mjs';
@@ -206,6 +206,25 @@ try {
   check('least squares on request, with a warning and a way back', (await page.locator('#mixed').count()) === 0 && (await page.locator('#use-mixed').count()) === 1);
   await page.click('#use-mixed'); await settle();
   check('back to the mixed model', (await page.locator('#mixed').count()) === 1);
+
+  section('gauge R&R (issue #17)');
+  await page.click('[data-step="define"]'); await settle();
+  await page.click('button[data-gauge="Rs"]'); await settle();
+  const gcase = JSON.parse(readFileSync(new URL('../fixtures/msa-r.json', import.meta.url), 'utf8')).cases[0];
+  await page.fill('#gauge-data', 'Part,Appraiser,Measurement\n' + gcase.input.rows.map(x => [x.part, x.operator, x.value].join(',')).join('\n'));
+  await page.keyboard.press('Tab'); await settle();
+  await page.fill('input[aria-label="tolerance"]', '8'); await page.keyboard.press('Tab'); await settle();
+  const gtxt = await page.textContent('#gauge-result');
+  check('gauge result: 32 % of study variation, 25 % of tolerance, ndc 4, σ_meas', /Gauge R&R 32 % of study variation, 25 % of tolerance; 4 distinct categories/.test(gtxt) && /σ_meas = 0\.3328/.test(gtxt), gtxt.slice(0, 300));
+  await shot('10-gauge');
+  await page.click('#gauge-save'); await settle();
+  const gs = await state();
+  check('σ_meas kept on the response with the readings', Math.abs(gs.study.responses.find(r => r.id === 'Rs').measurement.sigma - 0.33284) < 1e-4 && gs.study.responses.find(r => r.id === 'Rs').measurement.data.length === 90);
+  check('response row shows σ_meas', /σ_meas 0\.333/.test(await page.textContent('button[data-gauge="Rs"]')));
+  await page.click('[data-step="design"]'); await settle();
+  await page.fill('input[aria-label="delta in units"]', '2'); await page.keyboard.press('Tab'); await settle();
+  await page.fill('input[aria-label="sigma process"]', '0.5'); await page.keyboard.press('Tab'); await settle();
+  check('Design power from σ_meas: Δ = 2 Ω/sq, σ_process 0.5 → Δ/σ = 2/√(0.5² + 0.3328²) = 3.33', /Δ\/σ = 3\.33/.test(await page.textContent('#power-units')) && (await page.inputValue('input[aria-label="effect size"]')) === '3.33', await page.textContent('#power-units'));
 
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide', 'anneal-results']) {

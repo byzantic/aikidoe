@@ -37,7 +37,8 @@ const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
-  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'levels', 'derived', 'note'],
+  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'levels', 'derived', 'measurement', 'note'],
+  measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
   design: ['kind', 'params', 'randomisation', 'runs'],
   run: ['run', 'order', 'wholePlot', 'block', 'kind', 'settings'],
   observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'operator', 'repeat', 'note'],
@@ -287,6 +288,18 @@ function normResponse(r, i, errors) {
       errors.push(`${path}.derived: must be { from: response id, stat: mean | sd | logsd | rangemean }`);
     else out.derived = { from: r.derived.from, stat: r.derived.stat };
     if (r.levels === undefined) out.levels = ['run', 'wafer'];
+  }
+  if (r.measurement !== undefined) {
+    // the measurement system's σ, from a gauge R&R study (msa.js), with the study's data
+    const m = r.measurement;
+    if (!isObj(m)) errors.push(`${path}.measurement: must be an object`);
+    else {
+      checkKeys(m, KEYS.measurement, `${path}.measurement`, errors);
+      if (!isNum(m.sigma) || !(m.sigma > 0)) errors.push(`${path}.measurement.sigma: must be a positive number (the measurement standard deviation)`);
+      if (m.data !== undefined && !(Array.isArray(m.data) && m.data.every(x => isObj(x) && isLabel(x.part) && (x.value === null || isNum(x.value)))))
+        errors.push(`${path}.measurement.data: must be a list of { part, operator?, value }`);
+      out.measurement = { ...m };
+    }
   }
   if (r.note !== undefined) out.note = String(r.note);
   return out;

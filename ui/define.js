@@ -1,6 +1,8 @@
 // Define step: factors, responses, constraints, measurement structure (spec §12 step 1).
 import { h, select, messages } from './dom.js';
 import { siteScheme, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
+import { gaugePanel } from './gauge.js';
+import { num } from '../js/format.js';
 
 const MEASURED = [
   { value: 'run', label: 'once per run', levels: ['run'] },
@@ -12,7 +14,8 @@ const measuredKey = (lv = ['run']) => (MEASURED.find(m => JSON.stringify(m.level
 const numOrDelete = (obj, key, text) => { const t = String(text).trim(); if (t === '') delete obj[key]; else obj[key] = Number.isFinite(Number(t)) ? Number(t) : t; };
 const nextId = (taken, base) => { if (!taken.includes(base)) return base; for (let i = 2; ; i++) if (!taken.includes(base + i)) return base + i; };
 
-export function render({ state, update, go }) {
+export function render(ctx) {
+  const { state, update, go, setUI } = ctx;
   const d = state.doc;
   const locked = !!d.design;             // factor structure fixed once there is a design
   const lockNote = locked ? h('div', { class: 'msg warning' }, 'This study has a design, so factor ids, types and levels are fixed (names, units and ranges can still change). ',
@@ -71,11 +74,13 @@ export function render({ state, update, go }) {
         onchange: (e) => set(o => numOrDelete(o, k, e.target.value)) }))),
       r.derived ? h('td', { class: 'muted small' }, `wafer ${SUMMARY_STATS[r.derived.stat]?.name ?? r.derived.stat} of ${r.derived.from}`)
         : h('td', {}, select(MEASURED, measuredKey(r.levels), (v) => set(o => { o.levels = MEASURED.find(m => m.value === v).levels; }), { 'aria-label': 'measured' })),
+      h('td', {}, r.derived ? null : h('button', { class: 'btn small', 'data-gauge': r.id, title: 'gauge R&R study for this response', onclick: () => setUI({ gauge: { open: r.id } }) },
+        r.measurement ? `σ_meas ${num(r.measurement.sigma, 3)}` : 'gauge…')),
       h('td', {}, h('button', { class: 'btn', title: 'remove response', disabled: (d.observations ?? []).some(o => o.response === r.id), onclick: () => update(x => { x.responses.splice(i, 1); }) }, '✕')));
   });
   const responses = h('section', { class: 'panel' }, h('h2', {}, 'Responses'),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'goal', 'lower', 'target', 'upper', 'measured', ''].map(t => h('th', {}, t)))), h('tbody', {}, rRows))),
+      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'goal', 'lower', 'target', 'upper', 'measured', 'measurement system', ''].map(t => h('th', {}, t)))), h('tbody', {}, rRows))),
     h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn', onclick: () => update(x => { x.responses ??= []; x.responses.push({ id: nextId(x.responses.map(r => r.id), 'y'), name: 'Response' }); }) }, '+ response'),
       siteResponses(d, update),
       h('span', { class: 'muted small' }, 'Responses measured per wafer or site are analysed reading by reading with a mixed model (whole plots, runs and wafers as random effects).')));
@@ -96,7 +101,8 @@ export function render({ state, update, go }) {
     h('textarea', { rows: 2, style: 'width:100%', placeholder: 'What is this study for?', value: d.description ?? '', onchange: (e) => update(x => { if (e.target.value) x.description = e.target.value; else delete x.description; }) }));
 
   const next = state.study ? h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => go(d.design ? 'run' : 'design') }, d.design ? 'Go to Run →' : 'Choose a design →')) : null;
-  return h('div', {}, errs, warns, factors, responses, sites, cons, desc, next);
+  const gauge = state.ui.gauge?.open ? gaugePanel(ctx, state.ui.gauge.open) : null;
+  return h('div', {}, errs, warns, factors, responses, gauge, sites, cons, desc, next);
 }
 
 // per-wafer summaries of site-measured responses, as derived responses

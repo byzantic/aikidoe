@@ -1,0 +1,1401 @@
+{
+  "fixture": "msa-sixsigma",
+  "generator": "tests/ref/msa_sixsigma.R",
+  "meta": {
+    "R": "4.6.2",
+    "packages": {
+      "SixSigma": "0.11.1"
+    }
+  },
+  "cases": [
+    {
+      "name": "ss.rr: crossed 10 x 3 x 3, operator x part interaction",
+      "input": {
+        "design": "crossed",
+        "tolerance": 8,
+        "rows": [
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 8.983
+          },
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 8.4372
+          },
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 8.8714
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 7.9874
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 8.0395
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 8.2471
+          },
+          {
+            "operator": "Op3",
+            "part": "P01",
+            "value": 8.2724
+          },
+          {
+            "operator": "Op3",
+            "part": "P01",
+            "value": 8.4286
+          },
+          {
+            "operator": "Op3",
+            "part": "P01",
+            "value": 8.4829
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 11.031
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 11.0091
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 10.9658
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 10.138
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 10.4018
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 10.3522
+          },
+          {
+            "operator": "Op3",
+            "part": "P02",
+            "value": 10.6449
+          },
+          {
+            "operator": "Op3",
+            "part": "P02",
+            "value": 10.7233
+          },
+          {
+            "operator": "Op3",
+            "part": "P02",
+            "value": 10.867
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 10.9157
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 10.7579
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 10.3495
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 9.9411
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 10.1883
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 10.1689
+          },
+          {
+            "operator": "Op3",
+            "part": "P03",
+            "value": 10.0683
+          },
+          {
+            "operator": "Op3",
+            "part": "P03",
+            "value": 10.2325
+          },
+          {
+            "operator": "Op3",
+            "part": "P03",
+            "value": 10.2247
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 9.9692
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 10.1608
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 10.2407
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 8.9914
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 9.1409
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 9.2918
+          },
+          {
+            "operator": "Op3",
+            "part": "P04",
+            "value": 9.4817
+          },
+          {
+            "operator": "Op3",
+            "part": "P04",
+            "value": 9.378
+          },
+          {
+            "operator": "Op3",
+            "part": "P04",
+            "value": 9.414
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 11.0508
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 11.091
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 10.8248
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 10.4034
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 10.3561
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 10.6507
+          },
+          {
+            "operator": "Op3",
+            "part": "P05",
+            "value": 10.6278
+          },
+          {
+            "operator": "Op3",
+            "part": "P05",
+            "value": 10.944
+          },
+          {
+            "operator": "Op3",
+            "part": "P05",
+            "value": 10.8563
+          },
+          {
+            "operator": "Op1",
+            "part": "P06",
+            "value": 10.277
+          },
+          {
+            "operator": "Op1",
+            "part": "P06",
+            "value": 10.6898
+          },
+          {
+            "operator": "Op1",
+            "part": "P06",
+            "value": 10.8415
+          },
+          {
+            "operator": "Op2",
+            "part": "P06",
+            "value": 10.0906
+          },
+          {
+            "operator": "Op2",
+            "part": "P06",
+            "value": 9.9212
+          },
+          {
+            "operator": "Op2",
+            "part": "P06",
+            "value": 10.2207
+          },
+          {
+            "operator": "Op3",
+            "part": "P06",
+            "value": 10.2127
+          },
+          {
+            "operator": "Op3",
+            "part": "P06",
+            "value": 10.1555
+          },
+          {
+            "operator": "Op3",
+            "part": "P06",
+            "value": 10.2254
+          },
+          {
+            "operator": "Op1",
+            "part": "P07",
+            "value": 10.7996
+          },
+          {
+            "operator": "Op1",
+            "part": "P07",
+            "value": 10.9049
+          },
+          {
+            "operator": "Op1",
+            "part": "P07",
+            "value": 10.6595
+          },
+          {
+            "operator": "Op2",
+            "part": "P07",
+            "value": 10.7011
+          },
+          {
+            "operator": "Op2",
+            "part": "P07",
+            "value": 10.5708
+          },
+          {
+            "operator": "Op2",
+            "part": "P07",
+            "value": 10.5403
+          },
+          {
+            "operator": "Op3",
+            "part": "P07",
+            "value": 10.4765
+          },
+          {
+            "operator": "Op3",
+            "part": "P07",
+            "value": 10.3762
+          },
+          {
+            "operator": "Op3",
+            "part": "P07",
+            "value": 10.7877
+          },
+          {
+            "operator": "Op1",
+            "part": "P08",
+            "value": 11.927
+          },
+          {
+            "operator": "Op1",
+            "part": "P08",
+            "value": 11.8182
+          },
+          {
+            "operator": "Op1",
+            "part": "P08",
+            "value": 11.7318
+          },
+          {
+            "operator": "Op2",
+            "part": "P08",
+            "value": 11.6453
+          },
+          {
+            "operator": "Op2",
+            "part": "P08",
+            "value": 11.4703
+          },
+          {
+            "operator": "Op2",
+            "part": "P08",
+            "value": 11.5705
+          },
+          {
+            "operator": "Op3",
+            "part": "P08",
+            "value": 11.591
+          },
+          {
+            "operator": "Op3",
+            "part": "P08",
+            "value": 11.4487
+          },
+          {
+            "operator": "Op3",
+            "part": "P08",
+            "value": 10.9197
+          },
+          {
+            "operator": "Op1",
+            "part": "P09",
+            "value": 10.9588
+          },
+          {
+            "operator": "Op1",
+            "part": "P09",
+            "value": 10.8172
+          },
+          {
+            "operator": "Op1",
+            "part": "P09",
+            "value": 10.8743
+          },
+          {
+            "operator": "Op2",
+            "part": "P09",
+            "value": 10.862
+          },
+          {
+            "operator": "Op2",
+            "part": "P09",
+            "value": 10.7764
+          },
+          {
+            "operator": "Op2",
+            "part": "P09",
+            "value": 10.673
+          },
+          {
+            "operator": "Op3",
+            "part": "P09",
+            "value": 10.8994
+          },
+          {
+            "operator": "Op3",
+            "part": "P09",
+            "value": 10.7477
+          },
+          {
+            "operator": "Op3",
+            "part": "P09",
+            "value": 10.9229
+          },
+          {
+            "operator": "Op1",
+            "part": "P10",
+            "value": 9.0176
+          },
+          {
+            "operator": "Op1",
+            "part": "P10",
+            "value": 8.9832
+          },
+          {
+            "operator": "Op1",
+            "part": "P10",
+            "value": 9.3171
+          },
+          {
+            "operator": "Op2",
+            "part": "P10",
+            "value": 8.7374
+          },
+          {
+            "operator": "Op2",
+            "part": "P10",
+            "value": 8.3368
+          },
+          {
+            "operator": "Op2",
+            "part": "P10",
+            "value": 8.5254
+          },
+          {
+            "operator": "Op3",
+            "part": "P10",
+            "value": 8.604
+          },
+          {
+            "operator": "Op3",
+            "part": "P10",
+            "value": 8.5358
+          },
+          {
+            "operator": "Op3",
+            "part": "P10",
+            "value": 8.4798
+          }
+        ]
+      },
+      "output": {
+        "varCompRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "part:operator", "Part-To-Part", "Total Variation"],
+        "varComp": [0.110779282555555, 0.0266117047777775, 0.0841675777777775, 0.067513181716049, 0.0166543960617284, 0.968873977456791, 1.07965326001235],
+        "contrib": [10.26, 2.46, 7.8, 6.25, 1.54, 89.74, 100],
+        "studyVarRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "part:operator", "Part-To-Part", "Total Variation"],
+        "studyVar": [
+          [0.332835218322153, 1.99701130993292, 32.03, 24.96],
+          [0.163130943655021, 0.978785661930124, 15.7, 12.23],
+          [0.290116490013542, 1.74069894008125, 27.92, 21.76],
+          [0.25983298812131, 1.55899792872786, 25.01, 19.49],
+          [0.12905191227459, 0.774311473647539, 12.42, 9.68],
+          [0.984313962847623, 5.90588377708574, 94.73, 73.82],
+          [1.03906364579478, 6.2343818747687, 100, 77.93]
+        ],
+        "studyVarCols": ["StdDev", "StudyVar", "%StudyVar", "%Tolerance"],
+        "ncat": 4
+      }
+    },
+    {
+      "name": "ss.rr: crossed 10 x 3 x 2, no interaction (pooled)",
+      "input": {
+        "design": "crossed",
+        "tolerance": 6,
+        "rows": [
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 11.4121
+          },
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 12.0795
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 11.7305
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 11.7252
+          },
+          {
+            "operator": "Op3",
+            "part": "P01",
+            "value": 11.5608
+          },
+          {
+            "operator": "Op3",
+            "part": "P01",
+            "value": 12.0224
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 10.8789
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 11.0124
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 10.7296
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 10.5677
+          },
+          {
+            "operator": "Op3",
+            "part": "P02",
+            "value": 11.2168
+          },
+          {
+            "operator": "Op3",
+            "part": "P02",
+            "value": 10.6348
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 9.9412
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 10.0125
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 9.5016
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 9.8889
+          },
+          {
+            "operator": "Op3",
+            "part": "P03",
+            "value": 10.09
+          },
+          {
+            "operator": "Op3",
+            "part": "P03",
+            "value": 10.0365
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 8.8262
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 9.042
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 9.0785
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 9.2497
+          },
+          {
+            "operator": "Op3",
+            "part": "P04",
+            "value": 9.2094
+          },
+          {
+            "operator": "Op3",
+            "part": "P04",
+            "value": 9.098
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 9.2199
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 8.8042
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 8.2981
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 8.6986
+          },
+          {
+            "operator": "Op3",
+            "part": "P05",
+            "value": 9.1202
+          },
+          {
+            "operator": "Op3",
+            "part": "P05",
+            "value": 9.1501
+          },
+          {
+            "operator": "Op1",
+            "part": "P06",
+            "value": 9.3016
+          },
+          {
+            "operator": "Op1",
+            "part": "P06",
+            "value": 8.7191
+          },
+          {
+            "operator": "Op2",
+            "part": "P06",
+            "value": 9.0371
+          },
+          {
+            "operator": "Op2",
+            "part": "P06",
+            "value": 8.8945
+          },
+          {
+            "operator": "Op3",
+            "part": "P06",
+            "value": 9.3833
+          },
+          {
+            "operator": "Op3",
+            "part": "P06",
+            "value": 9.0706
+          },
+          {
+            "operator": "Op1",
+            "part": "P07",
+            "value": 10.837
+          },
+          {
+            "operator": "Op1",
+            "part": "P07",
+            "value": 10.4358
+          },
+          {
+            "operator": "Op2",
+            "part": "P07",
+            "value": 10.6244
+          },
+          {
+            "operator": "Op2",
+            "part": "P07",
+            "value": 10.9313
+          },
+          {
+            "operator": "Op3",
+            "part": "P07",
+            "value": 10.6105
+          },
+          {
+            "operator": "Op3",
+            "part": "P07",
+            "value": 10.8835
+          },
+          {
+            "operator": "Op1",
+            "part": "P08",
+            "value": 8.5915
+          },
+          {
+            "operator": "Op1",
+            "part": "P08",
+            "value": 8.8898
+          },
+          {
+            "operator": "Op2",
+            "part": "P08",
+            "value": 8.3231
+          },
+          {
+            "operator": "Op2",
+            "part": "P08",
+            "value": 8.6239
+          },
+          {
+            "operator": "Op3",
+            "part": "P08",
+            "value": 8.3854
+          },
+          {
+            "operator": "Op3",
+            "part": "P08",
+            "value": 8.9627
+          },
+          {
+            "operator": "Op1",
+            "part": "P09",
+            "value": 9.8897
+          },
+          {
+            "operator": "Op1",
+            "part": "P09",
+            "value": 10.0329
+          },
+          {
+            "operator": "Op2",
+            "part": "P09",
+            "value": 9.8169
+          },
+          {
+            "operator": "Op2",
+            "part": "P09",
+            "value": 10.1352
+          },
+          {
+            "operator": "Op3",
+            "part": "P09",
+            "value": 9.9063
+          },
+          {
+            "operator": "Op3",
+            "part": "P09",
+            "value": 10.0563
+          },
+          {
+            "operator": "Op1",
+            "part": "P10",
+            "value": 8.9856
+          },
+          {
+            "operator": "Op1",
+            "part": "P10",
+            "value": 8.6343
+          },
+          {
+            "operator": "Op2",
+            "part": "P10",
+            "value": 9.2057
+          },
+          {
+            "operator": "Op2",
+            "part": "P10",
+            "value": 8.737
+          },
+          {
+            "operator": "Op3",
+            "part": "P10",
+            "value": 9.2575
+          },
+          {
+            "operator": "Op3",
+            "part": "P10",
+            "value": 8.7894
+          }
+        ]
+      },
+      "output": {
+        "varCompRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "Part-To-Part", "Total Variation"],
+        "varComp": [0.0577059653697919, 0.0519878128541669, 0.00571815251562502, 0.00571815251562502, 1.08023893148727, 1.13794489685706],
+        "contrib": [5.07, 4.57, 0.5, 0.5, 94.93, 100],
+        "studyVarRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "Part-To-Part", "Total Variation"],
+        "studyVar": [
+          [0.240220659748057, 1.44132395848834, 22.52, 24.02],
+          [0.228008361368979, 1.36805016821387, 21.37, 22.8],
+          [0.0756184667632518, 0.453710800579511, 7.09, 7.56],
+          [0.0756184667632518, 0.453710800579511, 7.09, 7.56],
+          [1.03934543414943, 6.23607260489658, 97.43, 103.93],
+          [1.06674500085871, 6.40047000515229, 100, 106.67]
+        ],
+        "studyVarCols": ["StdDev", "StudyVar", "%StudyVar", "%Tolerance"],
+        "ncat": 6
+      }
+    },
+    {
+      "name": "ss.rr: crossed 5 x 2 x 3, operator variance estimated negative",
+      "input": {
+        "design": "crossed",
+        "tolerance": 5,
+        "rows": [
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 10.1486
+          },
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 9.4168
+          },
+          {
+            "operator": "Op1",
+            "part": "P01",
+            "value": 9.5635
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 9.4875
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 9.2397
+          },
+          {
+            "operator": "Op2",
+            "part": "P01",
+            "value": 9.2765
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 10.7171
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 10.2581
+          },
+          {
+            "operator": "Op1",
+            "part": "P02",
+            "value": 10.626
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 10.2118
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 10.669
+          },
+          {
+            "operator": "Op2",
+            "part": "P02",
+            "value": 9.9884
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 10.2449
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 10.729
+          },
+          {
+            "operator": "Op1",
+            "part": "P03",
+            "value": 9.9032
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 9.982
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 11.0426
+          },
+          {
+            "operator": "Op2",
+            "part": "P03",
+            "value": 10.6317
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 9.0347
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 9.5131
+          },
+          {
+            "operator": "Op1",
+            "part": "P04",
+            "value": 8.7059
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 9.48
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 8.9346
+          },
+          {
+            "operator": "Op2",
+            "part": "P04",
+            "value": 9.203
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 9.5587
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 9.9783
+          },
+          {
+            "operator": "Op1",
+            "part": "P05",
+            "value": 10.3569
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 10.2147
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 9.6508
+          },
+          {
+            "operator": "Op2",
+            "part": "P05",
+            "value": 9.5322
+          }
+        ]
+      },
+      "output": {
+        "varCompRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "Part-To-Part", "Total Variation"],
+        "varComp": [0.1287299805, 0.1287299805, 0, 0, 0.289720924305556, 0.418450904805556],
+        "contrib": [30.76, 30.76, 0, 0, 69.24, 100],
+        "studyVarRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "Part-To-Part", "Total Variation"],
+        "studyVar": [
+          [0.358789604782524, 2.15273762869514, 55.46, 43.05],
+          [0.358789604782524, 2.15273762869514, 55.46, 43.05],
+          [0, 0, 0, 0],
+          [0, 0, 0, 0],
+          [0.538257303067553, 3.22954381840532, 83.21, 64.59],
+          [0.646877812887067, 3.8812668773224, 100, 77.63]
+        ],
+        "studyVarCols": ["StdDev", "StudyVar", "%StudyVar", "%Tolerance"],
+        "ncat": 2
+      }
+    },
+    {
+      "name": "ss.rr: nested: 3 operators x 5 parts each x 3 (destructive)",
+      "input": {
+        "design": "nested",
+        "tolerance": 10,
+        "rows": [
+          {
+            "part": "Op1-P1",
+            "operator": "Op1",
+            "value": 19.9572
+          },
+          {
+            "part": "Op1-P1",
+            "operator": "Op1",
+            "value": 20.3097
+          },
+          {
+            "part": "Op1-P1",
+            "operator": "Op1",
+            "value": 20.083
+          },
+          {
+            "part": "Op1-P2",
+            "operator": "Op1",
+            "value": 21.2852
+          },
+          {
+            "part": "Op1-P2",
+            "operator": "Op1",
+            "value": 21.0496
+          },
+          {
+            "part": "Op1-P2",
+            "operator": "Op1",
+            "value": 21.288
+          },
+          {
+            "part": "Op1-P3",
+            "operator": "Op1",
+            "value": 19.722
+          },
+          {
+            "part": "Op1-P3",
+            "operator": "Op1",
+            "value": 19.4994
+          },
+          {
+            "part": "Op1-P3",
+            "operator": "Op1",
+            "value": 19.5145
+          },
+          {
+            "part": "Op1-P4",
+            "operator": "Op1",
+            "value": 20.5045
+          },
+          {
+            "part": "Op1-P4",
+            "operator": "Op1",
+            "value": 20.705
+          },
+          {
+            "part": "Op1-P4",
+            "operator": "Op1",
+            "value": 20.3477
+          },
+          {
+            "part": "Op1-P5",
+            "operator": "Op1",
+            "value": 20.7483
+          },
+          {
+            "part": "Op1-P5",
+            "operator": "Op1",
+            "value": 20.6518
+          },
+          {
+            "part": "Op1-P5",
+            "operator": "Op1",
+            "value": 20.6613
+          },
+          {
+            "part": "Op2-P1",
+            "operator": "Op2",
+            "value": 20.6737
+          },
+          {
+            "part": "Op2-P1",
+            "operator": "Op2",
+            "value": 20.5919
+          },
+          {
+            "part": "Op2-P1",
+            "operator": "Op2",
+            "value": 20.7882
+          },
+          {
+            "part": "Op2-P2",
+            "operator": "Op2",
+            "value": 20.2358
+          },
+          {
+            "part": "Op2-P2",
+            "operator": "Op2",
+            "value": 20.0918
+          },
+          {
+            "part": "Op2-P2",
+            "operator": "Op2",
+            "value": 20.2258
+          },
+          {
+            "part": "Op2-P3",
+            "operator": "Op2",
+            "value": 18.7577
+          },
+          {
+            "part": "Op2-P3",
+            "operator": "Op2",
+            "value": 19.1309
+          },
+          {
+            "part": "Op2-P3",
+            "operator": "Op2",
+            "value": 19.073
+          },
+          {
+            "part": "Op2-P4",
+            "operator": "Op2",
+            "value": 20.9643
+          },
+          {
+            "part": "Op2-P4",
+            "operator": "Op2",
+            "value": 20.9997
+          },
+          {
+            "part": "Op2-P4",
+            "operator": "Op2",
+            "value": 21.2866
+          },
+          {
+            "part": "Op2-P5",
+            "operator": "Op2",
+            "value": 19.4339
+          },
+          {
+            "part": "Op2-P5",
+            "operator": "Op2",
+            "value": 19.2349
+          },
+          {
+            "part": "Op2-P5",
+            "operator": "Op2",
+            "value": 19.176
+          },
+          {
+            "part": "Op3-P1",
+            "operator": "Op3",
+            "value": 21.6501
+          },
+          {
+            "part": "Op3-P1",
+            "operator": "Op3",
+            "value": 21.0475
+          },
+          {
+            "part": "Op3-P1",
+            "operator": "Op3",
+            "value": 21.3676
+          },
+          {
+            "part": "Op3-P2",
+            "operator": "Op3",
+            "value": 19.0839
+          },
+          {
+            "part": "Op3-P2",
+            "operator": "Op3",
+            "value": 19.0462
+          },
+          {
+            "part": "Op3-P2",
+            "operator": "Op3",
+            "value": 19.1696
+          },
+          {
+            "part": "Op3-P3",
+            "operator": "Op3",
+            "value": 18.5739
+          },
+          {
+            "part": "Op3-P3",
+            "operator": "Op3",
+            "value": 18.4917
+          },
+          {
+            "part": "Op3-P3",
+            "operator": "Op3",
+            "value": 18.8818
+          },
+          {
+            "part": "Op3-P4",
+            "operator": "Op3",
+            "value": 19.581
+          },
+          {
+            "part": "Op3-P4",
+            "operator": "Op3",
+            "value": 19.7313
+          },
+          {
+            "part": "Op3-P4",
+            "operator": "Op3",
+            "value": 19.7836
+          },
+          {
+            "part": "Op3-P5",
+            "operator": "Op3",
+            "value": 19.4519
+          },
+          {
+            "part": "Op3-P5",
+            "operator": "Op3",
+            "value": 19.7777
+          },
+          {
+            "part": "Op3-P5",
+            "operator": "Op3",
+            "value": 19.7539
+          }
+        ]
+      },
+      "output": {
+        "varCompRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "Part-To-Part", "Total Variation"],
+        "varComp": [0.025885480888889, 0.025885480888889, 0, 0.734300259111111, 0.76018574],
+        "contrib": [3.41, 3.41, 0, 96.59, 100],
+        "studyVarRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "Part-To-Part", "Total Variation"],
+        "studyVar": [
+          [0.160889654387375, 0.965337926324251, 18.45, 9.65],
+          [0.160889654387375, 0.965337926324251, 18.45, 9.65],
+          [0, 0, 0, 0],
+          [0.856913215624028, 5.14147929374417, 98.28, 51.41],
+          [0.871886311396159, 5.23131786837696, 100, 52.31]
+        ],
+        "studyVarCols": ["StdDev", "StudyVar", "%StudyVar", "%Tolerance"],
+        "ncat": 7
+      }
+    },
+    {
+      "name": "ss.rr: SixSigma example ss.data.rr (prototype x operator x run)",
+      "input": {
+        "design": "crossed",
+        "tolerance": 1,
+        "rows": [
+          {
+            "part": "prot #1",
+            "operator": "op #1",
+            "value": 1.27
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #1",
+            "value": 0.9
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #1",
+            "value": 1.09
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #1",
+            "value": 1.12
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #1",
+            "value": 1.09
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #1",
+            "value": 1.15
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #1",
+            "value": 1.73
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #1",
+            "value": 1.28
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #1",
+            "value": 1.77
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #2",
+            "value": 1.34
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #2",
+            "value": 1.32
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #2",
+            "value": 1.27
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #2",
+            "value": 1.24
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #2",
+            "value": 1
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #2",
+            "value": 1.14
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #2",
+            "value": 1.64
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #2",
+            "value": 1.65
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #2",
+            "value": 1.77
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #3",
+            "value": 1.09
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #3",
+            "value": 1.26
+          },
+          {
+            "part": "prot #1",
+            "operator": "op #3",
+            "value": 1.09
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #3",
+            "value": 1.48
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #3",
+            "value": 1.15
+          },
+          {
+            "part": "prot #2",
+            "operator": "op #3",
+            "value": 1.15
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #3",
+            "value": 1.64
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #3",
+            "value": 1.44
+          },
+          {
+            "part": "prot #3",
+            "operator": "op #3",
+            "value": 1.68
+          }
+        ]
+      },
+      "output": {
+        "varCompRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "Part-To-Part", "Total Variation"],
+        "varComp": [0.0218822671156004, 0.0213087542087542, 0.000573512906846247, 0.000573512906846247, 0.0643389450056117, 0.0862212121212121],
+        "contrib": [25.38, 24.71, 0.67, 0.67, 74.62, 100],
+        "studyVarRows": ["Total Gage R&R", "  Repeatability", "  Reproducibility", "    operator", "Part-To-Part", "Total Variation"],
+        "studyVar": [
+          [0.147926559872122, 0.887559359232731, 50.38, 88.76],
+          [0.14597518353732, 0.875851101223919, 49.71, 87.59],
+          [0.0239481295062109, 0.143688777037265, 8.16, 14.37],
+          [0.0239481295062109, 0.143688777037265, 8.16, 14.37],
+          [0.253651227092659, 1.52190736255595, 86.38, 152.19],
+          [0.293634487281743, 1.76180692369046, 100, 176.18]
+        ],
+        "studyVarCols": ["StdDev", "StudyVar", "%StudyVar", "%Tolerance"],
+        "ncat": 2
+      }
+    }
+  ],
+  "tolerance": {
+    "rel": 1e-08,
+    "abs": 1e-10
+  }
+}
