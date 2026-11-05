@@ -34,6 +34,8 @@ jobs:
         with:
           path: ${{ env.R_LIBS_USER }}
           key: r-${{ runner.os }}-${{ hashFiles('tests/ref/r-packages.txt') }}
+      - name: System libraries for R package binaries
+        run: sudo apt-get install -y --no-install-recommends libglpk40   # igraph (needed by FrF2)
       - run: Rscript tests/ref/install-r-packages.R
       - run: node tools/regen-fixtures.mjs --out .fixtures-fresh
       - run: node tools/check-fixtures.mjs --fresh .fixtures-fresh
