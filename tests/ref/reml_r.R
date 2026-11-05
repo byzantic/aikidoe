@@ -21,12 +21,24 @@ reference <- function(name, d, rform, aikidoe, groups, factors, note = NULL) {
     k <- KRmodcomp(fit, L)$stats
     list(term = labs[t], ndf = k$ndf, ddf = k$ddf, Fscaling = k$F.scaling, F = k$Fstat, Funscaled = k$FstatU)
   })
+  # maximum likelihood (for model comparison) and a prediction at the first observation's
+  # settings: KR standard error and df, and a Satterthwaite prediction interval for one new reading
+  # (all variance components): V = x'Φ_A x + Σσ², g_k = x'Φ P_k Φ x + 1 (pbkrtest's P is −P_k)
+  fml <- lmer(rform, d, REML = FALSE, control = ctrl, contrasts = if (length(ctr)) ctr else NULL)
+  vml <- as.data.frame(VarCorr(fml))
+  x0 <- X[1, ]; Pk <- attr(Phi, "P"); W <- as.matrix(attr(Phi, "W")); V0 <- as.matrix(vcov(fit))
+  se2 <- drop(t(x0) %*% as.matrix(Phi) %*% x0)
+  V <- se2 + sum(vc$vcov)
+  g <- sapply(Pk, function(P) drop(t(x0) %*% V0 %*% (-as.matrix(P)) %*% V0 %*% x0)) + 1
+  pred <- list(fit = sum(x0 * fixef(fit)), se = sqrt(se2), df = KRmodcomp(fit, matrix(x0, 1))$stats$ddf, predSe = sqrt(V), predDf = 2 * V^2 / drop(t(g) %*% W %*% g))
   for (g in groups) d[[g]] <- as.character(d[[g]])
   list(name = name, input = list(rows = rows_of(d), formula = aikidoe, groups = I(groups), factors = factors, note = note),
        output = list(coef = I(unname(fixef(fit))), columns = I(colnames(X)), vcov = unname(as.matrix(vcov(fit))),
                      varcomp = setNames(as.list(vc$vcov), ifelse(is.na(vc$var1) & vc$grp == "Residual", "Residual", vc$grp)),
                      REML = REMLcrit(fit), vcovKR = unname(as.matrix(Phi)), W = unname(as.matrix(attr(Phi, "W"))), kr = kr,
-                     singular = isSingular(fit)))
+                     singular = isSingular(fit),
+                     ml = list(deviance = deviance(fml), coef = I(unname(fixef(fml))), varcomp = setNames(as.list(vml$vcov), ifelse(is.na(vml$var1) & vml$grp == "Residual", "Residual", vml$grp))),
+                     pred = pred))
 }
 cont <- function(id) list(id = id, low = -1, high = 1)
 catf <- function(id, levels) list(id = id, levels = I(levels))

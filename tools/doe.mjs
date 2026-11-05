@@ -27,6 +27,7 @@
 //                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
 //        adds a stage of runs to the design as a new block
 //   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
+//        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
 //   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
 //   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
 //        (position terms in mixed-model formulas: radius2, edge, waferX, waferY, slot, slotZone)
@@ -52,8 +53,8 @@ import { fitModel, anova, lackOfFit, boxCox, lenth, twoLevelEffects, predict } f
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { hierarchyViolations } from '../js/model/formula.js';
 import { studyPower, detectableEffect } from '../js/model/power.js';
-import { reduceModel } from '../js/model/reduce.js';
-import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
+import { reduceModel, reduceMixed } from '../js/model/reduce.js';
+import { fitMixedModel, observationTable, randomEffects, predictMixed, runMeanWeights } from '../js/model/mixed.js';
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
 import { parseCSV } from '../js/io/csv.js';
@@ -225,8 +226,18 @@ function cmdFit({ pos, opt }) {
     let rand = [];
     try { rand = randomEffects(observationTable(study, resp), requested); } catch (e) { if (requested !== 'auto') throw e; }
     if (rand.length) {
-      if (opt.reduce || opt.lenth || opt.boxcox) fail('--reduce, --lenth and --boxcox work on least-squares fits: add --ols (the mixed model is the right analysis for these data, though)');
-      return printMixed(study, formula, requested, opt);
+      if (opt.lenth || opt.boxcox) fail('--lenth and --boxcox work on least-squares fits: add --ols (the mixed model is the right analysis for these data, though)');
+      let f = formula;
+      if (opt.reduce) {
+        const method = opt.reduce === true ? 'p' : String(opt.reduce);
+        const r = reduceMixed(study, formula, { method, random: requested, ...(opt['alpha-out'] !== undefined ? { alphaOut: Number(opt['alpha-out']) } : {}), keep: list(opt.keep).flatMap(k => String(k).split(',')).filter(Boolean) });
+        out(`model reduction of the mixed model (${method === 'p' ? `backward, Kenward–Roger p > ${opt['alpha-out'] ?? 0.1}` : 'backward, AICc of maximum-likelihood fits'}; hierarchy kept), from ${r.start.formula}:`);
+        if (!r.steps.length) out('  nothing to remove');
+        for (const st of r.steps) out(`  drop ${st.drop.padEnd(12)} ${method === 'p' ? `F = ${num(st.F, 4)} on ${num(st.ddf, 4)} df, p = ${pval(st.p)}` : `AICc → ${num(st.aicc, 7)}`}`);
+        out(`reduced model: ${r.formula}   (a suggestion: put a term back by editing the formula)\n`);
+        f = r.formula;
+      }
+      return printMixed(study, f, requested, opt);
     }
   }
   let fit = fitModel(study, formula, { aggregate: opt.aggregate ?? 'mean' });
@@ -319,9 +330,11 @@ function cmdAugment({ pos, opt }) {
       ...(opt.restarts ? { restarts: int(opt.restarts, 'restarts') } : {}) });
   } else if (opt.confirm) {
     if (!opt.formula) fail('--confirm needs --formula "y ~ …" (the model whose predictions are to be confirmed)');
-    const fit = fitModel(study, String(opt.formula));
-    stage = confirmationRuns(study, fit, list(opt.confirm).map(t => parseSettings(study, t)), { replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1 });
-    for (const p of stage.params.predictions) out(`predicted ${fit.response} at ${showSettings(p.settings)}: ${num(p.fit)} (95% prediction interval ${num(p.predLower)} … ${num(p.predUpper)})`);
+    const fit = mixedFor(study, String(opt.formula), opt) ?? fitModel(study, String(opt.formula));
+    const reps = opt.replicates ? int(opt.replicates, 'replicates') : 1;
+    stage = confirmationRuns(study, fit, list(opt.confirm).map(t => parseSettings(study, t)), { replicates: reps, inOneWholePlot: !opt['separate-whole-plots'] });
+    for (const p of stage.params.predictions) out(`predicted ${fit.response} at ${showSettings(p.settings)}: ${num(p.fit)} (95% prediction interval ${num(p.predLower)} … ${num(p.predUpper)}${stage.params.mixed ? ' for one run' : ''}${stage.params.mixed && reps > 1 ? `; ${num(p.meanLower)} … ${num(p.meanUpper)} for the mean of the ${reps} runs` : ''})`);
+    if (stage.params.mixed) out('mixed model: intervals include the whole-plot, run and wafer variation; confirmation runs at one setting share a new whole plot (--separate-whole-plots to give each its own)');
   } else fail('augment: choose --foldover, --axial, --optimal or --confirm');
   const next = appendStage(study, stage, opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {});
   save(file, next);
@@ -334,11 +347,29 @@ function cmdAugment({ pos, opt }) {
   if (opt.sheet) { writeFileSync(opt.sheet, runSheetCSV(next)); out(`run sheet: ${opt.sheet}`); }
 }
 
+// the mixed-model fit for split-plot / nested readings (unless --ols), or null
+function mixedFor(study, formula, opt) {
+  if (opt.ols) return null;
+  const resp = (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : '') || study.responses[0]?.id;
+  try { if (!randomEffects(observationTable(study, resp)).length) return null; } catch { return null; }
+  return fitMixedModel(study, formula);
+}
+
 function cmdPredict({ pos, opt }) {
   const [file, formula] = pos, study = load(file);
   if (!formula) fail('predict: give the formula of the model to predict from');
   const at = list(opt.at).map(t => parseSettings(study, t));
   if (!at.length) fail('predict: give settings with --at "A=…,B=…"');
+  const mixed = mixedFor(study, formula, opt);
+  if (mixed) {
+    const runs = opt.runs ? int(opt.runs, 'runs') : 1, sep = !!opt['separate-whole-plots'];
+    const p = predictMixed(mixed, at, { weights: runMeanWeights(mixed, { runs, inOneWholePlot: !sep }) });
+    const what = `${runs > 1 ? `mean of ${runs} runs${mixed.random.some(r => r.id === 'wholePlot') ? (sep ? ', each in its own whole plot' : ' in one new whole plot') : ''}` : 'one new run'}, measured like the others`;
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean, KR)', align: 'left' }, { key: 'pi', label: `95% PI (${what})`, align: 'left' }],
+      at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)} (df ${num(p[i].predDf, 3)})` }))));
+    out(`mixed model: the prediction interval includes ${mixed.random.map(r => r.name.toLowerCase()).join(', ')} and residual variation (Satterthwaite df)${mixed.positionTerms.length ? '; position terms averaged over the sites' : ''}`);
+    return;
+  }
   const fit = fitModel(study, formula);
   const p = predict(fit, at);
   out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: '95% PI (one run)', align: 'left' }],
@@ -399,6 +430,13 @@ function printMixed(study, formula, random, opt) {
   if (opt.compare) out(`"p if independent": least squares on the same ${m.n} readings as if every reading were independent — what an analysis that ignores the whole plots, runs and wafers would claim`);
   if (m.boundary.length) out(`note: ${m.boundary.join(', ')} variance estimated as 0 (on the boundary): the data show no variation at that level beyond what the levels below explain`);
   out(`REML criterion ${num(m.REML, 8)}`);
+  const conf = checkConfirmation(study, m.response);
+  if (conf.length) {
+    out('\nconfirmation runs (left out of the fit), against the intervals stored when they were planned:');
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'n', label: 'runs' }, { key: 'observed', label: 'observed' }, { key: 'predicted', label: 'predicted' },
+      { key: 'iv', label: '95% interval', align: 'left' }, { key: 'ok', label: '', align: 'left' }],
+      conf.map(c => ({ ...c, at: showSettings(c.settings), iv: `${num(c.lower)} … ${num(c.upper)}`, ok: c.inside === null ? 'no result yet' : c.inside ? 'confirmed' : 'OUTSIDE' }))));
+  }
 }
 
 function cmdAlias({ pos, opt }) {
@@ -537,7 +575,7 @@ function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 41).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 42).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];

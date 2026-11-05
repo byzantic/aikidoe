@@ -2,7 +2,10 @@
 // KRmodcomp) on 10 balanced and unbalanced split-plot and nested data sets.
 import { section, check, near, throws, done } from './lib/check.mjs';
 import { loadFixture } from './lib/fixtures.mjs';
-import { reml, fitMixedModel, randomEffects, observationTable } from '../js/model/mixed.js';
+import { reml, fitMixedModel, randomEffects, observationTable, mlFit, predictMixed, runMeanWeights, fitMixedML } from '../js/model/mixed.js';
+import { reduceMixed } from '../js/model/reduce.js';
+import { confirmationRuns, appendStage, checkConfirmation } from '../js/design/augment.js';
+import { EXAMPLES } from '../ui/examples.js';
 import { parseFormula, modelMatrix } from '../js/model/formula.js';
 import { createStudy } from '../js/study.js';
 import { fitModel } from '../js/model/ols.js';
@@ -32,6 +35,27 @@ for (const c of cases) {
   near(`${c.name}: KR denominator df to 1e−3`, r.terms.map(t => t.ddfKR), o.kr.map(k => k.ddf), { abs: 1e-3 });
   near(`${c.name}: KR F scaling and F`, r.terms.map(t => [t.scaling, t.FKR]), o.kr.map(k => [k.Fscaling, k.F]), EST);
   check(`${c.name}: boundary reported as such`, o.singular === (r.boundary.length > 0), r.boundary.join());
+}
+
+section('maximum likelihood vs lme4 (REML = FALSE)');
+for (const c of cases) {
+  const factors = c.input.factors.map(x => (x.levels ? { id: x.id, type: 'categorical', levels: x.levels } : { id: x.id, type: 'continuous', low: -1, high: 1 }));
+  const m = modelMatrix(parseFormula(c.input.formula, factors), factors, c.input.rows);
+  const random = c.input.groups.map(g => ({ name: g, labels: c.input.rows.map(r => r[g]) }));
+  const ml = mlFit(m.X, c.input.rows.map(r => r.y), random);
+  near(`${c.name}: ML deviance`, ml.deviance, c.output.ml.deviance, { rel: 1e-8 });
+  near(`${c.name}: ML fixed effects and variance components`, [ml.coef, ml.varcomp], [c.output.ml.coef, [...c.input.groups.map(g => c.output.ml.varcomp[g]), c.output.ml.varcomp.Residual]], EST);
+}
+
+section('mixed-model predictions vs pbkrtest');
+for (const c of cases) {
+  const factors = c.input.factors.map(x => (x.levels ? { id: x.id, type: 'categorical', levels: x.levels } : { id: x.id, type: 'continuous', low: -1, high: 1 }));
+  const model = parseFormula(c.input.formula, factors), mmx = modelMatrix(model, factors, c.input.rows);
+  const random = c.input.groups.map(g => ({ id: g, name: g, labels: c.input.rows.map(r => r[g]) }));
+  const r = reml(mmx.X, c.input.rows.map(x => x.y), random, { columns: mmx.columns, assign: mmx.assign, terms: model.terms });
+  const p = predictMixed({ ...r, model, factors, rows: c.input.rows.map(x => ({ settings: x })), random, positionTerms: [] }, [c.input.rows[0]])[0];
+  near(`${c.name}: x β̂, KR standard error and df (KRmodcomp of x)`, [p.fit, p.se, p.df], [c.output.pred.fit, c.output.pred.se, c.output.pred.df], { rel: 1e-5, abs: 1e-6 });
+  near(`${c.name}: one new reading: SE and Satterthwaite df`, [p.predSe, p.predDf], [c.output.pred.predSe, c.output.pred.predDf], { rel: 1e-5 });
 }
 
 section('containment df');
@@ -78,5 +102,49 @@ section('from a study: random effects chosen automatically');
   throws('unknown random effect', () => fitMixedModel(s, c.input.formula, { random: ['operator'] }), /unknown random effect/);
   // with per-run means the whole-plot error is still needed, so the mixed model is the analysis
   check('the least-squares fit of run means has 32 runs', fitModel(s, c.input.formula).n === 32);
+}
+section('run-mean predictions and confirmation with a mixed model');
+{
+  const ex = EXAMPLES.find(e => e.id === 'anneal-results').build();
+  const f = 'Rs ~ T*t*dose + radius2 + T:radius2';
+  const m = fitMixedModel(ex, f);
+  const w1 = runMeanWeights(m), w3 = runMeanWeights(m, { runs: 3 }), w3s = runMeanWeights(m, { runs: 3, inOneWholePlot: false });
+  near('weights for a run of 2 wafers × 9 sites: whole plot 1, run 1, wafer 1/2, reading 1/18', [w1.wholePlot, w1.run, w1.wafer, w1.residual], [1, 1, 1 / 2, 1 / 18], { rel: 1e-12 });
+  near('3 runs in one furnace load: whole plot not averaged; in 3 loads it is', [w3.wholePlot, w3.run, w3s.wholePlot], [1, 1 / 3, 1 / 3], { rel: 1e-12 });
+  const at = { T: 950, t: 20, dose: 2e15 };
+  const [p1] = predictMixed(m, [at], { weights: w1 }), [pr] = predictMixed(m, [at]);
+  const vc = Object.fromEntries(m.varcomp.map(v => [v.name, v.variance]));
+  near('run-mean interval: se² + σ²_wp + σ²_run + σ²_wafer/2 + σ²/18', p1.predSe ** 2, p1.se ** 2 + vc['Whole plot'] + vc.Run + vc.Wafer / 2 + vc.Residual / 18, { rel: 1e-12 });
+  check('position terms averaged over the sites for a run mean; a single reading is wider', pr.predSe > p1.predSe && Math.abs(pr.fit - p1.fit) < 1e-12);
+  check('the furnace-run variance dominates: the interval is far wider than least squares on run means gives', p1.predSe > 2 * p1.se);
+  const st = confirmationRuns(ex, m, [at], { replicates: 2 });
+  check('confirmation stage from a mixed fit: mixed intervals stored, replicates in one new whole plot', st.params.mixed && st.wholePlot.join() === '1,1' && Number.isFinite(st.params.predictions[0].meanLower));
+  const [one, sep] = [predictMixed(m, [at], { weights: runMeanWeights(m, { runs: 2 }) })[0], predictMixed(m, [at], { weights: runMeanWeights(m, { runs: 2, inOneWholePlot: false }) })[0]];
+  check('two runs in one furnace load barely help (the load-to-load variance stays); in two loads they do', Math.abs(one.predSe - p1.predSe) / p1.predSe < 0.1 && sep.predSe < 0.8 * p1.predSe);
+  let q = appendStage(ex, st);
+  const added = q.design.runs.filter(r => r.kind === 'confirm');
+  check('appended runs share a new whole plot, run consecutively', new Set(added.map(r => r.wholePlot)).size === 1 && !ex.design.runs.some(r => r.wholePlot === added[0].wholePlot) && Math.abs(added[0].order - added[1].order) === 1);
+  // the true response there (the example's simulation, without noise) is 62 − 6·(coded dose) …; use the prediction ± small offsets
+  const obs = []; for (const r of added) for (const w of ['W1', 'W2']) for (const site of ex.sites.positions.map(p => p.id)) obs.push({ run: r.run, wafer: `${r.run}${w}`, site, response: 'Rs', value: p1.fit + 0.3 });
+  q = createStudy({ ...q, observations: [...q.observations, ...obs] });
+  const cc = checkConfirmation(q, 'Rs');
+  check('confirmation check uses the stored interval for the mean of the 2 runs', cc.length === 1 && cc[0].n === 2 && cc[0].inside === true && Math.abs(cc[0].upper - st.params.predictions[0].meanUpper) < 1e-12);
+}
+
+section('model reduction for mixed models');
+{
+  const ex = EXAMPLES.find(e => e.id === 'anneal-results').build();
+  const start = 'Rs ~ (T+t+dose)^2 + radius2 + T:radius2 + t:radius2 + dose:radius2 + slot';
+  const r = reduceMixed(ex, start, { method: 'p' });
+  const kept = r.fit.model.terms.map(t => t.label);
+  check('p (KR): the simulated terms stay (T, t, dose, T:dose, radius2, T:radius2, slot), null ones go', ['T', 't', 'dose', 'T:dose', 'radius2', 'T:radius2', 'slot'].every(t => kept.includes(t)) && ['t:dose', 't:radius2', 'dose:radius2'].every(t => !kept.includes(t)), r.formula);
+  check('steps record KR F, ddf, p', r.steps.every(s => s.p > 0.1 && s.ddf > 0 && Number.isFinite(s.F)));
+  check('the random effects are kept from the start', r.fit.random.map(x => x.id).join() === 'wholePlot,run,wafer');
+  const a = reduceMixed(ex, 'Rs ~ T*t*dose + radius2 + T:radius2 + t:radius2', { method: 'aicc' });
+  check('AICc (ML): drops t:radius2, keeps the radial terms', !a.fit.model.terms.some(t => t.label === 't:radius2') && a.fit.model.terms.some(t => t.label === 'T:radius2'), a.formula);
+  check('AICc decreases at every step', a.steps.every((s, i) => s.aicc < (i ? a.steps[i - 1].aicc : a.start.aicc)));
+  const k = reduceMixed(ex, start, { method: 'p', keep: ['t:dose'] });
+  check('keep is respected', k.fit.model.terms.some(t => t.label === 't:dose'));
+  check('ML fit of a formula from a study', fitMixedML(ex, 'Rs ~ T + t').random.length === 3);
 }
 done();

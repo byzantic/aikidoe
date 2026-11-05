@@ -28,11 +28,22 @@ export function defaultFormula(study, response) {
   return `${response} ~ ${twoLevel && d.runs.length >= 1 + k + k * (k - 1) / 2 ? '2fi' : 'main'}`;
 }
 
+// one background job at a time in a worker (mixed-model reduction)
+let job = null;
+function background(msg, onDone) {
+  job?.terminate();
+  job = new Worker(new URL('./optimal-worker.js', import.meta.url), { type: 'module' });
+  job.onmessage = (e) => { onDone(e.data); job.terminate(); job = null; };
+  job.onerror = (e) => { onDone({ ok: false, error: e.message || 'the computation failed' }); job = null; };
+  job.postMessage({ ...msg, id: 0 });
+}
+
 function reduction(r, response, undoTo, close) {
   if (!r || r.response !== response) return null;
+  if (r.running) return h('div', { class: 'msg', id: 'reduction' }, `Reducing the mixed model (${r.method === 'p' ? 'Kenward–Roger p-values' : 'AICc of maximum-likelihood fits'}); each step refits the model…`);
   if (r.error) return h('div', { class: 'msg warning', id: 'reduction' }, r.error, ' ', h('button', { class: 'btn small', onclick: close }, 'ok'));
   return h('div', { class: 'msg', id: 'reduction' },
-    h('div', {}, h('b', {}, `Reduced ${r.method === 'p' ? 'by p-value (drop while p > 0.10)' : 'by AICc'}`), ', hierarchy kept: ',
+    h('div', {}, h('b', {}, `Reduced ${r.mixed ? 'the mixed model ' : ''}${r.method === 'p' ? `by ${r.mixed ? 'Kenward–Roger ' : ''}p-value (drop while p > 0.10)` : r.mixed ? 'by AICc (maximum likelihood)' : 'by AICc'}`), ', hierarchy kept: ',
       r.steps.length ? r.steps.map((st, i) => [i ? ', ' : '', h('span', { class: 'mono' }, st.drop), r.method === 'p' ? ` (p ${pval(st.p)})` : '']) : 'nothing to remove', '.'),
     h('div', { class: 'row small', style: 'margin-top:6px' }, 'This is a suggestion: edit the formula to put a term back.',
       h('button', { class: 'btn small', onclick: () => undoTo(r.start) }, 'undo'), h('button', { class: 'btn small', onclick: close }, 'hide')));
@@ -59,7 +70,16 @@ export function render(ctx) {
         onclick: () => {
           try {
             let mixed = false; try { mixed = !ui.ols && randomEffects(observationTable(study, resp.id)).length > 0; } catch { /* no */ }
-            if (mixed) throw new Error('Model reduction works on least-squares fits; for these split-plot / nested data it is not available yet. Edit the formula by hand (terms with large p in the mixed-model tests), or switch to least squares to explore.');
+            if (mixed) {
+              // mixed models: each step refits by REML (and ML for AICc), so run it in the worker
+              set({ reduce: { response: resp.id, method: m, start: formula, running: true, mixed: true } });
+              background({ reduce: { study, formula, method: m } }, (res) => {
+                const cur = state.ui.analyse ?? {};
+                if (!res.ok) { setUI({ analyse: { ...cur, reduce: { response: resp.id, error: res.error } } }); return; }
+                setUI({ analyse: { ...cur, reduce: { response: resp.id, method: m, start: formula, steps: res.steps, mixed: true }, formulas: { ...(cur.formulas ?? {}), [resp.id]: res.formula } } });
+              });
+              return;
+            }
             const r = reduceModel(study, formula, { method: m }); ui.reduce = { response: resp.id, method: m, start: formula, steps: r.steps }; setFormula(r.formula); }
           catch (e) { set({ reduce: { response: resp.id, error: e.message } }); }
         } }, m === 'p' ? 'reduce (p)' : 'reduce (AICc)')),
@@ -81,7 +101,7 @@ export function render(ctx) {
     const used = new Set(formula.match(/[A-Za-z_][A-Za-z0-9_]*/g));
     const chips = avail.length ? h('div', { class: 'row small', id: 'position-terms', style: 'margin-top:6px' }, 'position terms:',
       avail.map(t => h('button', { class: 'btn small', disabled: used.has(t.id), title: t.name, onclick: () => setFormula(`${formula} + ${t.id}`) }, `+ ${t.id}`))) : null;
-    return h('div', {}, controls, chips, mixedPanel(m, ui, set), sitesPanel(study, m, ui, set), fit ? confirmPanel(ctx, fit) : null);
+    return h('div', {}, controls, chips, mixedPanel(m, ui, set), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
   }
   const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
     h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;

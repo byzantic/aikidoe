@@ -181,7 +181,9 @@ Per-die wafer maps are out of scope for v1 (§14) but the observation format (§
 - Variance components with Satterthwaite (scaled χ²) intervals from the asymptotic covariance of the REML estimates.
 - Output: variance components with approximate CIs, fixed-effect estimates by GLS, and tests with **Kenward–Roger** denominator degrees of freedom and adjusted covariance (the accepted standard for split-plot analysis), or containment (stratum) df on request. A term is tested in the finest stratum within whose groups its columns are constant.
 - Power for split-plot designs uses the GLS information for an assumed η = σ²_wp/σ² and the containment df of each term's stratum.
-- Not yet: model reduction of mixed models; mixed-model prediction intervals for confirmation runs (they come from least squares on run means, with a note).
+- Predictions: x β̂ with the KR standard error and df; prediction intervals for a new run measured like the others (or the mean of n such runs, in one new whole plot or in separate ones) add the variance components weighted by how many groups of each level a run holds, with Satterthwaite df 2V²/(gᵀWg), g_k = xᵀΦP_kΦx + c_k. Confirmation runs planned from a mixed model store these intervals, and in a split-plot study they get a new whole plot.
+- Model reduction of mixed models: backward elimination keeping hierarchy, by Kenward–Roger p, or by AICc of maximum-likelihood fits (REML criteria are not comparable across fixed effects); the random effects stay as in the starting model.
+- H⁻¹ within each top-level group by Woodbury (q_b × q_b factorisation over the group indicators), so the cost grows with the number of groups, not readings.
 - A naive OLS fit of a split-plot experiment is shown side by side on request, to show what restricted randomisation does to whole-plot standard errors.
 
 ### 7.4 Boat / slot position

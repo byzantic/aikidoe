@@ -141,7 +141,7 @@ try {
   r = run('fit', 'sp.aikidoe.json', 'y ~ T + P + t + G + F', '--df', 'containment', '--random', 'wholePlot');
   check('fit --df containment --random wholePlot', r.code === 0 && /containment df/.test(r.out) && /random effects: Whole plot \(4\);/.test(r.out), r.out + r.err);
   r = run('fit', 'sp.aikidoe.json', 'y ~ T + t', '--reduce', 'p');
-  check('--reduce asks for --ols on mixed-model data', r.code !== 0 && /add --ols/.test(r.err), r.err);
+  check('--reduce on mixed-model data: KR backward elimination, then the mixed fit', r.code === 0 && /model reduction of the mixed model \(backward, Kenward–Roger/.test(r.out) && /mixed model \(REML\)/.test(r.out), r.out + r.err);
   r = run('power', 'sp.aikidoe.json', '--model', 'T + P + t + G + F', '--eta', '2');
   check('power on a split-plot: GLS with η, per-term error df', r.code === 0 && /η = 2/.test(r.out) && /^T\s+1\s+1\s/m.test(r.out), r.out + r.err);
 
@@ -171,6 +171,17 @@ try {
   check('power --response: σ = σ_meas as an upper bound', r.code === 0 && /σ = σ_meas = 0\.3328 .*upper bound/.test(r.out), r.out + r.err);
   r = run('power', 'seq.aikidoe.json', '--model', 'main', '--response', 'y', '--sigma-process', '0.5');
   check('power --sigma-process: combined σ', r.code === 0 && /= 0\.6006 \(σ_meas from the gauge study of y\)/.test(r.out), r.out + r.err);
+
+  section('mixed-model predictions and confirmation (#15 follow-ups)');
+  r = run('predict', 'anneal.aikidoe.json', 'Rs ~ T*t*dose + radius2 + T:radius2', '--at', 'T=950,t=20,dose=2e15');
+  check('predict on nested data: KR CI and a run-mean PI with whole-plot variation', r.code === 0 && /95% CI \(mean, KR\)/.test(r.out) && /one new run, measured like the others/.test(r.out) && /includes whole plot, run, wafer/.test(r.out), r.out + r.err);
+  r = run('augment', 'anneal.aikidoe.json', '--confirm', 'T=950,t=20,dose=2e15', '--formula', 'Rs ~ T*t*dose + radius2 + T:radius2', '--replicates', '2');
+  check('augment --confirm with a mixed model: intervals for one run and for the mean of 2, in a new whole plot', r.code === 0 && /for the mean of the 2 runs/.test(r.out) && /share a new whole plot/.test(r.out), r.out + r.err);
+  const an = parseStudy(readFileSync(join(dir, 'anneal.aikidoe.json'), 'utf8'));
+  const cr = an.design.runs.filter(x => x.kind === 'confirm');
+  check('the confirmation runs share one new whole plot', cr.length === 2 && cr[0].wholePlot === cr[1].wholePlot && !an.design.runs.filter(x => x.kind !== 'confirm').some(x => x.wholePlot === cr[0].wholePlot));
+  r = run('fit', 'anneal.aikidoe.json', 'Rs ~ T*t*dose + radius2 + T:radius2');
+  check('mixed fit lists the confirmation runs', /confirmation runs \(left out of the fit\)/.test(r.out) && /no result yet/.test(r.out), r.out + r.err);
 
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');

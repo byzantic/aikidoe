@@ -195,6 +195,11 @@ try {
   await page.selectOption('select[aria-label="wafer view"]', 'residual'); await settle();
   check('residual view', /Mean within-wafer residual at each site/.test(await page.textContent('#sites')));
   await shot('9-sites');
+  check('confirm panel uses the mixed model: KR CI, one-run and mean-of-2 intervals', /95% CI \(mean, KR\)/.test(await page.textContent('#prediction')) && /mean of 2 runs/.test(await page.textContent('#prediction')) && /Mixed model: a run is measured like the others/.test(await page.textContent('#confirm')));
+  await page.click('#reduce-p');
+  await page.waitForFunction(() => /Reduced the mixed model/.test(document.querySelector('#reduction')?.textContent ?? ''), null, { timeout: 60000 });
+  check('reduce (p) on the mixed model, in the background: null 2fis go, radius2 stays', /Kenward–Roger/.test(await page.textContent('#reduction')) && /radius2/.test(await page.inputValue('#formula')) && !/t:dose/.test(await page.inputValue('#formula')), await page.inputValue('#formula'));
+  await page.click('#reduction >> text=undo'); await settle();
   await page.click('[data-step="define"]'); await settle();
   await page.click('button[data-summary="Rs_logsd"]'); await settle();
   check('per-wafer summary added as a derived response', (await state()).study.responses.some(r => r.id === 'Rs_logsd' && r.derived?.stat === 'logsd'));
