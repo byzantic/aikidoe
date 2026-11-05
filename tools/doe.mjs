@@ -34,6 +34,10 @@
 //   gauge DATA.csv [--tolerance T | --lsl L --usl U] [--design crossed|nested|repeatability] [--k 6]
 //        [--into STUDY --response R]   gauge R&R (columns part, operator, value); --into stores σ_meas
 //   power … [--response R [--sigma-process σp]]   σ from the response's gauge study: √(σp² + σ_meas²)
+//   goal STUDY RESPONSE (--maximize|--minimize|--target|--range|--none) [--lower L] [--target T] [--upper U]
+//        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
+//   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
+//        best settings by overall desirability over the fitted models
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
 //
@@ -57,6 +61,7 @@ import { reduceModel, reduceMixed } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects, predictMixed, runMeanWeights } from '../js/model/mixed.js';
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
+import { fittedModels, optimiseDesirability, dValue } from '../js/model/desirability.js';
 import { parseCSV } from '../js/io/csv.js';
 import { num, pval, stars, table } from '../js/format.js';
 
@@ -551,6 +556,44 @@ function cmdGauge({ pos, opt }) {
   }
 }
 
+function cmdGoal({ pos, opt }) {
+  const [file, rid] = pos, study = load(file);
+  const i = study.responses.findIndex(r => r.id === rid);
+  if (i < 0) fail(`no response "${rid}"`);
+  const r = { ...study.responses[i] };
+  const goal = ['maximize', 'minimize', 'target', 'range', 'none'].filter(g => opt[g] === true);
+  if (goal.length > 1) fail('give one goal');
+  if (goal.length) r.goal = goal[0];
+  for (const k of ['lower', 'upper', 'importance']) if (opt[k] !== undefined) r[k] = Number(opt[k]);
+  if (typeof opt.target === 'string' || typeof opt.target === 'number') r.target = Number(opt.target);
+  if (opt.weight !== undefined) { const w = String(opt.weight).split(',').map(Number); r.weight = w.length === 2 ? w : w[0]; }
+  const responses = study.responses.slice(); responses[i] = r;
+  save(file, createStudy({ ...study, responses }));
+  out(`${rid}: ${r.goal}${r.lower !== undefined ? `, lower ${r.lower}` : ''}${r.target !== undefined ? `, target ${r.target}` : ''}${r.upper !== undefined ? `, upper ${r.upper}` : ''}${r.weight !== undefined ? `, weight ${r.weight}` : ''}${r.importance !== undefined ? `, importance ${r.importance}` : ''}`);
+}
+
+function cmdOptimise({ pos, opt }) {
+  const study = load(pos[0]);
+  const formulas = {};
+  for (const m of list(opt.model)) { const f = String(m); const id = f.slice(0, f.indexOf('~')).trim(); if (!f.includes('~') || !id) fail(`--model "${f}": give "response ~ terms"`); formulas[id] = f; }
+  const { models, missing } = fittedModels(study, { formulas, ols: !!opt.ols });
+  for (const m of missing) out(`note: ${m.id} left out (${m.reason})`);
+  if (!models.length) fail('no response with a goal and limits has a model: set goals with "doe goal" and give results');
+  const region = opt.region ? String(opt.region) : 'cube';
+  if (!['cube', 'sphere'].includes(region)) fail('--region cube or sphere');
+  const fixed = opt.fix ? Object.fromEntries(String(opt.fix).split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? fail(`unknown factor "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })) : {};
+  const o = optimiseDesirability(study, models, { region, ...(opt.radius !== undefined ? { radius: Number(opt.radius) } : {}), fixed, seed: study.seed });
+  out(`models: ${models.map(m => m.formula + (m.fit.kind === 'mixed' ? ' (mixed)' : '')).join('; ')}`);
+  out(`region: ${region}${opt.radius !== undefined ? ` (${region === 'sphere' ? 'radius' : 'half-width'} ${opt.radius} coded)` : ''}${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ''}`);
+  out(`\nbest settings: ${showSettings(o.settings)}${o.feasible ? '' : '  (violates a constraint)'}`);
+  out(`overall desirability D = ${num(o.D, 4)}`);
+  out(table([{ key: 'id', label: 'response', align: 'left' }, { key: 'y', label: 'predicted' }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'goal', label: 'goal', align: 'left' }, { key: 'd', label: 'd' }],
+    models.map((m, i) => { const b = m.predictBand(o.settings), sp = m.spec;
+      return { id: m.id, y: o.d[i].y, ci: `${num(b.lower)} … ${num(b.upper)}`, d: o.d[i].d,
+        goal: sp.kind === 'max' ? `max (${sp.low} → ${sp.high})` : sp.kind === 'min' ? `min (${sp.low} ← ${sp.high})` : sp.kind === 'target' ? `target ${sp.target} (${sp.low} … ${sp.high})` : `range ${sp.low} … ${sp.high}` }; })));
+  if (o.D === 0) out('D = 0: no settings in the region meet every response\'s acceptable range');
+}
+
 function cmdInfo({ pos }) {
   const s = load(pos[0]);
   out(`${s.name}  (seed ${s.seed})`);
@@ -569,13 +612,13 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 function main(argv) {
   const [cmd, ...rest] = argv;
   if (!cmd || cmd === 'help' || cmd === '--help') {
     const src = readFileSync(new URL(import.meta.url), 'utf8');
-    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 42).map(l => l.slice(3)).join('\n'));
+    out(src.split('\n').filter(l => l.startsWith('//')).slice(1, 46).map(l => l.slice(3)).join('\n'));
     return 0;
   }
   const f = COMMANDS[cmd];

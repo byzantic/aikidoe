@@ -17,14 +17,14 @@ const extent = (vals) => { const f = vals.filter(Number.isFinite); return f.leng
 const pad = ([a, b], f = 0.06) => { const d = (b - a) || Math.abs(a) || 1; return [a - f * d, b + f * d]; };
 
 /**
- * plot({ series: [{ points: [{ x, y, label?, hi? }], kind: 'points' | 'line', cls }],
+ * plot({ series: [{ points: [{ x, y, label?, hi? }], kind: 'points' | 'line', cls }  or  { kind: 'ribbon', points: [{ x, lo, hi }] }],
  *        hlines: [{ y, label, cls }], vlines: [{ x, label, cls }], band: { x0, x1 },
  *        xLabel, yLabel, width, height, xDomain, yDomain, labelPoints })
  */
 export function plot(o) {
   const W = o.width ?? 420, H = o.height ?? 260, m = { l: 52, r: 14, t: 10, b: 38 };
   const all = o.series.flatMap(s => s.points);
-  const xs = all.map(p => p.x).concat((o.vlines ?? []).map(v => v.x)), ys = all.map(p => p.y).concat((o.hlines ?? []).map(v => v.y));
+  const xs = all.map(p => p.x).concat((o.vlines ?? []).map(v => v.x)), ys = all.flatMap(p => (p.lo !== undefined ? [p.lo, p.hi] : [p.y])).concat((o.hlines ?? []).map(v => v.y));
   const [x0, x1] = o.xDomain ?? pad(extent(xs)), [y0, y1] = o.yDomain ?? pad(extent(ys));
   const X = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = (v) => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
   const svg = h('svg:svg', { class: 'plot', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': o.title ?? `${o.yLabel ?? ''} against ${o.xLabel ?? ''}` });
@@ -47,6 +47,9 @@ export function plot(o) {
   (o.vlines ?? []).forEach((r, i) => svg.append(h('svg:line', { class: `ref ${r.cls ?? ''}`, x1: X(r.x), x2: X(r.x), y1: m.t, y2: H - m.b }),
     r.label ? h('svg:text', { class: 'lbl', x: X(r.x) + 3, y: m.t + 10 + 12 * i }, r.label) : null));   // staggered labels
   for (const s of o.series) {
+    // a confidence band: points { x, lo, hi }
+    if (s.kind === 'ribbon') { const pts = s.points.filter(p => Number.isFinite(p.lo) && Number.isFinite(p.hi));
+      if (pts.length) svg.append(h('svg:path', { class: `ribbon ${s.cls ?? ''}`, d: pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.hi).toFixed(1)}`).join('') + pts.slice().reverse().map(p => `L${X(p.x).toFixed(1)},${Y(p.lo).toFixed(1)}`).join('') + 'Z' })); continue; }
     if (s.kind === 'line') svg.append(h('svg:path', { class: `ln ${s.cls ?? ''}`, d: s.points.filter(p => Number.isFinite(p.y)).map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join('') }));
     else for (const p of s.points) {
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;

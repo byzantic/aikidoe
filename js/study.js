@@ -37,7 +37,7 @@ const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
-  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'levels', 'derived', 'measurement', 'note'],
+  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
   design: ['kind', 'params', 'randomisation', 'runs'],
   run: ['run', 'order', 'wholePlot', 'block', 'kind', 'settings'],
@@ -275,6 +275,12 @@ function normResponse(r, i, errors) {
     else if ((isNum(out.lower) && out.target < out.lower) || (isNum(out.upper) && out.target > out.upper)) errors.push(`${path}: target must lie between lower and upper`);
   }
   if (out.goal === 'range' && !(isNum(out.lower) && isNum(out.upper))) errors.push(`${path}: goal "range" needs lower and upper`);
+  // desirability shape (a number, or [below target, above target]) and importance (§8)
+  if (r.weight !== undefined) {
+    if (!(isNum(r.weight) && r.weight > 0) && !(Array.isArray(r.weight) && r.weight.length === 2 && r.weight.every(w => isNum(w) && w > 0))) errors.push(`${path}.weight: must be a positive number, or two for a target`);
+    else out.weight = r.weight;
+  }
+  if (r.importance !== undefined) { if (!isNum(r.importance) || !(r.importance > 0)) errors.push(`${path}.importance: must be a positive number`); else out.importance = r.importance; }
   out.levels = r.levels ?? ['run'];
   if (!Array.isArray(out.levels) || !out.levels.length || !out.levels.every(l => LEVELS.includes(l)))
     errors.push(`${path}.levels: must be a list drawn from ${LEVELS.join(', ')}`);

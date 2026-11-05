@@ -197,6 +197,7 @@ Furnace boat or cassette slot can be entered per wafer and used as a fixed covar
 - **Dual response (mean and variance):** model log s (within-wafer or replicate standard deviation) alongside the mean, then optimise e.g. "mean on target, minimise s".
 - **Propagation of error:** with tolerances on continuous factors, variance transmitted through the fitted surface (σ_y² ≈ Σ (∂f/∂x_i)² σ_i² + σ²), so settings can be chosen on a flat part of the surface.
 - **Prediction profiler:** interactive slices of every response vs each factor, with confidence bands.
+- Implementation (#18): desirability functions as the R package `desirability` (dMax, dMin, dTarget with two shapes, dBox), from each response's goal and lower / target / upper, `weight` (shape) and `importance` (exponent in the weighted geometric mean). Optimisation over the fitted models (least squares, or the mixed model for split-plot / nested readings): Latin-hypercube screen, Nelder–Mead from the best starts projected onto the region (cube of a given half-width, or sphere — e.g. to the axial points of a CCD), coordinate polish; categorical factors enumerated; constraints respected; factors can be held. An Optimise step shows the goals, the best settings with each response's d, a profiler (responses × factors, with 95% bands; click to move a factor) and a two-factor overlay of D with the infeasible region greyed.
 
 ## 9. Measurement systems analysis (gauge R&R)
 

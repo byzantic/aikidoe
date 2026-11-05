@@ -231,6 +231,22 @@ try {
   await page.fill('input[aria-label="sigma process"]', '0.5'); await page.keyboard.press('Tab'); await settle();
   check('Design power from σ_meas: Δ = 2 Ω/sq, σ_process 0.5 → Δ/σ = 2/√(0.5² + 0.3328²) = 3.33', /Δ\/σ = 3\.33/.test(await page.textContent('#power-units')) && (await page.inputValue('input[aria-label="effect size"]')) === '3.33', await page.textContent('#power-units'));
 
+  section('desirability and profiler (issue #18)');
+  await page.click('#btn-examples'); await page.click('[data-example="ccd-results"]'); await settle();
+  await page.click('[data-step="optimise"]'); await settle();
+  check('Optimise step: goals for conv (maximise 74 → 80) and bypr (minimise 2 … 6)', (await page.inputValue('input[aria-label="conv lower"]')) === '74' && (await page.inputValue('input[aria-label="bypr upper"]')) === '6');
+  await page.click('#optimise'); await settle();
+  const Dopt = Number(await page.getAttribute('[data-d]', 'data-d'));
+  check('best settings found: 0 < D < 1 (the goals conflict)', Dopt > 0.3 && Dopt < 1, Dopt);
+  check('profiler: 2 responses × 2 factors with bands', (await page.locator('#profiler .cell').count()) === 4 && (await page.locator('#profiler path.ribbon').count()) === 4);
+  check('overlay heat map with an infeasible region', (await page.locator('#overlay rect.infeasible').count()) > 0 && (await page.locator('#overlay rect').count()) === 41 * 41);
+  await page.fill('input[aria-label="at T"]', '150'); await page.keyboard.press('Tab'); await settle();
+  check('moving a factor away lowers D', Number(await page.getAttribute('[data-d]', 'data-d')) < Dopt);
+  await page.fill('input[aria-label="conv importance"]', '3'); await page.keyboard.press('Tab'); await settle();
+  await page.click('#optimise'); await settle();
+  check('importance stored on the response', (await state()).study.responses.find(r => r.id === 'conv').importance === 3);
+  await shot('11-optimise');
+
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide', 'anneal-results']) {
     await page.click('#btn-examples'); await page.click(`[data-example="${id}"]`); await page.waitForTimeout(300);

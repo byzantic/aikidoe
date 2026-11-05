@@ -2,6 +2,8 @@
 import { h, select, messages, dataTable } from './dom.js';
 import { plot } from './plot.js';
 import { num, pval } from '../js/format.js';
+import { defaultFormula } from '../js/model/defaults.js';
+export { defaultFormula };
 import { fitModel, anova, lackOfFit, boxCox, lenth, halfNormal, twoLevelEffects } from '../js/model/ols.js';
 import { hierarchyViolations } from '../js/model/formula.js';
 import { normal } from '../js/dist.js';
@@ -12,21 +14,6 @@ import { observationsOf, availablePositionTerms, sitePositions } from '../js/mod
 import { waferPlot } from './wafer.js';
 
 /** A sensible first model for the study's design. */
-export function defaultFormula(study, response) {
-  const d = study.design, k = study.factors.length;
-  if (!d) return `${response} ~ main`;
-  if (d.kind === 'ccd' || d.kind === 'box-behnken') return `${response} ~ quadratic`;
-  if (d.kind === 'plackett-burman') return `${response} ~ main`;
-  if (d.kind === 'fractional-factorial') return `${response} ~ ${d.params.resolution >= 5 ? '2fi' : 'main'}`;
-  if (d.kind === 'sequential') {
-    // the largest standard model the combined runs support (block included)
-    const tries = d.params.stages.some(s => s.kind === 'axial') ? ['quadratic', '2fi', 'main'] : ['2fi', 'main'];
-    for (const t of tries) { try { const f = fitModel(study, `${response} ~ ${t}`); if (!f.aliased.length && f.dfRes >= 1) return `${response} ~ ${t}`; } catch { /* try a smaller model */ } }
-    return `${response} ~ main`;
-  }
-  const twoLevel = study.factors.every(f => f.type === 'continuous' || f.levels.length === 2);
-  return `${response} ~ ${twoLevel && d.runs.length >= 1 + k + k * (k - 1) / 2 ? '2fi' : 'main'}`;
-}
 
 // one background job at a time in a worker (mixed-model reduction)
 let job = null;
