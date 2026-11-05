@@ -7,6 +7,7 @@ import { hierarchyViolations } from '../js/model/formula.js';
 import { normal } from '../js/dist.js';
 import { confirmPanel } from './augment.js';
 import { reduceModel } from '../js/model/reduce.js';
+import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
 
 /** A sensible first model for the study's design. */
 export function defaultFormula(study, response) {
@@ -54,7 +55,10 @@ export function render(ctx) {
       h('button', { class: 'btn', onclick: () => setFormula(defaultFormula(study, resp.id)) }, 'reset'),
       ['p', 'aicc'].map(m => h('button', { class: 'btn', id: `reduce-${m}`, title: m === 'p' ? 'backward elimination: drop the least significant term while p > 0.10, keeping the model hierarchical' : 'backward elimination by AICc, keeping the model hierarchical',
         onclick: () => {
-          try { const r = reduceModel(study, formula, { method: m }); ui.reduce = { response: resp.id, method: m, start: formula, steps: r.steps }; setFormula(r.formula); }
+          try {
+            let mixed = false; try { mixed = !ui.ols && randomEffects(observationTable(study, resp.id)).length > 0; } catch { /* no */ }
+            if (mixed) throw new Error('Model reduction works on least-squares fits; for these split-plot / nested data it is not available yet. Edit the formula by hand (terms with large p in the mixed-model tests), or switch to least squares to explore.');
+            const r = reduceModel(study, formula, { method: m }); ui.reduce = { response: resp.id, method: m, start: formula, steps: r.steps }; setFormula(r.formula); }
           catch (e) { set({ reduce: { response: resp.id, error: e.message } }); }
         } }, m === 'p' ? 'reduce (p)' : 'reduce (AICc)')),
       h('label', { class: 'inline' }, 'ANOVA', select([{ value: 1, label: 'type I (sequential)' }, { value: 2, label: 'type II' }, { value: 3, label: 'type III' }], ui.anovaType ?? 1, (v) => set({ anovaType: Number(v) }), { 'aria-label': 'ANOVA type' }))),
@@ -65,10 +69,20 @@ export function render(ctx) {
   let fit;
   try { fit = fitModel(study, formula); } catch (e) { return h('div', {}, controls, h('div', { class: 'msg error' }, e.message)); }
 
+  // split-plot or nested readings: the mixed model is the analysis (least squares on request)
+  let rand = [];
+  try { rand = randomEffects(observationTable(study, resp.id)); } catch { /* none */ }
+  if (rand.length && !ui.ols) {
+    let m;
+    try { m = fitMixedModel(study, formula); } catch (e) { return h('div', {}, controls, h('div', { class: 'msg error' }, e.message)); }
+    return h('div', {}, controls, mixedPanel(m, ui, set), confirmPanel(ctx, fit));
+  }
+  const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
+    h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;
+
   const notes = [];
   if (fit.rows.some(r => r.n > 1)) notes.push('Repeated observations of a run (wafers, sites, repeats) are averaged: this least-squares fit uses run means. Mixed models for nested measurements come in a later version.');
   for (const v of hierarchyViolations(fit.model)) notes.push(`${v.term} is in the model without ${v.missing.join(', ')}.`);
-  if (study.design.runs.some(r => r.wholePlot !== undefined)) notes.push('Split-plot design: this least-squares fit treats every run as independent, so the standard errors and tests of whole-plot effects are too optimistic. The REML analysis with the whole-plot error comes in issue #15.');
   if (fit.aliased.length) notes.push(`Not estimable (aliased with earlier terms): ${fit.aliased.join(', ')}.`);
   const missingRuns = study.design.runs.filter(r => r.kind !== 'confirm').length - fit.n;
   if (fit.model.terms[0]?.block) notes.push(`The design has ${fit.factors.find(f => f.block).levels.length} blocks (stages); a block term is fitted first so shifts between them do not bias the effects.`);
@@ -140,5 +154,42 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics'), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, controls, summary, anovaPanel, effectsPanel, diag, confirmPanel(ctx, fit));
+  return h('div', {}, controls, olsNote, summary, anovaPanel, effectsPanel, diag, confirmPanel(ctx, fit));
+}
+
+function mixedPanel(m, ui, set) {
+  const total = m.varcomp.reduce((a, v) => a + v.variance, 0);
+  const nRuns = new Set(m.rows.map(r => r.run)).size;
+  const cont = ui.dfMethod === 'containment';
+  const notes = [];
+  if (!m.converged) notes.push('The REML optimisation did not fully converge; treat the results with care.');
+  if (m.aliased.length) notes.push(`Not estimable (aliased): ${m.aliased.join(', ')}.`);
+  if (m.boundary.length) notes.push(`${m.boundary.join(', ')} variance estimated as 0: no variation at that level beyond what the levels below explain.`);
+  const residualIs = m.random.some(r => r.id === 'wafer') ? 'within wafer (sites, repeats)' : m.random.some(r => r.id === 'run') ? 'within run (wafers, repeats)' : 'run to run';
+  const terms = m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block);
+  return h('section', { class: 'panel', id: 'mixed' }, h('h2', {}, 'Mixed model (REML)'),
+    h('p', { class: 'small' }, `${m.n} readings from ${nRuns} runs. Random effects: ${m.random.map(r => `${r.name.toLowerCase()} (${new Set(r.labels).size})`).join(', ')}; residual: ${residualIs}. Each term is tested against the variation at the level where it was applied — whole-plot factors against the whole-plot variance.`),
+    messages(notes, 'warning'),
+    h('h3', {}, 'Variance components'),
+    dataTable([{ key: 'name', label: 'source' }, { key: 'variance', label: 'variance', cls: 'n', fmt: (v) => num(v) }, { key: 'sd', label: 'std. dev.', cls: 'n', fmt: (v) => num(v) },
+      { key: 'ci', label: '95% interval (variance)' }, { key: 'pct', label: '% of total', cls: 'n', fmt: (v) => num(v, 3) }, { key: 'bar', label: '' }],
+    m.varcomp.map(v => ({ ...v, ci: v.boundary ? 'on the boundary (0)' : `${num(v.lower)} … ${num(v.upper)}`, pct: 100 * v.variance / total,
+      bar: h('span', { class: 'vbar' }, h('span', { style: `width:${(100 * v.variance / total).toFixed(1)}%` })) }))),
+    h('h3', {}, `Tests of model terms (${cont ? 'containment df' : 'Kenward–Roger'})`),
+    h('div', { class: 'row small', style: 'margin-bottom:6px' },
+      h('label', { class: 'inline' }, 'df', select([{ value: 'kr', label: 'Kenward–Roger' }, { value: 'containment', label: 'containment' }], ui.dfMethod ?? 'kr', (v) => set({ dfMethod: v }), { 'aria-label': 'df method' })),
+      h('label', { class: 'inline' }, h('input', { type: 'checkbox', id: 'compare-ols', checked: !!ui.compare, onchange: (e) => set({ compare: e.target.checked }) }), 'compare with treating every reading as independent'),
+      h('button', { class: 'btn small', onclick: () => set({ ols: true }), title: 'least squares on run means, ignoring whole plots' }, 'least squares instead')),
+    dataTable([{ key: 'term', label: 'term' }, { key: 'F', label: 'F', cls: 'n', fmt: (v) => num(v) }, { key: 'df', label: 'ndf', cls: 'n' }, { key: 'ddf', label: 'ddf', cls: 'n', fmt: (v) => num(v, 4) },
+      { key: 'p', label: 'p', cls: 'n', fmt: (v) => h('span', { class: v < 0.05 ? 'sig' : '' }, pval(v)) }, { key: 'stratum', label: 'tested in' },
+      ...(ui.compare ? [{ key: 'naiveP', label: 'p if independent', cls: 'n', fmt: (v, r) => h('span', { class: (v < 0.05) !== (r.p < 0.05) ? 'low-power' : '' }, pval(v)) }] : [])],
+    terms.map(t => ({ ...t, F: cont ? t.F : t.FKR, ddf: cont ? t.ddfContainment : t.ddfKR, p: cont ? t.pContainment : t.pKR, stratum: t.stratum === 'Residual' ? 'residual' : (t.stratum ?? '').toLowerCase() })),
+    { rowAttrs: () => ({ 'data-term': '' }) }),
+    ui.compare ? h('p', { class: 'muted small' }, `"p if independent": least squares on the same ${m.n} readings as if each were an independent run — what an analysis ignoring whole plots, runs and wafers would claim. Highlighted where the conclusion at 5% changes.`) : null,
+    m.strata ? h('p', { class: 'muted small' }, `Strata (containment df): ${m.strata.map(st => `${st.name === 'Residual' ? 'residual' : st.name.toLowerCase()} ${st.df}`).join(', ')}.`) : null,
+    h('h3', {}, 'Coefficients'),
+    dataTable([{ key: 'term', label: 'term' }, { key: 'est', label: 'estimate', cls: 'n', fmt: (v) => num(v) }, { key: 'se', label: 'std. error (KR)', cls: 'n', fmt: (v) => num(v) },
+      { key: 'df', label: 'df', cls: 'n', fmt: (v) => num(v, 4) }, { key: 'p', label: 'p', cls: 'n', fmt: (v) => h('span', { class: v < 0.05 ? 'sig' : '' }, pval(v)) }],
+    m.columns.map((c, j) => ({ term: c, est: m.coef[j], se: m.seKR[j], df: m.dfKR[j], p: m.pKR[j] })).filter(r => Number.isFinite(r.est))),
+    h('p', { class: 'muted small' }, `Coefficients in coded units (−1 … +1), estimated by generalised least squares. REML criterion ${num(m.REML, 8)}.`));
 }

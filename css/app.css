@@ -90,3 +90,5 @@ details > summary { cursor: pointer; color: var(--muted); }
 .low-power { color: #9a6700; font-weight: 600; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .low-power { color: #e3b341; } }
 :root[data-theme="dark"] .low-power { color: #e3b341; }
+.vbar { display: inline-block; width: 80px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; vertical-align: middle; }
+.vbar > span { display: block; height: 100%; background: var(--accent); }

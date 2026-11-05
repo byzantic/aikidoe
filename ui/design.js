@@ -229,7 +229,7 @@ function diagnostics(study, d, modelFor) {
         W - 1 - nWP < 2 ? h('div', { class: 'msg warning' }, `${W} whole plots leave ${Math.max(0, df)} degrees of freedom for the whole-plot error after the whole-plot effects above: too few to test them. Use more whole plots or replicate.`) : null);
     }
     if (d.kind === 'optimal-split-plot') parts.push(h('div', { class: 'row small', 'data-efficiency': '' }, h('span', { class: 'stat' }, 'D-optimal for ', h('b', {}, d.params.model)), h('span', { class: 'stat' }, 'η = ', h('b', {}, d.params.eta)), h('span', { class: 'stat' }, 'log|XᵀV⁻¹X| = ', h('b', {}, num(d.params.logDet, 5)))));
-    parts.push(h('p', { class: 'muted small' }, 'Analysis: the whole-plot effects need the whole-plot error (REML, coming in issue #15); until then the Analyse step fits least squares and warns.'));
+    parts.push(h('p', { class: 'muted small' }, 'Analysis: the Analyse step fits a mixed model (REML), testing whole-plot effects against the whole-plot variance.'));
   }
   if (d.kind === 'full-factorial' && !d.block) parts.push(h('p', { class: 'small' }, 'Every main effect and interaction can be estimated.'));
   if (d.kind === 'optimal' || d.kind === 'definitive-screening') {
@@ -268,24 +268,26 @@ function powerSection(study, d, cand, ui, set) {
       onchange: (e) => setP({ models: { ...(pw.models ?? {}), [cand.id]: e.target.value.replace(/^.*~/, '').trim() || 'main' } }) })),
     h('label', { class: 'inline', title: 'the change in the response from the low to the high setting that matters, in units of the run-to-run standard deviation σ' }, 'effect Δ/σ',
       h('input', { class: 'num', type: 'number', min: 0.1, step: 0.1, value: ratio, 'aria-label': 'effect size', onchange: (e) => setP({ ratio: Number(e.target.value) }) })),
-    h('label', { class: 'inline' }, 'α', select([0.01, 0.05, 0.1], alpha, (v) => setP({ alpha: Number(v) }), { 'aria-label': 'power alpha' })));
+    h('label', { class: 'inline' }, 'α', select([0.01, 0.05, 0.1], alpha, (v) => setP({ alpha: Number(v) }), { 'aria-label': 'power alpha' })),
+    d.wholePlot ? h('label', { class: 'inline', title: 'assumed ratio of whole-plot variance to run-to-run variance' }, 'η = σ²wp/σ²',
+      h('input', { class: 'num', type: 'number', min: 0, step: 0.5, value: pw.eta ?? 1, 'aria-label': 'power eta', onchange: (e) => setP({ eta: Number(e.target.value) }) })) : null);
   let res, err = null;
-  try { res = designPower(study, d.X, { model, block: d.block, delta: ratio, alpha }); } catch (e) { err = e.message; }
+  try { res = designPower(study, d.X, { model, block: d.block, delta: ratio, alpha, ...(d.wholePlot ? { wholePlot: d.wholePlot, eta: pw.eta ?? 1 } : {}) }); } catch (e) { err = e.message; }
   let body;
   if (err) body = h('div', { class: 'msg error' }, err);
-  else if (res.dfRes < 1) body = h('div', { class: 'msg warning' }, `${res.n} runs for ${res.rank} coefficients: no residual degrees of freedom, so no test and no power for this model. Add centre points or replicates, use a smaller model, or rely on Lenth’s method.`);
+  else if (res.dfRes < 1 && !res.strata) body = h('div', { class: 'msg warning' }, `${res.n} runs for ${res.rank} coefficients: no residual degrees of freedom, so no test and no power for this model. Add centre points or replicates, use a smaller model, or rely on Lenth’s method.`);
   else {
     const det = Object.fromEntries(detectableEffect(res, { power: 0.8 }).map(x => [x.term, x.ratio]));
     const rows = res.terms.filter(t => !t.block);
     body = h('div', {},
-      dataTable([{ key: 'term', label: 'term' }, { key: 'df', label: 'df', cls: 'n' },
+      dataTable([{ key: 'term', label: 'term' }, { key: 'df', label: 'df', cls: 'n' }, ...(res.strata ? [{ key: 'ddf', label: 'error df', cls: 'n' }] : []),
         { key: 'power', label: `power at Δ/σ = ${ratio}`, cls: 'n', fmt: (v) => (Number.isNaN(v) ? h('span', { class: 'muted' }, 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
         { key: 'det', label: 'Δ/σ for 80%', cls: 'n', fmt: (v) => (Number.isFinite(v) ? num(v, 3) : '') }],
       rows.map(t => ({ ...t, det: det[t.term] })), { rowAttrs: () => ({ 'data-power': '' }) }),
-      h('p', { class: 'muted small' }, `${res.dfRes} residual df${res.terms.some(t => t.block) ? '; blocks fitted' : ''}. Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
+      h('p', { class: 'muted small' }, `${res.strata ? `Split-plot: whole-plot terms are tested against the whole-plot error (${res.strata[0].df} df), the others against the residual (${res.strata[1].df} df), with σ²wp = η σ². ` : `${res.dfRes} residual df. `}${res.terms.some(t => t.block) ? 'Blocks fitted. ' : ''}Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
         'Power below 0.8 is marked; Δ/σ for 80% is the smallest effect this design would usually find.'));
   }
-  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, d.wholePlot ? h('div', { class: 'msg warning' }, 'Power here assumes complete randomisation: for whole-plot effects of a split-plot it is optimistic. Split-plot power comes with REML (issue #15).') : null, body);
+  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, body);
 }
 
 function optimalOptions(study, ui, set, split = false) {

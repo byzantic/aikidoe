@@ -108,17 +108,25 @@ export function fitModel(study, formula, opts = {}) {
   let rows = opts.rows ?? responseTable(study, response, opts);
   if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
   if (!rows.length) throw new Error(`no results for ${response} yet`);
+  const b = withBlockTerm(study, parsed, rows, opts);
+  const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
+  const fit = fitOLS(mm, b.rows.map(r => r.y));
+  return { ...fit, response, rows: b.rows, factors: b.factors };
+}
+
+/**
+ * The model with a fixed Block term first when the rows fall in more than one block (unless
+ * opts.blocks === false): { model, factors, rows } with the block label in each row's settings.
+ */
+export function withBlockTerm(study, parsed, rows, opts = {}) {
   const labels = [...new Set(rows.map(r => (r.block === undefined ? '' : String(r.block))))].sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
-  let factors = study.factors, model = parsed;
-  if (opts.blocks !== false && labels.length > 1) {
-    const id = blockId(study);
-    factors = [...study.factors, { id, name: 'Block', type: 'categorical', levels: labels, block: true }];
-    model = { ...parsed, terms: [{ label: id, comps: [{ f: id }], degree: 1, block: true }, ...parsed.terms] };
-    rows = rows.map(r => ({ ...r, settings: { ...r.settings, [id]: r.block === undefined ? '' : String(r.block) } }));
-  }
-  const mm = modelMatrix(model, factors, rows.map(r => r.settings));
-  const fit = fitOLS(mm, rows.map(r => r.y));
-  return { ...fit, response, rows, factors };
+  if (opts.blocks === false || labels.length < 2) return { model: parsed, factors: study.factors, rows };
+  const id = blockId(study);
+  return {
+    factors: [...study.factors, { id, name: 'Block', type: 'categorical', levels: labels, block: true }],
+    model: { ...parsed, terms: [{ label: id, comps: [{ f: id }], degree: 1, block: true }, ...parsed.terms] },
+    rows: rows.map(r => ({ ...r, settings: { ...r.settings, [id]: r.block === undefined ? '' : String(r.block) } })),
+  };
 }
 
 /**

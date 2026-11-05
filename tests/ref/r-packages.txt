@@ -8,3 +8,6 @@ daewr
 skpr
 AlgDesign
 pwr
+lme4
+pbkrtest
+Matrix
