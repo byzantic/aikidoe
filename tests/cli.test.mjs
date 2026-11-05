@@ -17,10 +17,10 @@ const S = 'reactor.aikidoe.json';
 try {
   section('init and design');
   let r = run('init', S, '--name', 'Reactor screening', '--seed', '7', '--factor', 'F:10:15:L/min', '--factor', 'Cat:1:2:%',
-    '--factor', 'RPM:100:120', '--factor', 'T:140:180:°C!', '--factor', 'Conc:3:6:%', '--response', 'yield:%');
+    '--factor', 'RPM:100:120', '--factor', 'T:140:180:°C', '--factor', 'Conc:3:6:%', '--response', 'yield:%');
   check('init', r.code === 0 && /5 factors, 1 responses, seed 7/.test(r.out), r.err);
   const s0 = parseStudy(readFileSync(join(dir, S), 'utf8'));
-  check('init: units and hard-to-change flag', s0.factors[0].units === 'L/min' && s0.factors[3].htc && !s0.factors[0].htc);
+  check('init: units', s0.factors[0].units === 'L/min' && s0.factors[3].units === '°C' && !s0.factors[3].htc);
   r = run('init', S, '--factor', 'A:0:1');
   check('init refuses to overwrite', r.code === 1 && /exists/.test(r.err));
   r = run('design', S, '--runs', '16', '--sheet', 'sheet.csv', '--html', 'sheet.html');
@@ -45,7 +45,7 @@ try {
   r = run('import', S, 'results.csv');
   check('import', r.code === 0 && /16 observation\(s\)/.test(r.out), r.out + r.err);
   r = run('info', S);
-  check('info: all runs have results', /results for 16 of 16 runs/.test(r.out) && /hard to change/.test(r.out));
+  check('info: all runs have results', /results for 16 of 16 runs/.test(r.out));
   r = run('fit', S, 'yield ~ (F+Cat+RPM+T+Conc)^2', '--lenth');
   // the simultaneous margin (SME) controls false positives over all 15 effects; the individual
   // ME may also flag a small one (here the sinusoidal wobble loads on F:RPM)
@@ -103,6 +103,28 @@ try {
   check('fit --reduce p: steps and a reduced model containing A and I(B^2)', r.code === 0 && /drop /.test(r.out) && /reduced model: y ~ .*A.*I\(B\^2\)/.test(r.out), r.out + r.err);
   r = run('fit', 'seq.aikidoe.json', 'y ~ quadratic', '--reduce', 'aicc', '--keep', 'C');
   check('fit --reduce aicc --keep C', r.code === 0 && /reduced model: y ~ [^\n]*\bC\b/.test(r.out), r.out + r.err);
+
+  section('split-plot');
+  run('init', 'sp.aikidoe.json', '--seed', '6', '--factor', 'T:900:1000:C!', '--factor', 'P:1:2!', '--factor', 't:10:30', '--factor', 'G=N2,O2', '--factor', 'F:1:5', '--response', 'y');
+  check('init: a trailing ! marks a factor hard to change', parseStudy(readFileSync(join(dir, 'sp.aikidoe.json'), 'utf8')).factors.map(f => f.htc).join() === 'true,true,false,false,false');
+  check('info shows it', /hard to change/.test(run('info', 'sp.aikidoe.json').out));
+  r = run('design', 'sp.aikidoe.json', '--runs', '32', '--whole-plots', '8', '--html', 'sp.html');
+  check('design --runs with htc factors: split-plot fraction, restricted randomisation', r.code === 0 && /split-plot-fraction, 32 runs, randomisation restricted/.test(r.out) && /8 whole plots of 4 runs/.test(r.out) && /whole-plot effects .*T, P, T:P/.test(r.out), r.out + r.err);
+  check('printable sheet: whole-plot headers with the settings to make once', /Whole plot \d+ <span class="u">— set once: T \d+ C, P \d/.test(readFileSync(join(dir, 'sp.html'), 'utf8')));
+  r = run('alias', 'sp.aikidoe.json');
+  check('alias for a split-plot fraction', r.code === 0 && /word-length pattern/.test(r.out) && /whole-plot effects: T, P, T:P/.test(r.out), r.out + r.err);
+  r = run('design', 'sp.aikidoe.json', '--optimal', '--runs', '24', '--whole-plots', '6', '--model', '(T+P+t+G+F)^2', '--restarts', '5', '--force');
+  check('design --optimal with htc factors: optimal split-plot', r.code === 0 && /optimal-split-plot, 24 runs/.test(r.out) && /η = 1/.test(r.out), r.out + r.err);
+  r = run('design', 'sp.aikidoe.json', '--ccd', '--force');
+  check('CCD with htc factors refused unless --no-split-plot', r.code !== 0 && /--no-split-plot/.test(r.err), r.err);
+  r = run('design', 'sp.aikidoe.json', '--runs', '16', '--force', '--no-split-plot');
+  check('--no-split-plot: complete randomisation', r.code === 0 && /randomisation complete/.test(r.out), r.out + r.err);
+  r = run('design', 'sp.aikidoe.json', '--full', '--force');
+  const spS = parseStudy(readFileSync(join(dir, 'sp.aikidoe.json'), 'utf8'));
+  writeFileSync(join(dir, 'sp.csv'), 'run,y\n' + spS.design.runs.map(x => `${x.run},${(5 + x.settings.t / 10).toFixed(3)}`).join('\n') + '\n');
+  run('import', 'sp.aikidoe.json', 'sp.csv');
+  r = run('fit', 'sp.aikidoe.json', 'y ~ main');
+  check('fit on a split-plot warns about least squares', /warning: split-plot design/.test(r.out), r.out + r.err);
 
   section('errors');
   writeFileSync(join(dir, 'bad.csv'), 'run,yield\n99,5\n3,abc\n');

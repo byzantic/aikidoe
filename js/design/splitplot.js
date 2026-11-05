@@ -29,20 +29,23 @@ const binom = (n, r) => { let x = 1; for (let i = 0; i < r; i++) x = x * (n - i)
 
 // ---------------------------------------------------------------- regular fractions
 
-// word-length pattern of a set of factor masks: words are the subsets whose masks XOR to 0
-function wlpMasks(masks, basis, gens) {
-  // with a basis of single-bit factors, words correspond to subsets of the generated factors:
-  // the XOR of a subset S of generators, if it touches only assigned basic bits, gives the word
-  // S ∪ {basic factors of those bits}; bits of unassigned (dummy) columns make it no word
-  const A = new Array(masks.length).fill(0), p = gens.length;
+// Word-length pattern. With every base column a factor, words correspond to subsets S of the
+// generated factors: the XOR of S gives the word S ∪ {base factors of its bits}. Base columns
+// that carry no factor (an extra whole-plot column when there are fewer whole-plot factors than
+// whole-plot base columns) count as pseudo-factors in the search, as FrF2 does — otherwise the
+// search would happily alias effects with whole-plot contrasts. With realOnly, words touching
+// them are skipped: the pattern among the real factors, for reporting.
+function wlpMasks(k, basis, gens, realOnly = false) {
+  const A = new Array(k + 31).fill(0), p = gens.length;
   let m = 0, inSet = 0, size = 0;
   for (let s = 1; s < 1 << p; s++) {
     const j = 31 - Math.clz32(s & -s);
     m ^= gens[j]; inSet ^= 1 << j; size += (inSet >> j & 1) ? 1 : -1;
-    if ((m & ~basis) !== 0) continue;
+    if (realOnly && (m & ~basis) !== 0) continue;
     A[size + popcount(m) - 1]++;
   }
-  return A;
+  let n = A.length; while (n > k && !A[n - 1]) n--;
+  return A.slice(0, Math.max(n, k));
 }
 const cmpWLP = (a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i++) { const d = (a[i] || 0) - (b[i] || 0); if (d) return d; } return 0; };
 
@@ -84,7 +87,7 @@ export function splitPlotFraction(htc, { runs, wholePlots, replicates = 1, names
     if (p1 > wpC.length || p2 > spC.length) throw new Error('these factors do not fit this split-plot structure');
     let best = null, bestW = null;
     const consider = (g1, g2) => {
-      const g = [...g1, ...g2], w = wlpMasks(new Array(k), basis, g);
+      const g = [...g1, ...g2], w = wlpMasks(k, basis, g);
       if (!best || cmpWLP(w, bestW) < 0) { best = [g1.slice(), g2.slice()]; bestW = w; }
     };
     const combos = (arr, r, f) => {
@@ -103,11 +106,11 @@ export function splitPlotFraction(htc, { runs, wholePlots, replicates = 1, names
       const rnd = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
       const pick = (arr, r) => { const s = arr.slice(); for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; } return s.slice(0, r); };
       for (let r = 0; r < restarts; r++) {
-        let g1 = pick(wpC, p1), g2 = pick(spC, p2), w = wlpMasks(new Array(k), basis, [...g1, ...g2]);
+        let g1 = pick(wpC, p1), g2 = pick(spC, p2), w = wlpMasks(k, basis, [...g1, ...g2]);
         for (;;) {
           let move = null, mw = w;
           const used = new Set([...g1, ...g2]);
-          const tryAt = (arr, cands, j, which) => { for (const c of cands) { if (used.has(c)) continue; const h = arr.slice(); h[j] = c; const hw = wlpMasks(new Array(k), basis, which ? [...g1, ...h] : [...h, ...g2]); if (cmpWLP(hw, mw) < 0) { move = [which, h]; mw = hw; } } };
+          const tryAt = (arr, cands, j, which) => { for (const c of cands) { if (used.has(c)) continue; const h = arr.slice(); h[j] = c; const hw = wlpMasks(k, basis, which ? [...g1, ...h] : [...h, ...g2]); if (cmpWLP(hw, mw) < 0) { move = [which, h]; mw = hw; } } };
           for (let j = 0; j < p1; j++) tryAt(g1, wpC, j, 0);
           for (let j = 0; j < p2; j++) tryAt(g2, spC, j, 1);
           if (!move) break;
@@ -146,7 +149,7 @@ export function splitPlotFraction(htc, { runs, wholePlots, replicates = 1, names
     }
     words.sort((a, b) => a.split(':').length - b.split(':').length || a.localeCompare(b));
   }
-  const wlp = wlpMasks(new Array(k), basis, [...wpGens, ...spGens]);
+  const wlp = wlpMasks(k, basis, [...wpGens, ...spGens], true).slice(0, k);
   const res = wlp.findIndex(a => a > 0);
   // effects up to order 2: alias chains and whether each is a whole-plot effect
   const effects = [];
@@ -154,6 +157,9 @@ export function splitPlotFraction(htc, { runs, wholePlots, replicates = 1, names
   for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) effects.push({ name: `${ids[a]}:${ids[b]}`, mask: masks[a] ^ masks[b] });
   const groups = new Map();
   for (const e of effects) { if (!groups.has(e.mask)) groups.set(e.mask, []); groups.get(e.mask).push(e.name); }
+  // an effect whose column equals a product of unassigned whole-plot columns is confounded with
+  // a contrast between whole plots
+  for (const [m, g] of groups) if ((m & basis) === 0) g.push(`(whole-plot contrast ${expr(m)})`);
   const chains = [...groups.values()].filter(g => g.length > 1);
   const wholePlotEffects = effects.filter(e => (e.mask & ~WP) === 0).map(e => e.name);
   const params = {
@@ -161,7 +167,7 @@ export function splitPlotFraction(htc, { runs, wholePlots, replicates = 1, names
     generators: [...wpIdx.slice(nb1), ...spIdx.slice(nb2)].map(j => `${ids[j]}=${expr(masks[j])}`),
     definingRelation: words, wlp, resolution: res < 0 ? Infinity : res + 1, aliasChains: chains.map(c => c.join(' = ')), wholePlotEffects,
     // with k1 < q1 the extra whole-plot base columns carry no factor: they only separate whole plots
-    ...(nb1 < q1 ? { unassignedWholePlotColumns: q1 - nb1 } : {}),
+    ...(nb1 < q1 ? { unassignedWholePlotColumns: q1 - nb1, wlpWithPseudo: wlpMasks(k + q1 - nb1, basis, [...wpGens, ...spGens]).slice(0, k + q1 - nb1) } : {}),
   };
   return replicateWP({ kind: 'split-plot-fraction', params, levels: new Array(k).fill(2), X: base, runKind: base.map(() => 'fraction'), wholePlot: wp }, replicates);
 }

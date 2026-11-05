@@ -105,7 +105,8 @@ export function runSheetHTML(study, { title, date } = {}) {
   let body = '', prev;
   for (const r of s.rows) {
     if (group && r[gi] !== prev) {
-      body += `<tr class="g"><th colspan="${s.header.length}">${group === 'wholePlot' ? 'Whole plot' : 'Block'} ${esc(r[gi])}</th></tr>\n`;
+      const set = group === 'wholePlot' ? study.factors.filter(f => f.htc).map(f => `${esc(f.name)} ${esc(show(r[s.header.indexOf(f.id)]))}${f.units ? ` ${esc(f.units)}` : ''}`).join(', ') : '';
+      body += `<tr class="g"><th colspan="${s.header.length}">${group === 'wholePlot' ? 'Whole plot' : 'Block'} ${esc(r[gi])}${set ? ` <span class="u">— set once: ${set}</span>` : ''}</th></tr>\n`;
       prev = r[gi];
     }
     body += '<tr>' + r.map((v, j) => `<td${j >= resStart ? ' class="res"' : typeof v === 'number' ? ' class="n"' : ''}>${esc(show(v))}</td>`).join('') + '</tr>\n';
