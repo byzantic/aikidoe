@@ -57,7 +57,9 @@ cases.append({'name': 'lu exactly singular', 'input': {'op': 'lu', 'A': A},
 for name, A, unique in [('random symmetric 5x5', sym(5), True),
                         ('random symmetric 10x10', sym(10), True),
                         ('SPD 8x8', spd(8), True),
-                        ('Hilbert 10', hilbert(10), True),
+                        # Hilbert 10's small eigenvalues are ~1e-12 apart, so its eigenvectors are
+                        # only determined to ~1e-4 and differ between numpy builds: values only
+                        ('Hilbert 10', hilbert(10), False),
                         ('repeated eigenvalue: I + u uT', np.eye(5) + np.outer(*[np.arange(1.0, 6)] * 2), False),
                         ('diagonal', np.diag([3.0, -1, 2]), True)]:
     w, V = np.linalg.eigh(A)
