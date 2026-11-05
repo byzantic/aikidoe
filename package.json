@@ -8,7 +8,9 @@
   "scripts": {
     "test": "node tests/run-all.mjs",
     "fixtures": "node tools/regen-fixtures.mjs",
-    "fixtures:check": "node tools/regen-fixtures.mjs --out .fixtures-fresh && node tools/check-fixtures.mjs --fresh .fixtures-fresh"
+    "fixtures:check": "node tools/regen-fixtures.mjs --out .fixtures-fresh && node tools/check-fixtures.mjs --fresh .fixtures-fresh",
+    "ui": "node tools/serve.mjs",
+    "test:ui": "node tests/ui/smoke.mjs"
   },
   "engines": {
     "node": ">=20"

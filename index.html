@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aikidoe · design of experiments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">◇</span> aikidoe</div>
+  <input id="study-name" class="study-name" aria-label="Study name" spellcheck="false">
+  <div class="toolbar">
+    <button class="btn" id="btn-new">New</button>
+    <button class="btn" id="btn-examples">Examples</button>
+    <button class="btn" id="btn-open">Open…</button>
+    <button class="btn" id="btn-save">Save</button>
+    <button class="btn" id="btn-share" title="Copy a link that contains this study">Link</button>
+    <input type="file" id="file-in" accept=".json,.aikidoe.json" hidden>
+  </div>
+</header>
+<nav class="steps" role="tablist" id="steps"></nav>
+<main id="main"></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="ui/app.js"></script>
+</body>
+</html>

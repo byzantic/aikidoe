@@ -14,3 +14,22 @@ jobs:
       - run: npm test
       - name: Minimum-aberration catalogue is reproduced by the search
         run: node tools/build-catalogue.mjs --check
+
+  # The browser UI, driven through Define → Design → Run → Analyse in Chromium (issue #13)
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright@1.63.0
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/ui/smoke.mjs --shots ui-shots
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-shots
+          path: ui-shots/
+          if-no-files-found: ignore
