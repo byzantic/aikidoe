@@ -1,0 +1,11 @@
+{
+  "name": "aikidoe",
+  "version": "0.0.0",
+  "description": "Design of Experiments assistant in the browser",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "echo \"no tests yet\""
+  }
+}
