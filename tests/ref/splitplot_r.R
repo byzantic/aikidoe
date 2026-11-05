@@ -46,8 +46,12 @@ for (o in opt) safe(o$name, list(kind = "optimal", model = o$aikidoe, wholePlots
   })
   d <- as.data.frame(d)
   message("skpr split-plot columns: ", paste(names(d), collapse = ", "))
-  wpid <- d[[grep("^Block", names(d))[1]]]
-  vars <- setdiff(names(d), grep("^Block", names(d), value = TRUE))
+  # skpr marks whole plots in the row names ("1.1", "1.2", … = whole plot 1) or a Block column;
+  # rows come grouped by whole plot
+  message("skpr row names: ", paste(head(rownames(d), 6), collapse = " "))
+  bc <- grep("^Block", names(d), value = TRUE)
+  wpid <- if (length(bc)) d[[bc[1]]] else if (all(grepl("\\.", rownames(d)))) sub("\\..*$", "", rownames(d)) else rep(seq_len(o$W), each = o$m)
+  vars <- setdiff(names(d), bc)
   if ("G" %in% vars) d$G <- factor(as.character(d$G), levels = c("b", "c", "a"))
   rows <- lapply(seq_len(nrow(d)), function(i) lapply(as.list(d[i, vars, drop = FALSE]), function(v) if (is.factor(v)) as.character(v) else v))
   list(rows = rows, wholePlot = I(as.integer(factor(wpid, levels = unique(wpid)))), logDet = gls_logdet(o$model, d, o$eta, wpid))
