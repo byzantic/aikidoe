@@ -108,6 +108,8 @@ export const EXAMPLES = [
       const fns = Object.fromEntries(Object.entries(sim.responses).map(([k, e]) => [k, compileExpression(e)]));
       return createStudy({ ...s, design, observations: design.runs.flatMap(r => Object.entries(fns).map(([id, f]) => ({ run: r.run, response: id, value: f(r.settings) }))) });
     } },
+  { id: 'coupler', title: 'Coupler yield: comb-over', step: 'optimise', url: 'examples/coupler-10dB-ro4350b.aikidoe.json',
+    blurb: 'A 10 dB coupled-line coupler on RO4350B, simulated by comb-over: yield of coupling 10 ± 0.5 dB and directivity ≥ 12 dB against etch bias and εr. Try adding I(etch^3) to the surrogate.' },
   { id: 'gate-oxide', title: 'Gate oxide anneal (split-plot)', step: 'run', url: 'examples/gate-oxide-anneal.aikidoe.json',
     blurb: 'The spec §4 example: furnace temperature and ambient set per run, drop-in sites, a missing value.' },
 ];

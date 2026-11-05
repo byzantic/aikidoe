@@ -1,0 +1,20 @@
+comb-over d73e823bf48fb2238478313c5a94b0205243d83a
+https://github.com/byzantic/comb-over
+entries: js/netlist.js, js/solver.js, js/expr.js
+files:
+  js/capacitors.js
+  js/discontinuities.js
+  js/expr.js
+  js/fieldlines.js
+  js/linalg.js
+  js/microstrip.js
+  js/netlist.js
+  js/resistors.js
+  js/section.js
+  js/solver.js
+  js/substrates.js
+  js/synth-ideal.js
+  js/tee.js
+  solver/mtl2d.js
+  solver/numeric.js
+  solver/thick.js

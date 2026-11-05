@@ -96,6 +96,7 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd"] [--sd-model "y_logsd ~ …"] [--goal target\|mse\|maximize\|minimize] [--target T] [--max-sd s] [--at …]` | propagation of error and dual-response optimisation |
 | `design STUDY --lhs [--runs N]` | maximin Latin hypercube for a simulator (default quadratic surrogate) |
 | `simulator STUDY --expression "y=…" … \| --module sim.mjs` | the study's simulator: formulas per response, or a Node module exporting `run(settingsList)` |
+| `comb-over STUDY NETLIST.cir --factor etch=8 --factor er=0.025 --factor w --metric "coupling=-db(S31) @ 5G" --spec "coupling=9.5:10.5"` | a study whose simulator is [comb-over](https://github.com/byzantic/comb-over): factors from `.param`s, substrate keys and etch bias; metrics over S-parameters |
 | `simulate STUDY [--all]` | run the design on the simulator, results stored as observations |
 | `tolerance STUDY "A=sd" "B=uniform:sd" "C=truncated:sd:at"` | tolerance distributions of the factors' actual values |
 | `spec STUDY RESPONSE [--lower L] [--upper U]` | specification limits for yield |

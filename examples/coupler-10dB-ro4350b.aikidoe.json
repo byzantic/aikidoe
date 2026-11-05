@@ -1,0 +1,660 @@
+{
+  "aikidoe": 1,
+  "name": "10 dB coupler on RO4350B: etch and εr yield",
+  "seed": 21,
+  "factors": [
+    {
+      "id": "etch",
+      "name": "etch bias (per edge)",
+      "type": "continuous",
+      "units": "µm",
+      "htc": false,
+      "note": "nominal 0",
+      "low": -32,
+      "high": 32,
+      "transform": "none",
+      "tolerance": 8
+    },
+    {
+      "id": "er",
+      "name": "substrate er",
+      "type": "continuous",
+      "htc": false,
+      "note": "nominal 3.66",
+      "low": 3.56,
+      "high": 3.76,
+      "transform": "none",
+      "tolerance": 0.025
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "coupling",
+      "name": "coupling",
+      "units": "dB",
+      "goal": "none",
+      "levels": [
+        "run"
+      ],
+      "spec": {
+        "lower": 9.5,
+        "upper": 10.5
+      }
+    },
+    {
+      "id": "directivity",
+      "name": "directivity",
+      "units": "dB",
+      "goal": "none",
+      "levels": [
+        "run"
+      ],
+      "spec": {
+        "lower": 12
+      }
+    }
+  ],
+  "design": {
+    "kind": "lhs",
+    "params": {
+      "runs": 30,
+      "criterion": "maximin",
+      "minDist": 0.3333333333333333,
+      "seed": 21
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 21,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -1.0666666666666664,
+          "er": 3.69
+        }
+      },
+      {
+        "run": 2,
+        "order": 12,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -30.933333333333334,
+          "er": 3.716666666666667
+        }
+      },
+      {
+        "run": 3,
+        "order": 8,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 9.600000000000001,
+          "er": 3.7033333333333336
+        }
+      },
+      {
+        "run": 4,
+        "order": 6,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -13.866666666666667,
+          "er": 3.756666666666667
+        }
+      },
+      {
+        "run": 5,
+        "order": 26,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 30.93333333333333,
+          "er": 3.5633333333333335
+        }
+      },
+      {
+        "run": 6,
+        "order": 5,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 16,
+          "er": 3.67
+        }
+      },
+      {
+        "run": 7,
+        "order": 28,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 7.466666666666669,
+          "er": 3.5700000000000003
+        }
+      },
+      {
+        "run": 8,
+        "order": 15,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 3.200000000000003,
+          "er": 3.743333333333333
+        }
+      },
+      {
+        "run": 9,
+        "order": 1,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -11.733333333333334,
+          "er": 3.6833333333333336
+        }
+      },
+      {
+        "run": 10,
+        "order": 17,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 1.06666666666667,
+          "er": 3.6233333333333335
+        }
+      },
+      {
+        "run": 11,
+        "order": 23,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 28.799999999999997,
+          "er": 3.73
+        }
+      },
+      {
+        "run": 12,
+        "order": 14,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 5.333333333333336,
+          "er": 3.6633333333333336
+        }
+      },
+      {
+        "run": 13,
+        "order": 19,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 13.866666666666667,
+          "er": 3.6366666666666667
+        }
+      },
+      {
+        "run": 14,
+        "order": 11,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -28.8,
+          "er": 3.6300000000000003
+        }
+      },
+      {
+        "run": 15,
+        "order": 25,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 26.666666666666664,
+          "er": 3.6500000000000004
+        }
+      },
+      {
+        "run": 16,
+        "order": 4,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -5.333333333333332,
+          "er": 3.6566666666666667
+        }
+      },
+      {
+        "run": 17,
+        "order": 7,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -26.666666666666668,
+          "er": 3.5966666666666667
+        }
+      },
+      {
+        "run": 18,
+        "order": 9,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 18.133333333333333,
+          "er": 3.736666666666667
+        }
+      },
+      {
+        "run": 19,
+        "order": 13,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -3.1999999999999993,
+          "er": 3.5833333333333335
+        }
+      },
+      {
+        "run": 20,
+        "order": 16,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 20.266666666666666,
+          "er": 3.576666666666667
+        }
+      },
+      {
+        "run": 21,
+        "order": 29,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 24.53333333333333,
+          "er": 3.6966666666666668
+        }
+      },
+      {
+        "run": 22,
+        "order": 18,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 22.4,
+          "er": 3.6100000000000003
+        }
+      },
+      {
+        "run": 23,
+        "order": 10,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -18.133333333333333,
+          "er": 3.6433333333333335
+        }
+      },
+      {
+        "run": 24,
+        "order": 2,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -20.266666666666666,
+          "er": 3.71
+        }
+      },
+      {
+        "run": 25,
+        "order": 27,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -7.466666666666665,
+          "er": 3.7233333333333336
+        }
+      },
+      {
+        "run": 26,
+        "order": 20,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -24.53333333333333,
+          "er": 3.75
+        }
+      },
+      {
+        "run": 27,
+        "order": 3,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -9.600000000000001,
+          "er": 3.6166666666666667
+        }
+      },
+      {
+        "run": 28,
+        "order": 24,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -22.4,
+          "er": 3.6766666666666667
+        }
+      },
+      {
+        "run": 29,
+        "order": 22,
+        "kind": "space-filling",
+        "settings": {
+          "etch": 11.733333333333334,
+          "er": 3.6033333333333335
+        }
+      },
+      {
+        "run": 30,
+        "order": 30,
+        "kind": "space-filling",
+        "settings": {
+          "etch": -16,
+          "er": 3.5900000000000003
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "coupling",
+      "value": 10.029139532888909
+    },
+    {
+      "run": 1,
+      "response": "directivity",
+      "value": 13.238466319467644
+    },
+    {
+      "run": 2,
+      "response": "coupling",
+      "value": 8.150147415768853
+    },
+    {
+      "run": 2,
+      "response": "directivity",
+      "value": 13.933136316375109
+    },
+    {
+      "run": 3,
+      "response": "coupling",
+      "value": 10.548535760053085
+    },
+    {
+      "run": 3,
+      "response": "directivity",
+      "value": 12.651922457023053
+    },
+    {
+      "run": 4,
+      "response": "coupling",
+      "value": 9.357189331133235
+    },
+    {
+      "run": 4,
+      "response": "directivity",
+      "value": 13.666102025529534
+    },
+    {
+      "run": 5,
+      "response": "coupling",
+      "value": 11.44037507340763
+    },
+    {
+      "run": 5,
+      "response": "directivity",
+      "value": 11.626737708908426
+    },
+    {
+      "run": 6,
+      "response": "coupling",
+      "value": 10.828714534835077
+    },
+    {
+      "run": 6,
+      "response": "directivity",
+      "value": 12.349856437386826
+    },
+    {
+      "run": 7,
+      "response": "coupling",
+      "value": 10.412139987929274
+    },
+    {
+      "run": 7,
+      "response": "directivity",
+      "value": 12.949235567466301
+    },
+    {
+      "run": 8,
+      "response": "coupling",
+      "value": 10.257472425096037
+    },
+    {
+      "run": 8,
+      "response": "directivity",
+      "value": 12.923604612750822
+    },
+    {
+      "run": 9,
+      "response": "coupling",
+      "value": 9.452859223062632
+    },
+    {
+      "run": 9,
+      "response": "directivity",
+      "value": 13.77313332247713
+    },
+    {
+      "run": 10,
+      "response": "coupling",
+      "value": 10.115749357505097
+    },
+    {
+      "run": 10,
+      "response": "directivity",
+      "value": 13.241347579024243
+    },
+    {
+      "run": 11,
+      "response": "coupling",
+      "value": 11.385011632788558
+    },
+    {
+      "run": 11,
+      "response": "directivity",
+      "value": 11.63285530210512
+    },
+    {
+      "run": 12,
+      "response": "coupling",
+      "value": 10.336619293128644
+    },
+    {
+      "run": 12,
+      "response": "directivity",
+      "value": 12.940021054304061
+    },
+    {
+      "run": 13,
+      "response": "coupling",
+      "value": 10.725323616166671
+    },
+    {
+      "run": 13,
+      "response": "directivity",
+      "value": 12.50294188634208
+    },
+    {
+      "run": 14,
+      "response": "coupling",
+      "value": 8.284578690856652
+    },
+    {
+      "run": 14,
+      "response": "directivity",
+      "value": 14.320155988069196
+    },
+    {
+      "run": 15,
+      "response": "coupling",
+      "value": 11.280867557000816
+    },
+    {
+      "run": 15,
+      "response": "directivity",
+      "value": 11.800789423540765
+    },
+    {
+      "run": 16,
+      "response": "coupling",
+      "value": 9.796429635651549
+    },
+    {
+      "run": 16,
+      "response": "directivity",
+      "value": 13.526645282361528
+    },
+    {
+      "run": 17,
+      "response": "coupling",
+      "value": 8.43688877919183
+    },
+    {
+      "run": 17,
+      "response": "directivity",
+      "value": 14.461674604577706
+    },
+    {
+      "run": 18,
+      "response": "coupling",
+      "value": 10.938333287157615
+    },
+    {
+      "run": 18,
+      "response": "directivity",
+      "value": 12.165388533670718
+    },
+    {
+      "run": 19,
+      "response": "coupling",
+      "value": 9.88470505443244
+    },
+    {
+      "run": 19,
+      "response": "directivity",
+      "value": 13.555845068537238
+    },
+    {
+      "run": 20,
+      "response": "coupling",
+      "value": 10.993673478312797
+    },
+    {
+      "run": 20,
+      "response": "directivity",
+      "value": 12.20253195425271
+    },
+    {
+      "run": 21,
+      "response": "coupling",
+      "value": 11.201651332676697
+    },
+    {
+      "run": 21,
+      "response": "directivity",
+      "value": 11.875148388962335
+    },
+    {
+      "run": 22,
+      "response": "coupling",
+      "value": 11.092760062205894
+    },
+    {
+      "run": 22,
+      "response": "directivity",
+      "value": 12.058325075996358
+    },
+    {
+      "run": 23,
+      "response": "coupling",
+      "value": 9.051466781013866
+    },
+    {
+      "run": 23,
+      "response": "directivity",
+      "value": 14.135398932665417
+    },
+    {
+      "run": 24,
+      "response": "coupling",
+      "value": 8.94157906978249
+    },
+    {
+      "run": 24,
+      "response": "directivity",
+      "value": 13.992163401764124
+    },
+    {
+      "run": 25,
+      "response": "coupling",
+      "value": 9.705014739759575
+    },
+    {
+      "run": 25,
+      "response": "directivity",
+      "value": 13.485442740160654
+    },
+    {
+      "run": 26,
+      "response": "coupling",
+      "value": 8.666680412178888
+    },
+    {
+      "run": 26,
+      "response": "directivity",
+      "value": 13.918879716542214
+    },
+    {
+      "run": 27,
+      "response": "coupling",
+      "value": 9.549345558040924
+    },
+    {
+      "run": 27,
+      "response": "directivity",
+      "value": 13.834787040295701
+    },
+    {
+      "run": 28,
+      "response": "coupling",
+      "value": 8.783581892248877
+    },
+    {
+      "run": 28,
+      "response": "directivity",
+      "value": 14.141869144521104
+    },
+    {
+      "run": 29,
+      "response": "coupling",
+      "value": 10.620001905340358
+    },
+    {
+      "run": 29,
+      "response": "directivity",
+      "value": 12.660646621313436
+    },
+    {
+      "run": 30,
+      "response": "coupling",
+      "value": 9.163426351413838
+    },
+    {
+      "run": 30,
+      "response": "directivity",
+      "value": 14.207713697962577
+    }
+  ],
+  "simulator": {
+    "adapter": "comb-over",
+    "netlist": ".title 10 dB coupled-line coupler on JLC RO4350B 0.508 mm, from physical dimensions (5 GHz)\n# The section is given by strip width W and gap S; Z0e/Z0o, the even/odd effective permittivities\n# and the per-mode losses come from the microstrip models (manual §4.6) for the .substrate below.\n# W and S are tunable, so the optimiser can adjust the actual copper dimensions.\n.freq 1G 9G 801\n.ref 5G\n.substrate jlc-ro4350b-0.508\n.param w = 0.8831mm tune 0.5mm 1.3mm\n.param s = 0.1025mm tune 0.1mm 0.4mm      # 0.1 mm is JLC's minimum space\nport in    # 1\nport thru  # 2\nport cpl   # 3\nport iso   # 4\ncline K geom=msl W=w S=s\n  len 90deg                 # at .ref, mean modal velocity\n  A in   cpl\n  B thru iso\nend\n.goal db(S31) = -10 4.5G 5.5G\n.goal db(S11) < -25 4G 6G\n.plot ylim=-50,0 db(S11) db(S21) db(S31) db(S41)\n.plot title=Directivity_(dB) db(S31/S41)\n.layout coupler K\n",
+    "factors": {
+      "etch": {
+        "etch": true
+      },
+      "er": {
+        "substrate": "er"
+      }
+    },
+    "metrics": {
+      "coupling": "-db(S31) @ 5G",
+      "directivity": "db(S31/S41) @ 5G"
+    }
+  },
+  "history": [],
+  "description": "Worked example for the comb-over adapter (#21): the 10 dB coupled-line coupler of comb-over examples/coupler-10dB-ro4350b.cir (JLC RO4350B 0.508 mm, 5 GHz). Factors: etch bias per edge (µm; positive narrows the strips and widens the gap), sd 8 µm — an assumed value, not a JLCPCB figure; substrate εr, sd 0.025 (Rogers quotes ±0.05 on Dk). Specs: coupling 10 ± 0.5 dB and directivity ≥ 12 dB at 5 GHz. (The issue asked for directivity > 15 dB; this design has 13.2 dB nominal, so 15 dB would give zero yield.) A cubic etch term (coupling ~ quadratic + I(etch^3)) cuts the surrogate error by about 3×."
+}

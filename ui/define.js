@@ -3,6 +3,7 @@ import { h, select, messages } from './dom.js';
 import { siteScheme, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugePanel } from './gauge.js';
 import { num } from '../js/format.js';
+import { combOverChoice, combOverEditor } from './combover.js';
 
 const MEASURED = [
   { value: 'run', label: 'once per run', levels: ['run'] },
@@ -114,7 +115,8 @@ export const SIMULATOR_EDITORS = {
       h('input', { type: 'text', class: 'formula', style: 'width:32em', value: d.simulator.responses?.[r.id] ?? '', placeholder: '—', 'aria-label': `simulator ${r.id}`,
         onchange: (e) => update(x => { x.simulator.responses ??= {}; if (e.target.value.trim()) x.simulator.responses[r.id] = e.target.value.trim(); else delete x.simulator.responses[r.id]; }) }))))),
 };
-export const SIMULATOR_CHOICES = [{ value: 'expression', label: 'formulas', make: () => ({ adapter: 'expression', responses: {} }) }];
+export const SIMULATOR_CHOICES = [{ value: 'expression', label: 'formulas', make: () => ({ adapter: 'expression', responses: {} }) }, combOverChoice];
+SIMULATOR_EDITORS['comb-over'] = combOverEditor;
 
 function simulatorPanel(d, update) {
   const sim = d.simulator;

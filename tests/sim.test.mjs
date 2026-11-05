@@ -100,8 +100,10 @@ section('Monte Carlo yield (done-when: analytic yield inside the interval)');
   // a surrogate error comparable to the margin makes the result untrustworthy
   const t1 = monteCarloYield((t) => ({ y: t.a }), { a: 0 }, { a: 0.3 }, [{ id: 'y', lower: -0.5, upper: 0.5, cvError: 0.001 }], { N: 20000 });
   const t2 = monteCarloYield((t) => ({ y: t.a }), { a: 0 }, { a: 0.3 }, [{ id: 'y', lower: -0.5, upper: 0.5, cvError: 0.1 }], { N: 20000 });
-  check('small CV error: trustworthy', t1.trustworthy && t1.bounds.loose - t1.bounds.strict < 0.01);
-  check('CV error ~ ⅕ of the margin: flagged, with bounds', !t2.trustworthy && t2.bounds.strict < t2.yield && t2.yield < t2.bounds.loose);
+  check('small CV error: trust good', t1.trust === 'good' && t1.bounds.loose - t1.bounds.strict < 0.01);
+  check('CV error ⅕ of the margin: poor, flagged, with bounds', t2.trust === 'poor' && !t2.trustworthy && t2.bounds.strict < t2.yield && t2.yield < t2.bounds.loose);
+  const t3 = monteCarloYield((t) => ({ y: t.a }), { a: 0 }, { a: 0.3 }, [{ id: 'y', lower: -0.5, upper: 0.5, cvError: 0.02 }], { N: 20000 });
+  check(`CV error 1/25 of the margin: fair (bounds ${t3.bounds.strict.toFixed(3)} … ${t3.bounds.loose.toFixed(3)})`, t3.trust === 'fair' && t3.trustworthy);
   throws('no spec limits', () => monteCarloYield(() => ({}), {}, {}, []), /no response has specification limits/);
 }
 

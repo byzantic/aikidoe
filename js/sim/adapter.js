@@ -22,6 +22,9 @@ export async function runOnSimulator(study, adapter, { batch = 50, onProgress, a
   for (let i = 0; i < todo.length; i += batch) {
     const part = todo.slice(i, i + batch);
     const out = await adapter.run(part.map(r => r.settings));
+    // an adapter reports a failed run as { __error }; stored as missing, unless every run fails
+    const failed = out.filter(o => o?.__error);
+    if (failed.length === part.length) throw new Error(`${adapter.name}: ${failed[0].__error}`);
     part.forEach((r, j) => { for (const id of resp) { const v = out[j][id]; obs.push({ run: r.run, response: id, value: Number.isFinite(v) ? v : null }); } });
     onProgress?.(Math.min(i + batch, todo.length), todo.length);
   }

@@ -44,6 +44,11 @@
 //   design STUDY --lhs [--runs N]        maximin Latin hypercube (computer experiments; default 10 runs per factor)
 //   simulator STUDY (--expression "y=…" … | --module FILE.mjs [--export run])   the study's simulator
 //        (FILE.mjs exports async run(settingsList) → [{ response: value }], or simulate(settings))
+//   comb-over STUDY NETLIST.cir --factor SPEC … --metric "id=EXPR @ F" … [--spec "id=lo:hi"] [--force]
+//        a study whose simulator is comb-over: SPEC is NAME[:low:high][=tolerance], NAME a .param
+//        (range: its tune limits), a substrate key (er, h mm, t µm, tand) or etch (µm per edge,
+//        narrows W= and widens S=); EXPR a comb-over trace (db(S31), db(S31/S41) …) at a frequency,
+//        or min|max|mean(EXPR) @ F1..F2
 //   simulate STUDY [--all] [--batch n]   run the design's runs on the study's simulator
 //   tolerance STUDY "A=sd" "B=uniform:sd" "C=truncated:sd:at" …   tolerance of each factor's actual value
 //   spec STUDY RESPONSE [--lower L] [--upper U] | --none    specification limits for yield
@@ -81,6 +86,7 @@ import { parseCSV } from '../js/io/csv.js';
 import { lhsDesign, fitSurrogates, surrogateYield, surrogateSensitivity, directYieldCheck } from '../js/sim/surrogate.js';
 import { runOnSimulator } from '../js/sim/adapter.js';
 import { studyAdapter, registerAdapter } from '../js/sim/adapters.js';
+import { combOverStudy } from '../js/sim/combover.js';
 import { toleranceSd } from '../js/sim/sample.js';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -683,6 +689,33 @@ function cmdSimulator({ pos, opt }) {
   out(`${file}: simulator ${sim.adapter}${sim.path ? ' ' + sim.path : ''}`);
 }
 
+const SUBSTRATE_KEYS = ['er', 'h', 't', 'tand', 'ftand', 'sigma', 'rough'];
+function cmdCombOver({ pos, opt }) {
+  const [file, cir] = pos;
+  if (!file || !cir) fail('comb-over: give the study file and the netlist');
+  if (existsSync(file) && !opt.force) fail(`${file} exists (use --force to replace it)`);
+  if (!existsSync(cir)) fail(`${cir}: no such file`);
+  const factors = list(opt.factor).map(spec => {
+    const [head, tol] = String(spec).split('=');
+    const [nm, lo, hi] = head.split(':');
+    const base = nm === 'etch' ? { etch: true } : nm.startsWith('param.') ? { param: nm.slice(6), id: nm.slice(6) } : SUBSTRATE_KEYS.includes(nm.toLowerCase()) ? { substrate: nm.toLowerCase() } : { param: nm };
+    return { ...base, ...(lo !== undefined ? { low: Number(lo), high: Number(hi ?? fail(`--factor ${spec}: give low and high`)) } : {}), ...(tol !== undefined ? { tolerance: parseTolerance(tol) } : {}) };
+  });
+  if (!factors.length) fail('comb-over: give at least one --factor');
+  const metrics = {};
+  for (const m of list(opt.metric)) { const t = String(m), k = t.indexOf('='); if (k < 1) fail(`--metric "${t}": give id=EXPR @ FREQ`); metrics[t.slice(0, k).trim()] = t.slice(k + 1).trim(); }
+  if (!Object.keys(metrics).length) fail('comb-over: give at least one --metric');
+  const specs = {};
+  for (const sp of list(opt.spec)) { const [id, r] = String(sp).split('='); const [lo, hi] = (r ?? '').split(':'); specs[id] = { ...(lo !== '' && lo !== undefined ? { lower: Number(lo) } : {}), ...(hi !== '' && hi !== undefined ? { upper: Number(hi) } : {}) }; }
+  const doc = combOverStudy(readFileSync(cir, 'utf8'), { factors, metrics, specs, ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), ...(opt.name ? { name: String(opt.name) } : {}) });
+  const study = createStudy(doc);
+  save(file, study);
+  out(`created ${file}: comb-over simulator on ${cir}`);
+  out(table([{ key: 'id', label: 'factor', align: 'left' }, { key: 'name', label: 'netlist', align: 'left' }, { key: 'range', label: 'range', align: 'left' }, { key: 'note', label: '', align: 'left' }, { key: 'tol', label: 'tolerance', align: 'left' }],
+    study.factors.map(f => ({ ...f, range: `${num(f.low, 6)} … ${num(f.high, 6)}${f.units ? ' ' + f.units : ''}`, tol: f.tolerance !== undefined ? showTol(f.tolerance) : '' }))));
+  out(`metrics: ${Object.entries(metrics).map(([k, v]) => `${k} = ${v}${specs[k] ? ` (spec ${specs[k].lower ?? '−∞'} … ${specs[k].upper ?? '∞'})` : ''}`).join('; ')}`);
+}
+
 async function cmdSimulate({ pos, opt }) {
   const file = pos[0], study = load(file);
   const ad = await adapterFor(file, study);
@@ -752,7 +785,8 @@ async function cmdYield({ pos, opt }) {
     y.margins.map((m, i) => ({ ...m, spec: `${y.specs[i].lower ?? '−∞'} … ${y.specs[i].upper ?? '∞'}`, below: 100 * y.perResponse[i].below, above: 100 * y.perResponse[i].above }))));
   out(`\nyield ${num(100 * y.yield, 4)} %  (95% CI ${num(100 * y.lower, 4)} … ${num(100 * y.upper, 4)} %, ${N} samples of the surrogate)`);
   if (y.bounds) out(`with every limit moved by ±2·RMSE_cv: ${num(100 * y.bounds.strict, 4)} … ${num(100 * y.bounds.loose, 4)} %`);
-  if (!y.trustworthy) out('warning: the surrogate\'s cross-validated error is comparable to the margins to the spec limits — the yield depends on the surrogate more than on the sampling. Check on the simulator (--check M), add runs near the limits, or fit a better model.');
+  if (y.trust === 'poor') out('warning: not trustworthy — the surrogate\'s cross-validated error is comparable to the margins to the spec limits, so the yield depends on the surrogate more than on the process. Check on the simulator (--check M), add runs near the limits, narrow the ranges or fit a better model.');
+  else if (y.trust === 'fair') out(`note: the surrogate's error, not the sampling, limits this estimate (it could lie anywhere in ${num(100 * y.bounds.strict, 3)} … ${num(100 * y.bounds.loose, 3)} %); --check M compares with the simulator`);
   if (opt.check) {
     const ad = await adapterFor(file, study);
     const M = int(opt.check, 'check');
@@ -797,7 +831,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;
