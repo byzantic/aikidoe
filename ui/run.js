@@ -1,0 +1,88 @@
+// Run step: run sheet with results entered in place, downloads, results import (spec §12 step 3).
+import { h, messages, download, toast } from './dom.js';
+import { num } from '../js/format.js';
+import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
+import { parseNumber } from '../js/io/csv.js';
+
+export function render({ state, update, setDoc, setUI, go }) {
+  const study = state.study, ui = state.ui.run ??= {};
+  const sheet = runSheet(study);
+  const runs = study.design.runs, done = new Set(study.observations.filter(o => o.value !== null).map(o => o.run));
+  const base = (study.name || 'study').replace(/[^\w.-]+/g, '-');
+
+  // ---------------------------------------------------------------- summary and actions
+  const fileIn = h('input', { type: 'file', accept: '.csv,.txt,.tsv', hidden: true, id: 'results-in', onchange: async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const imp = importResults(study, await f.text());
+    setUI({ run: { ...ui, pending: { name: f.name, imp } } });
+  } });
+  const head = h('section', { class: 'panel' }, h('h2', {}, 'Run sheet'),
+    h('div', { class: 'row small', style: 'margin-bottom:10px' },
+      h('span', { class: 'stat' }, h('b', {}, runs.length), ' runs'),
+      h('span', { class: 'stat' }, 'results for ', h('b', { 'data-done': done.size }, done.size), ` of ${runs.length} `, h('span', { class: 'progress' }, h('span', { style: `width:${(100 * done.size / runs.length).toFixed(1)}%` }))),
+      h('span', { class: 'stat' }, `${study.design.kind}, randomisation ${study.design.randomisation}, seed ${study.design.params?.seed ?? study.seed}`)),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn', onclick: () => download(`${base}-run-sheet.csv`, runSheetCSV(study), 'text/csv') }, 'Download CSV'),
+      h('button', { class: 'btn', onclick: () => { const w = window.open(URL.createObjectURL(new Blob([runSheetHTML(study)], { type: 'text/html' })), '_blank'); if (!w) toast('Allow pop-ups to open the printable sheet'); } }, 'Printable sheet'),
+      h('button', { class: 'btn', onclick: () => fileIn.click() }, 'Import results…'), fileIn,
+      done.size ? h('button', { class: 'btn primary', onclick: () => go('analyse') }, 'Analyse →') : null),
+    h('p', { class: 'muted small' }, 'Run in the order shown. Type results into the sheet, or fill in the CSV and import it. Leave a cell blank if it was not measured; type NA if the measurement failed.'));
+
+  // ---------------------------------------------------------------- pending import
+  let pending = null;
+  if (ui.pending) {
+    const { imp, name } = ui.pending;
+    const errs = imp.problems.filter(p => p.severity === 'error'), warns = imp.problems.filter(p => p.severity === 'warning'), info = imp.problems.filter(p => p.severity === 'info');
+    const fmt = (p) => `${p.line ? `line ${p.line}${p.column ? `, ${p.column}` : ''}: ` : ''}${p.message}`;
+    const apply = (mode, force = false) => { try { const next = applyResults(study, imp, { mode, force }); state.ui.run = { ...ui, pending: null }; setDoc(structuredClone(next)); toast(`${imp.observations.length} value(s) imported`); } catch (e) { toast(e.message); } };
+    pending = h('section', { class: 'panel', id: 'import-review' }, h('h2', {}, `Import ${name}`),
+      h('p', { class: 'small' }, `${imp.observations.length} value(s) read (${imp.format ?? '?'} format).`),
+      messages(errs.map(fmt), 'error'), messages(warns.map(fmt), 'warning'), messages(info.map(fmt), 'ok'),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', disabled: !!errs.length || !imp.observations.length, onclick: () => apply('replace') }, 'Import (replace)'),
+        h('button', { class: 'btn', disabled: !!errs.length || !imp.observations.length, onclick: () => apply('append') }, 'Import (add to existing)'),
+        errs.length && imp.observations.length ? h('button', { class: 'btn danger', onclick: () => apply('replace', true) }, `Import the ${imp.observations.length} valid values anyway`) : null,
+        h('button', { class: 'btn', onclick: () => setUI({ run: { ...ui, pending: null } }) }, 'Cancel')));
+  }
+
+  // ---------------------------------------------------------------- the sheet, editable
+  const H = sheet.header, iRun = H.indexOf('run');
+  const metaIdx = sheet.metaColumns.map(m => H.indexOf(m));
+  const resIdx = sheet.resultColumns.map(c => H.indexOf(c.header));
+  const label = (key) => {
+    const f = study.factors.find(x => x.id === key); if (f) return [f.name, f.units ? h('span', { class: 'muted' }, ` (${f.units})`) : null];
+    const c = sheet.resultColumns.find(x => x.header === key);
+    if (c) { const r = study.responses.find(x => x.id === c.response); return [r.name, c.site !== undefined ? ` @ ${c.site}` : '', r.units ? h('span', { class: 'muted' }, ` (${r.units})`) : null]; }
+    return { order: 'order', run: 'run', wholePlot: 'whole plot', block: 'block', kind: 'type', note: 'notes' }[key] ?? key;
+  };
+  const setCell = (row, col, text) => update(d => {
+    const run = row[iRun], meta = Object.fromEntries(sheet.metaColumns.map((m, j) => [m, row[metaIdx[j]] === '' ? undefined : row[metaIdx[j]]]));
+    const same = (o) => o.run === run && o.response === col.response && String(o.site ?? '') === String(col.site ?? '') && sheet.metaColumns.every(m => String(o[m] ?? '') === String(meta[m] ?? ''));
+    d.observations = (d.observations ?? []).filter(o => !same(o));
+    const v = parseNumber(text);
+    if (v === undefined) return;
+    if (Number.isNaN(v)) { toast(`"${text}" is not a number`); return; }
+    const o = { run, response: col.response, value: v };
+    if (col.site !== undefined) o.site = col.site;
+    for (const m of sheet.metaColumns) if (meta[m] !== undefined) o[m] = meta[m];
+    d.observations.push(o);
+  });
+  const groupKey = H.includes('wholePlot') ? 'wholePlot' : H.includes('block') ? 'block' : null;
+  const rows = [];
+  let prev;
+  sheet.rows.forEach((row) => {
+    if (groupKey && row[H.indexOf(groupKey)] !== prev) { prev = row[H.indexOf(groupKey)]; rows.push(h('tr', { class: 'group' }, h('td', { colspan: H.length - 1 }, `${groupKey === 'wholePlot' ? 'Whole plot' : 'Block'} ${prev}`))); }
+    rows.push(h('tr', { 'data-run': row[iRun] }, H.map((key, j) => {
+      if (key === 'note') return null;
+      const ri = resIdx.indexOf(j);
+      if (ri >= 0) return h('td', { class: 'res' }, h('input', { type: 'text', inputmode: 'decimal', value: row[j] ?? '', 'aria-label': `run ${row[iRun]} ${H[j]}`,
+        onchange: (e) => setCell(row, sheet.resultColumns[ri], e.target.value) }));
+      const v = row[j];
+      return h('td', { class: typeof v === 'number' ? 'n' : '' }, typeof v === 'number' && !Number.isInteger(v) ? num(v, 6) : v);
+    })));
+  });
+  const table = h('section', { class: 'panel' }, h('div', { class: 'table-wrap' }, h('table', { class: 'data', id: 'run-sheet' },
+    h('thead', {}, h('tr', {}, H.filter(k => k !== 'note').map(k => h('th', { class: resIdx.includes(H.indexOf(k)) ? 'n' : '' }, label(k))))),
+    h('tbody', {}, rows))));
+  return h('div', {}, head, pending, table);
+}
