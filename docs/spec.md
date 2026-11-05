@@ -98,7 +98,7 @@ Study files are JSON; comments (`//`, `/* */`) and trailing commas are accepted 
 | Design | Notes | Issue |
 |---|---|---|
 | Full factorial 2^k and mixed-level | with centre points, replicates, blocking | #5 |
-| Regular fractional 2^(k−p) | generators chosen from minimum-aberration catalogue (k ≤ 15, up to 128 runs); user generators allowed; defining relation, resolution, full alias table to 2- or 3-factor interactions | #5 |
+| Regular fractional 2^(k−p) | generators chosen from minimum-aberration catalogue (k ≤ 15, up to 128 runs; built by aikidoe's own search and checked against FrF2's); user generators allowed, with signs; defining relation, resolution, full alias table to 2- or 3-factor interactions | #5 |
 | Fold-over | full and single-factor, for de-aliasing (U7) | #11 |
 | Plackett–Burman | N = 12, 20, 24, 28, … 48; partial alias (correlation) table | #5 |
 | Definitive screening (DSD) | Jones–Nachtsheim conference-matrix construction, 2k+1 (or 2k+3) runs; categorical 2-level extension | #10 |
