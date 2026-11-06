@@ -2,7 +2,7 @@
 // replicate); the nuisance; generation reproducible from the seed; across topics × difficulties
 // × 50 seeds the reference strategy earns full marks and one-factor-at-a-time scores lower; the
 // class-mode round trip from the CLI.
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -118,6 +118,10 @@ section('class mode round trip from the CLI');
     doe('sheet', 'cls/blocking-medium-20.aikidoe.json', '--csv', 'sheet.csv');
     r = doe('exercise', 'run', 'cls/blocking-medium-20.key.json', 'sheet.csv', '--out', 'results.csv');
     check('instructor: results for the student\'s run sheet', r.status === 0 && /results for 16 runs \(budget 16\)/.test(r.stdout), r.stdout + r.stderr);
+    const sheet = readFileSync(join(dir, 'sheet.csv'), 'utf8').trim().split('\n');
+    writeFileSync(join(dir, 'part.csv'), [sheet[0], ...sheet.slice(1).filter(l => Number(l.split(',')[1]) > 8)].join('\n') + '\n');
+    r = doe('exercise', 'run', 'cls/blocking-medium-20.key.json', 'part.csv');
+    check('instructor: a sheet without the earlier runs is refused (repeat runs are counted from run 1)', r.status === 1 && /runs 9–16 only; send the whole run sheet/.test(r.stderr), r.stdout + r.stderr);
     r = doe('import', 'cls/blocking-medium-20.aikidoe.json', 'results.csv');
     check('student: imports the results', r.status === 0 && /16 observation/.test(r.stdout), r.stdout + r.stderr);
     r = doe('exercise', 'grade', 'cls/blocking-medium-20.key.json', 'cls/blocking-medium-20.aikidoe.json');

@@ -79,6 +79,6 @@ them. A known hazard of choosing a model after looking at the data; the skill co
 - `doe exercise run KEY sheet.csv` counts repeat runs (the replicate index) within the sheet it is
   given. A stage-only sheet with centre points would reuse the earlier centre points' noise; the
   simulated user was told to run the full sheet (`doe sheet` writes every run, results unchanged
-  for runs already done). Now stated in the manual's class-mode section.
+  for runs already done). Fixed: `exercise run` now refuses a sheet that does not hold runs 1 to n.
 - The run sheets show log-scale settings with round-off (40.000000000000014 min); every agent had to
-  explain it. Worth fixing in `doe sheet`.
+  explain it. Fixed: decoded settings drop round-off (snapped to 12 significant digits when that moves them by less than 1e-14 relative).

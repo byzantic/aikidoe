@@ -127,8 +127,9 @@ doe exercise grade class/blocking-medium-100.key.json submitted.aikidoe.json
 ```
 
 Each time, send the whole run sheet (`doe sheet` writes every run, including those already done):
-repeat runs at the same settings are told apart by how many came before them in the sheet, and the
-results for earlier runs come back unchanged. The student imports `results.csv` with `doe import` (or the app's **Import results…**). The results
+repeat runs at the same settings are told apart by how many came before them in the sheet, so
+`exercise run` refuses a sheet that does not start at run 1, and the results for earlier runs come
+back unchanged. The student imports `results.csv` with `doe import` (or the app's **Import results…**). The results
 depend on the run order in the sheet, so a student who runs everything in one day and ignores the
 blocks sees the shift.
 

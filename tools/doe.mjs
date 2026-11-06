@@ -993,6 +993,10 @@ async function cmdExercise({ pos, opt }) {
         ...(col('wholePlot') >= 0 && r[col('wholePlot')] !== '' ? { wholePlot: r[col('wholePlot')] } : {}), ...(col('block') >= 0 && r[col('block')] !== '' ? { block: r[col('block')] } : {}),
         settings: Object.fromEntries(key.study.factors.map(f => { const j = col(f.id); if (j < 0) fail(`${pos[2]}: no column for factor ${f.id}`); return [f.id, f.type === 'categorical' ? r[j] : Number(r[j])]; })),
       }));
+      // repeat runs at the same settings and the day of each run are worked out from the whole
+      // sheet, so a sheet with only the latest stage would repeat earlier runs' noise
+      const nums = [...new Set(runs.map(r => r.run))].sort((a, b) => a - b);
+      if (nums.some((r, i) => r !== i + 1)) fail(`${pos[2]}: runs ${nums[0]}–${nums.at(-1)} only; send the whole run sheet (doe sheet), from run 1 — results for runs already done come back unchanged`);
       const st = runExercise(key, createStudy({ ...key.study, design: { kind: 'custom', runs } }));
       const csv = ['run,response,value', ...st.observations.map(o => `${o.run},${o.response},${o.value}`)].join('\n') + '\n';
       const over = runs.length > key.budget;

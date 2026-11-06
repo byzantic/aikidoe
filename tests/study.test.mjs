@@ -32,6 +32,8 @@ section('coding (§4.3)');
   near('log: 1e15…5e15, √5e15 → 0', S.code(dose, Math.sqrt(5) * 1e15), 0, { abs: 1e-15 });
   near('log: coded is linear in log10', S.code(t, 20), (2 * Math.log10(20) - Math.log10(300)) / Math.log10(3), { rel: 1e-15 });
   near('decode inverts code (log)', [-1, -0.3, 0.7, 1, 1.68].map(c => S.code(t, S.decode(t, c))), [-1, -0.3, 0.7, 1, 1.68], { rel: 1e-14, abs: 1e-15 });
+  { const g = { id: 'g', type: 'continuous', low: 10, high: 160, transform: 'log' };
+    check('decode (log): round settings without round-off (40, not 40.000000000000014); others exact', [-1, 0, 0.5, 1].map(c => S.decode(g, c)).join() === '10,40,80,160' && S.decode(g, 1.68) === 10 ** (Math.log10(40) + 1.68 * Math.log10(4))); }
   near('decode: axial point beyond the range', S.decode(T, -1.5), 875, { rel: 1e-15 });
   check('categorical: index both ways', S.code(amb, 'Ar') === 1 && S.decode(amb, 0) === 'N2');
   near('effect coding, 2 levels: −1 / +1', [S.effectCode(amb, 'N2'), S.effectCode(amb, 'Ar')], [[-1], [1]]);
