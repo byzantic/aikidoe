@@ -194,7 +194,15 @@ export function decode(f, c) {
     return f.levels[c];
   }
   const lo = tf(f, f.low), hi = tf(f, f.high);
-  return itf(f, ((hi + lo) + c * (hi - lo)) / 2);
+  return snap(itf(f, ((hi + lo) + c * (hi - lo)) / 2));
+}
+
+// Decoding leaves round-off on settings that should be round numbers (40.000000000000014 for 40
+// on a log scale, 9.600000000000001 on a linear one). Snap to 12 significant digits when that moves the value by
+// round-off only (< 1e-14 relative); other values, such as an axial point, are left as computed.
+function snap(x) {
+  const r = Number(x.toPrecision(12));
+  return Math.abs(r - x) < 1e-14 * Math.abs(x) ? r : x;
 }
 
 /**
