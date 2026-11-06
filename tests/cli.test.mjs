@@ -301,6 +301,8 @@ try {
   o = js('sensitivity', 'jsim.aikidoe.json');
   check('sensitivity --json: S and ST per factor', o.indices?.length === 2 && o.indices[0].factors.length === 3);
   js('comb-over', 'jcpl2.aikidoe.json', 'cpl.cir', '--factor', 'etch=8', '--metric', 'c=-db(S31) @ 5G');
+  o = js('report', 'jccd.aikidoe.json', '--date', '2026-01-01');
+  check('report --json: a self-contained HTML file with the study embedded', o.file === 'jccd.html' && /id="aikidoe-study"/.test(readFileSync(join(dir, 'jccd.html'), 'utf8')) && !/<link|<script src/.test(readFileSync(join(dir, 'jccd.html'), 'utf8')));
   o = js('schema');
   check('schema --json: the study schema', o.jsonSchema?.title === 'aikidoe study');
   o = js('info', 'jseq.aikidoe.json');

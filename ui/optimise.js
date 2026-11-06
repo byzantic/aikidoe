@@ -1,6 +1,6 @@
 // The Optimise step (issue #18): desirability goals for the responses, the best settings over
 // the fitted models, a prediction profiler and a two-factor overlay of the desirability.
-import { h, select, dataTable, messages } from './dom.js';
+import { h, select, dataTable, messages, help } from './dom.js';
 import { plot } from './plot.js';
 import { num } from '../js/format.js';
 import { fittedModels, optimiseDesirability, profile, desirabilityGrid, dValue, dOverall } from '../js/model/desirability.js';
@@ -70,7 +70,7 @@ function robustPanel({ state, update, setUI }, at, set, ui) {
         h('svg:circle', { cx: 44 + (code(study.factors.find(f => f.id === fx), at[fx]) + 1) / 2 * W, cy: W - (code(study.factors.find(f => f.id === fy), at[fy]) + 1) / 2 * W, r: 5, class: 'site-dot' }),
         h('svg:text', { x: 44 + W / 2, y: W + 28, 'text-anchor': 'middle', class: 'site-label' }, fx), h('svg:text', { x: 12, y: W / 2, 'text-anchor': 'middle', class: 'site-label', transform: `rotate(-90 12 ${W / 2})` }, fy)));
   }
-  return h('section', { class: 'panel', id: 'robust' }, h('h2', {}, 'Robustness'),
+  return h('section', { class: 'panel', id: 'robust' }, h('h2', {}, 'Robustness', help('optimisation','robust-design')),
     h('p', { class: 'small' }, 'Noise factors vary in production (set them to a fixed level only in the experiment); tolerances are how far the actual value of a control factor wanders from its setting. Their variation is transmitted through the fitted surface: settings on a flat part of it are robust. The sd adds the residual (run-to-run) variation of the model.'),
     factorTable, controls, ui.rNote ? h('div', { class: 'msg warning' }, ui.rNote) : null, summary, surf);
 }
@@ -81,7 +81,7 @@ export function render(ctx) {
   const set = (patch) => setUI({ optimise: { ...ui, ...patch } });
   const numIn = (r, key, label) => h('input', { class: 'num', type: 'number', step: 'any', value: r[key] ?? '', 'aria-label': `${r.id} ${label}`,
     onchange: (e) => update(d => { const o = d.responses.find(x => x.id === r.id); if (e.target.value === '') delete o[key]; else o[key] = Number(e.target.value); }) });
-  const goals = h('section', { class: 'panel' }, h('h2', {}, 'Goals'),
+  const goals = h('section', { class: 'panel' }, h('h2', {}, 'Goals', help('optimisation','desirability')),
     h('p', { class: 'small' }, 'For each response, what is wanted and where it stops being acceptable. Maximise: unacceptable below lower, fully satisfactory at target (or upper). Minimise: fully satisfactory at target (or lower), unacceptable above upper. Target: lower – target – upper. The weight shapes the desirability curve (1 linear, > 1 stricter, < 1 more lenient); importance weights a response in the overall desirability.'),
     dataTable([{ key: 'id', label: 'response' }, { key: 'goal', label: 'goal' }, { key: 'lower', label: 'lower' }, { key: 'target', label: 'target' }, { key: 'upper', label: 'upper' },
       { key: 'weight', label: 'weight' }, { key: 'importance', label: 'importance' }, { key: 'formula', label: 'model' }],
@@ -152,7 +152,7 @@ export function render(ctx) {
           vlines: [{ x: f.type === 'categorical' ? f.levels.indexOf(at[f.id]) : code(f, at[f.id]), cls: 'cur' }], hlines: lim.map(y => ({ y, cls: 'lim' })),
           xLabel: '', yLabel: '' }));
       })]));
-  const profPanel = h('section', { class: 'panel', id: 'profiler' }, h('h2', {}, 'Prediction profiler'),
+  const profPanel = h('section', { class: 'panel', id: 'profiler' }, h('h2', {}, 'Prediction profiler', help('optimisation','profiler')),
     h('p', { class: 'small' }, 'Each response against each factor (coded −1 … +1) with the others held at the settings above, with 95% confidence bands; dashed lines mark the response’s limits. Click a plot to move that factor.'), grid);
 
   // overlay of D over two continuous factors
@@ -171,10 +171,10 @@ export function render(ctx) {
       ...[[gr.xs[0], 44, 'start'], [gr.xs[n - 1], 44 + W, 'end']].map(([v, x, a]) => h('svg:text', { x, y: Hh + 14, 'text-anchor': a, class: 'site-label' }, num(v, 4))),
       ...[[gr.ys[0], Hh], [gr.ys[n - 1], 10]].map(([v, y]) => h('svg:text', { x: 40, y, 'text-anchor': 'end', class: 'site-label' }, num(v, 4))),
       h('svg:text', { x: 44 + W / 2, y: Hh + 28, 'text-anchor': 'middle', class: 'site-label' }, fx), h('svg:text', { x: 12, y: Hh / 2, 'text-anchor': 'middle', class: 'site-label', transform: `rotate(-90 12 ${Hh / 2})` }, fy));
-    overlay = h('section', { class: 'panel', id: 'overlay' }, h('h2', {}, 'Overlay'),
+    overlay = h('section', { class: 'panel', id: 'overlay' }, h('h2', {}, 'Overlay', help('optimisation','overlay')),
       h('div', { class: 'row small' }, h('label', { class: 'inline' }, 'x', select(contF.map(f => f.id), fx, (v) => set({ ox: v }), { 'aria-label': 'overlay x' })),
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
       svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region.`));
   }
-  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings'), controls, res), profPanel, overlay, robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui));
+  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui));
 }

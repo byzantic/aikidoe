@@ -551,6 +551,25 @@
       "then": {
         "$ref": "#/$defs/optimize"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "report"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/report"
+      }
     }
   ],
   "$defs": {
@@ -2276,6 +2295,21 @@
               }
             }
           }
+        }
+      }
+    },
+    "report": {
+      "type": "object",
+      "required": [
+        "file",
+        "bytes"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer"
         }
       }
     }

@@ -17,10 +17,12 @@
       "description": "study format version"
     },
     "name": {
-      "type": "string"
+      "type": "string",
+      "description": "a short title"
     },
     "description": {
-      "type": "string"
+      "type": "string",
+      "description": "what the study is for"
     },
     "seed": {
       "type": "integer",
@@ -33,37 +35,44 @@
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/factor"
-      }
+      },
+      "description": "the factors varied (continuous or categorical)"
     },
     "responses": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/response"
-      }
+      },
+      "description": "what is measured"
     },
     "constraints": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/constraint"
-      }
+      },
+      "description": "linear constraints on the settings"
     },
     "design": {
-      "$ref": "#/$defs/design"
+      "$ref": "#/$defs/design",
+      "description": "the runs, in standard order, with their randomised run order"
     },
     "observations": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/observation"
-      }
+      },
+      "description": "results: one per reading (run, response, and wafer / site / repeat when measured that way)"
     },
     "sites": {
-      "$ref": "#/$defs/sites"
+      "$ref": "#/$defs/sites",
+      "description": "drop-in measurement sites on the wafer"
     },
     "history": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/stage"
-      }
+      },
+      "description": "the stages of a sequential experiment"
     },
     "simulator": {
       "type": "object",
@@ -76,13 +85,15 @@
           "description": "expression, comb-over, module (CLI) or another registered adapter"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "description": "the simulator that runs the design (computer experiments): { adapter, …its options }"
     }
   },
   "$defs": {
     "id": {
       "type": "string",
-      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "description": "an identifier: letters, digits and _, not starting with a digit"
     },
     "label": {
       "anyOf": [
@@ -93,7 +104,8 @@
         {
           "type": "number"
         }
-      ]
+      ],
+      "description": "a non-empty string or a number"
     },
     "factor": {
       "oneOf": [
@@ -126,35 +138,43 @@
       ],
       "properties": {
         "id": {
-          "$ref": "#/$defs/id"
+          "$ref": "#/$defs/id",
+          "description": "used in formulas, constraints and run sheets"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "a readable name"
         },
         "units": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in tables and run sheets"
         },
         "type": {
-          "const": "continuous"
+          "const": "continuous",
+          "description": "optional: inferred from levels"
         },
         "low": {
-          "type": "number"
+          "type": "number",
+          "description": "the low end of the range (coded −1)"
         },
         "high": {
-          "type": "number"
+          "type": "number",
+          "description": "the high end of the range (coded +1)"
         },
         "levels": {
           "type": "array",
           "minItems": 2,
           "items": {
             "type": "number"
-          }
+          },
+          "description": "the levels a multi-level design uses (sorted)"
         },
         "transform": {
           "enum": [
             "none",
             "log"
-          ]
+          ],
+          "description": "log: coded on the log scale (e.g. time, dose)"
         },
         "htc": {
           "type": "boolean",
@@ -207,10 +227,12 @@
             "mean": {
               "type": "number"
             }
-          }
+          },
+          "description": "a noise factor: varied in the experiment, random in production: { sd, mean? } (natural units)"
         },
         "note": {
-          "type": "string"
+          "type": "string",
+          "description": "free text"
         }
       }
     },
@@ -248,17 +270,20 @@
           "type": "string"
         },
         "type": {
-          "const": "categorical"
+          "const": "categorical",
+          "description": "optional when a level is a string"
         },
         "levels": {
           "type": "array",
           "minItems": 2,
           "items": {
             "$ref": "#/$defs/label"
-          }
+          },
+          "description": "two or more distinct levels"
         },
         "htc": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "hard to change: split-plot designs"
         },
         "note": {
           "type": "string"
@@ -288,16 +313,20 @@
             "minimize",
             "target",
             "range"
-          ]
+          ],
+          "description": "for optimisation (desirability)"
         },
         "target": {
-          "type": "number"
+          "type": "number",
+          "description": "desirability target"
         },
         "lower": {
-          "type": "number"
+          "type": "number",
+          "description": "desirability lower limit"
         },
         "upper": {
-          "type": "number"
+          "type": "number",
+          "description": "desirability upper limit"
         },
         "weight": {
           "anyOf": [
@@ -320,11 +349,13 @@
               "minItems": 2,
               "items": false
             }
-          ]
+          ],
+          "description": "desirability shape: one number, or two (below, above a target)"
         },
         "importance": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "description": "relative importance in the overall desirability"
         },
         "levels": {
           "type": "array",
@@ -359,7 +390,8 @@
                 "rangemean"
               ]
             }
-          }
+          },
+          "description": "a per-wafer summary of another response, computed from its readings"
         },
         "measurement": {
           "type": "object",
@@ -403,7 +435,8 @@
               }
             },
             "note": {}
-          }
+          },
+          "description": "the measurement system, from a gauge R&R study: { sigma, … }"
         },
         "spec": {
           "type": "object",
@@ -420,7 +453,8 @@
           "description": "specification limits for yield"
         },
         "note": {
-          "type": "string"
+          "type": "string",
+          "description": "free text"
         }
       }
     },
@@ -458,10 +492,12 @@
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "type": "string"
+          "type": "string",
+          "description": "the kind of design (fractional-factorial, ccd, split-plot-fraction, sequential, …)"
         },
         "params": {
-          "type": "object"
+          "type": "object",
+          "description": "the design's parameters (generators, resolution, α, …)"
         },
         "randomisation": {
           "enum": [
@@ -469,7 +505,8 @@
             "restricted",
             "blocked",
             "none"
-          ]
+          ],
+          "description": "complete; restricted (split-plot); blocked; or none"
         },
         "runs": {
           "type": "array",
@@ -489,17 +526,21 @@
       "properties": {
         "run": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "run number (standard order)"
         },
         "order": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "the randomised order in which to run it"
         },
         "wholePlot": {
-          "$ref": "#/$defs/label"
+          "$ref": "#/$defs/label",
+          "description": "whole plot (split-plot designs)"
         },
         "block": {
-          "$ref": "#/$defs/label"
+          "$ref": "#/$defs/label",
+          "description": "block (stage, day, batch)"
         },
         "kind": {
           "enum": [
@@ -512,7 +553,8 @@
             "optimal",
             "space-filling",
             "other"
-          ]
+          ],
+          "description": "the part of the design it comes from"
         },
         "settings": {
           "type": "object",
@@ -521,7 +563,8 @@
               "number",
               "string"
             ]
-          }
+          },
+          "description": "factor id → setting (natural units, or a level)"
         }
       }
     },
@@ -535,10 +578,12 @@
       "additionalProperties": false,
       "properties": {
         "run": {
-          "type": "integer"
+          "type": "integer",
+          "description": "the run"
         },
         "response": {
-          "type": "string"
+          "type": "string",
+          "description": "the response id"
         },
         "value": {
           "type": [
@@ -548,25 +593,32 @@
           "description": "null: missing (measured but failed)"
         },
         "lot": {
-          "$ref": "#/$defs/label"
+          "$ref": "#/$defs/label",
+          "description": "lot"
         },
         "wafer": {
-          "$ref": "#/$defs/label"
+          "$ref": "#/$defs/label",
+          "description": "wafer within the run"
         },
         "site": {
-          "$ref": "#/$defs/label"
+          "$ref": "#/$defs/label",
+          "description": "site on the wafer"
         },
         "slot": {
-          "$ref": "#/$defs/label"
+          "$ref": "#/$defs/label",
+          "description": "boat slot"
         },
         "operator": {
-          "$ref": "#/$defs/label"
+          "$ref": "#/$defs/label",
+          "description": "operator"
         },
         "repeat": {
-          "type": "integer"
+          "type": "integer",
+          "description": "repeat reading"
         },
         "note": {
-          "type": "string"
+          "type": "string",
+          "description": "free text"
         }
       }
     },
@@ -578,11 +630,13 @@
       "additionalProperties": false,
       "properties": {
         "scheme": {
-          "type": "string"
+          "type": "string",
+          "description": "5-site, 9-site, dropin-9 or custom"
         },
         "diameter": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "description": "wafer diameter, mm"
         },
         "positions": {
           "type": "array",
@@ -605,7 +659,8 @@
                 "type": "number"
               }
             }
-          }
+          },
+          "description": "site id and x, y in mm from the wafer centre"
         }
       }
     },
@@ -618,22 +673,26 @@
       "properties": {
         "stage": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "name: screen, foldover, axial, augment, confirm, …"
         },
         "runs": {
           "type": "array",
           "items": {
             "type": "integer"
-          }
+          },
+          "description": "the runs added in this stage"
         },
         "date": {
-          "type": "string"
+          "type": "string",
+          "description": "when"
         },
         "note": {
           "type": "string"
         },
         "params": {
-          "type": "object"
+          "type": "object",
+          "description": "the stage's parameters"
         }
       }
     }

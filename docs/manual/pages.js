@@ -1,0 +1,27 @@
+// The manual's pages in reading order (the viewer's contents; the tests check every page exists
+// and every Markdown file here is listed).
+export const PAGES = [
+  { id: 'index', title: 'aikidoe manual', part: '' },
+  { id: 'getting-started', title: 'Getting started', part: 'Start here' },
+  { id: 'concepts', title: 'Concepts', part: 'Start here' },
+  { id: 'designs-factorial', title: 'Full and fractional factorials', part: 'Designs' },
+  { id: 'designs-screening', title: 'Plackett–Burman and definitive screening', part: 'Designs' },
+  { id: 'designs-rsm', title: 'Response surfaces: central composite and Box–Behnken', part: 'Designs' },
+  { id: 'designs-optimal', title: 'Optimal designs', part: 'Designs' },
+  { id: 'designs-split-plot', title: 'Split-plot designs', part: 'Designs' },
+  { id: 'designs-sequential', title: 'Sequential experiments: augmenting and confirming', part: 'Designs' },
+  { id: 'designs-space-filling', title: 'Space-filling designs', part: 'Designs' },
+  { id: 'analysis', title: 'Analysis', part: 'Analysis' },
+  { id: 'optimisation', title: 'Optimisation and robust design', part: 'Analysis' },
+  { id: 'process', title: 'Process topics: wafers, sites, gauges', part: 'Process' },
+  { id: 'simulation', title: 'Simulation and yield', part: 'Simulation' },
+  { id: 'example-screening', title: 'Worked example: a 2⁵⁻¹ screening experiment', part: 'Worked examples' },
+  { id: 'example-furnace', title: 'Worked example: furnace split-plot with drop-in sites', part: 'Worked examples' },
+  { id: 'example-gauge', title: 'Worked example: gauge R&R', part: 'Worked examples' },
+  { id: 'example-coupler', title: 'Worked example: coupler yield with comb-over', part: 'Worked examples' },
+  { id: 'reference-cli', title: 'Command line', part: 'Reference' },
+  { id: 'reference-study-format', title: 'Study file format', part: 'Reference' },
+  { id: 'reference-formulas', title: 'Formula syntax', part: 'Reference' },
+  { id: 'glossary', title: 'Glossary', part: 'Reference' },
+  { id: 'bibliography', title: 'Bibliography', part: 'Reference' },
+];

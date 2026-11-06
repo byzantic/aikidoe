@@ -114,3 +114,6 @@ svg.plot .ref.cur { stroke: var(--ink); stroke-dasharray: none; opacity: .5; } s
 .warn-text { color: #8a6d00; } @media (prefers-color-scheme: dark) { .warn-text { color: #d9b44a; } }
 tr.muted td { color: var(--muted, #888); }
 [data-reasons] { white-space: normal; min-width: 24em; max-width: 60em; line-height: 1.35; }
+/* "?" links from the app's panels to the manual */
+a.help { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 50%; border: 1px solid var(--line); font-size: 12px; font-weight: 500; color: var(--muted); text-decoration: none; vertical-align: 2px; }
+a.help:hover { color: var(--accent); border-color: var(--accent); }

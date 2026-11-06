@@ -325,6 +325,35 @@ none of them can drift from what the tool actually does.
   output compared with what the manual shows (numbers to the printed precision); internal links
   and example links are checked; generated reference pages are regenerated and diffed.
 
+- Implementation (#22):
+  - 23 pages in `docs/manual/` (contents in `docs/manual/pages.js`): getting started; concepts;
+    seven design pages; analysis; optimisation and robust design; process topics; simulation and
+    yield; four worked examples; reference (CLI, study format, formulas), glossary, bibliography.
+  - Viewer: `docs/manual/index.html?p=PAGE#section` renders the Markdown with `js/markdown.js`
+    (headings with ids, emphasis, code, links, images, fenced blocks, nested lists, quotes,
+    GitHub tables, raw HTML blocks); links `page.md#x` stay in the viewer, so the same files read
+    correctly on GitHub. Published on Pages at `/docs/manual/` (`/manual/` redirects); the app links
+    to it from the header, the welcome page and a `?` on each panel; `index.html#example=ID` opens a
+    built-in example (the manual's "open it" links).
+  - Worked examples: the 2⁵⁻¹ reactor experiment of Box, Hunter & Hunter (1978, p. 379; real data,
+    effects checked against the published B 20.5, D 12.25, E −6.25, BD 10.75, DE −9.5); the furnace
+    split-plot with drop-in sites (simulated, stated); gauge R&R on SixSigma's `ss.data.rr` (paper
+    helicopter, checked against `ss.rr`); the comb-over coupler yield. Also as app examples
+    (`reactor-bhh`) and files in `examples/`.
+  - Tested (`tests/manual.test.mjs`): every page listed and present; generated pages
+    (`reference-cli.md` from `doe help` and the CLI schema, `reference-study-format.md` from the
+    study schema; `node tools/gen-manual.mjs`) up to date; every link — between pages and to their
+    anchors, to app examples, to repository files — and every `?` link in the app resolves; every
+    `console` block is run in a fresh directory (with `file` blocks written first) and its output
+    compared with the page (a line `…` skips lines; timings are normalised).
+    `node tools/gen-manual.mjs --outputs [page]` rewrites the outputs after a deliberate change.
+  - Report export: `doe report STUDY [--model …]` and the app's **Report** button write one
+    self-contained HTML page (inline CSS and SVG): factors, responses, constraints, design and stage
+    history, the run sheet with results, and per response the fitted model (OLS: coefficients, fit
+    statistics, ANOVA with lack of fit, observed-vs-predicted and residual-vs-order plots; mixed:
+    variance components, KR fixed effects and tests), confirmation results; the study is embedded
+    (`script#aikidoe-study`), and **Open…** reads it back from a report.
+
 ### 16.2 Interactive tutorial and exercise generator (#38, #39)
 
 **Virtual process.** A seeded simulator of a process with a hidden true model, used by the

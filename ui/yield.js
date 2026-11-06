@@ -1,7 +1,7 @@
 // Yield and sensitivity panel of the Optimise step (spec §10, issue #20): tolerance distributions
 // and specification limits, Monte Carlo yield on surrogate models with their cross-validated
 // error, Sobol indices, and a direct check on the study's simulator.
-import { h, select, dataTable, messages } from './dom.js';
+import { h, select, dataTable, messages, help } from './dom.js';
 import { plot } from './plot.js';
 import { num } from '../js/format.js';
 import { fitSurrogates, surrogateYield, surrogateSensitivity, directYieldCheck } from '../js/sim/surrogate.js';
@@ -39,7 +39,7 @@ export function yieldPanel({ state, update, setUI }, at, set, ui) {
 
   // ---------------------------------------------------------------- surrogates
   let sur;
-  try { sur = fitSurrogates(study, { formulas }); } catch (e) { return h('section', { class: 'panel', id: 'yield' }, h('h2', {}, 'Yield and sensitivity'), h('div', { class: 'msg error' }, e.message)); }
+  try { sur = fitSurrogates(study, { formulas }); } catch (e) { return h('section', { class: 'panel', id: 'yield' }, h('h2', {}, 'Yield and sensitivity', help('simulation','yield')), h('div', { class: 'msg error' }, e.message)); }
   const ms = sur.models;
   const surTable = ms.length ? dataTable([{ key: 'id', label: 'surrogate' }, { key: 'formula', label: 'model' }, { key: 'n', label: 'runs', cls: 'n' }, { key: 'r2', label: 'R²', cls: 'n', fmt: (v) => num(v, 4) },
     { key: 'predR2', label: 'pred R²', cls: 'n', fmt: (v) => num(v, 4) }, { key: 'cvRmse', label: 'RMSE_cv', cls: 'n', fmt: (v) => num(v, 4) }], ms) : null;
@@ -104,7 +104,7 @@ export function yieldPanel({ state, update, setUI }, at, set, ui) {
           h('span', { style: `width:${Math.max(0, Math.min(100, 100 * r.total[i].S)).toFixed(1)}%` })) })))))) : null,
     h('p', { class: 'muted small' }, 'Sobol indices of the surrogate: S is the share of the response’s variance due to the factor alone, ST its share including interactions with the others. Bars show ST. Over the ranges this says which factors matter anywhere in the design space; over the tolerances, which tolerances drive the variation at the settings above.'));
 
-  return h('section', { class: 'panel', id: 'yield' }, h('h2', {}, 'Yield and sensitivity'),
+  return h('section', { class: 'panel', id: 'yield' }, h('h2', {}, 'Yield and sensitivity', help('simulation','yield')),
     h('p', { class: 'small' }, 'Each factor’s actual value scatters about its setting by its tolerance; a unit passes when every response with spec limits is inside them. The yield is estimated by Monte Carlo on surrogate models (least squares, the Analyse step’s formulas), whose leave-one-out error RMSE_cv says how far to trust them.'),
     messages(sur.missing.map(m => `${m.id}: ${m.reason}`), 'warning'),
     h('div', { class: 'grid2' }, h('div', {}, h('h3', {}, 'Tolerances'), tolTable), h('div', {}, h('h3', {}, 'Spec limits'), specTable)),

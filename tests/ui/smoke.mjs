@@ -313,6 +313,27 @@ try {
   const dirv = Number(await page.inputValue('#run-sheet tbody tr:first-child td.res:last-child input'));
   check(`Run: re-run on comb-over with a band metric (directivity ${dirv})`, dirv > 10 && dirv < 14, dirv);
 
+  section('manual (issue #22)');
+  await page.goto(url + 'index.html#example=reactor-bhh'); await page.waitForTimeout(400); await settle();
+  check('index.html#example=… opens that example (from the manual)', /Reactor screening \(Box, Hunter & Hunter\)/.test(await page.inputValue('#study-name')) && (await page.getAttribute('[data-step="analyse"]', 'aria-selected')) === 'true');
+  const helpHref = await page.getAttribute('a.help[data-help="analysis#formulas"]', 'href');
+  check('"?" link on the Model panel points into the manual', helpHref === 'docs/manual/index.html?p=analysis#formulas', helpHref);
+  const [repDl] = await Promise.all([page.waitForEvent('download'), page.click('#btn-report')]);
+  const rep = await (await import('node:fs')).promises.readFile(await repDl.path(), 'utf8');
+  check('Report: a self-contained HTML report with the fitted model and the study embedded', /<h2 id="response-yield">/.test(rep) && /id="aikidoe-study"/.test(rep) && !/<link |<script src=/.test(rep));
+  const mp = await browser.newPage();
+  mp.on('pageerror', (e) => errors.push(`manual: ${e.message}`));
+  await mp.goto(url + 'docs/manual/index.html?p=analysis#mixed-models'); await mp.waitForSelector('#page h1');
+  check('manual viewer renders a page, with contents and the current page marked', (await mp.textContent('#page h1')) === 'Analysis' && (await mp.locator('#toc a').count()) >= 20 && (await mp.textContent('#toc a[aria-current="page"]')) === 'Analysis');
+  check('manual: the section anchor exists (the page scrolls to it)', (await mp.locator('#page h2#mixed-models').count()) === 1);
+  await mp.click('#page a[href="?p=reference-formulas"]'); await mp.waitForSelector('#page h1');
+  check('manual: links between pages stay in the viewer', (await mp.textContent('#page h1')) === 'Formula syntax' && (await mp.locator('#page table').count()) >= 1);
+  await mp.goto(url + 'docs/manual/index.html?p=example-screening'); await mp.waitForSelector('#page h1');
+  check('manual: console blocks and file blocks render', (await mp.locator('#page pre.lang-console').count()) >= 5 && (await mp.locator('#page pre.lang-file .file-name').count()) === 1);
+  if (shots) await mp.screenshot({ path: `${shots}/15-manual.png`, fullPage: false });
+  await mp.close();
+  await page.goto(url); await page.waitForTimeout(300);
+
   section('other examples render');
   for (const id of ['ccd-results', 'gate-oxide', 'anneal-results']) {
     await page.click('#btn-examples'); await page.click(`[data-example="${id}"]`); await page.waitForTimeout(300);

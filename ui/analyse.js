@@ -1,5 +1,5 @@
 // Analyse step: fit a model, ANOVA, effects, diagnostics (spec §12 step 4).
-import { h, select, messages, dataTable } from './dom.js';
+import { h, select, messages, dataTable, help } from './dom.js';
 import { plot } from './plot.js';
 import { num, pval } from '../js/format.js';
 import { defaultFormula } from '../js/model/defaults.js';
@@ -48,7 +48,7 @@ export function render(ctx) {
 
   const fIn = h('input', { type: 'text', class: 'formula', id: 'formula', value: formula, 'aria-label': 'model formula', spellcheck: 'false',
     onchange: (e) => setFormula(e.target.value.includes('~') ? e.target.value : `${resp.id} ~ ${e.target.value}`) });
-  const controls = h('section', { class: 'panel' }, h('h2', {}, 'Model'),
+  const controls = h('section', { class: 'panel' }, h('h2', {}, 'Model', help('analysis','formulas')),
     h('div', { class: 'row', style: 'margin-bottom:8px' },
       withData.length > 1 ? h('label', { class: 'inline' }, 'response', select(withData.map(r => ({ value: r.id, label: r.name })), resp.id, (v) => set({ response: v }), { 'aria-label': 'response' })) : h('span', {}, h('b', {}, resp.name), resp.units ? ` (${resp.units})` : ''),
       ['main', '2fi', 'quadratic'].map(s => h('button', { class: 'btn', onclick: () => setFormula(`${resp.id} ~ ${s}`), title: { main: 'main effects', '2fi': 'main effects and two-factor interactions', quadratic: 'full quadratic (response surface)' }[s] }, s)),
@@ -103,7 +103,7 @@ export function render(ctx) {
   if (missingRuns) notes.push(`${missingRuns} run(s) have no result yet and are left out.`);
 
   // ---------------------------------------------------------------- summary and coefficients
-  const summary = h('section', { class: 'panel' }, h('h2', {}, 'Fit'),
+  const summary = h('section', { class: 'panel' }, h('h2', {}, 'Fit', help('analysis','least-squares-fits')),
     messages(notes, 'warning'),
     h('div', { class: 'row small', id: 'fit-stats' },
       h('span', { class: 'stat' }, h('b', {}, fit.n), ' runs'), h('span', { class: 'stat' }, h('b', {}, fit.rank), ' coefficients'), h('span', { class: 'stat' }, h('b', {}, fit.dfRes), ' residual df'),
@@ -122,7 +122,7 @@ export function render(ctx) {
     const rows = anova(fit, ui.anovaType ?? 1);
     const lof = lackOfFit(fit);
     if (lof?.lackOfFit) { const res = rows.pop(); rows.push(res, { term: '  lack of fit', ...lof.lackOfFit }, { term: '  pure error', ...lof.pureError }); }
-    anovaPanel = h('section', { class: 'panel' }, h('h2', {}, `ANOVA (type ${['', 'I', 'II', 'III'][ui.anovaType ?? 1]})`),
+    anovaPanel = h('section', { class: 'panel' }, h('h2', {}, `ANOVA (type ${['', 'I', 'II', 'III'][ui.anovaType ?? 1]})`, help('analysis','anova')),
       dataTable([{ key: 'term', label: 'source' }, { key: 'df', label: 'df', cls: 'n' }, { key: 'ss', label: 'sum of squares', cls: 'n', fmt: (v) => num(v) }, { key: 'ms', label: 'mean square', cls: 'n', fmt: (v) => num(v) },
         { key: 'F', label: 'F', cls: 'n', fmt: (v) => (v === undefined ? '' : num(v)) }, { key: 'p', label: 'p', cls: 'n', fmt: (v) => (v === undefined ? '' : h('span', { class: v < 0.05 ? 'sig' : '' }, pval(v))) }], rows),
       lof?.lackOfFit ? h('p', { class: 'muted small' }, lof.lackOfFit.p < 0.05 ? 'Lack of fit is significant: the model misses curvature or interactions that the replicated runs reveal.' : 'No evidence of lack of fit against pure error from the replicated runs.') : null);
@@ -135,7 +135,7 @@ export function render(ctx) {
   const eff = twoLevelEffects(fit);
   if (twoLevel && eff.length >= 3) {
     const L = lenth(eff.map(e => e.effect)), hn = halfNormal(eff.map(e => e.effect));
-    effectsPanel = h('section', { class: 'panel' }, h('h2', {}, 'Effects'),
+    effectsPanel = h('section', { class: 'panel' }, h('h2', {}, 'Effects', help('analysis','effects-and-lenths-method')),
       h('p', { class: 'small' }, `Lenth’s method: PSE = ${num(L.pse)}; effects beyond ME = ${num(L.me)} are likely active, beyond SME = ${num(L.sme)} active even allowing for looking at all ${eff.length}.`, fit.dfRes > 0 ? ' (With residual degrees of freedom the t-tests above are usually preferable; Lenth is shown for comparison.)' : ''),
       h('div', { class: 'grid2' },
         h('figure', {}, h('figcaption', {}, 'Half-normal plot of |effects|'), plot({ xLabel: '|effect|', yLabel: 'half-normal quantile', height: 260,
@@ -165,7 +165,7 @@ export function render(ctx) {
       } catch { /* not available for this fit */ }
     }
     const big = pts.filter(p => Math.abs(p.st) > 3);
-    diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics'), h('div', { class: 'plots' }, figs),
+    diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
   return h('div', {}, controls, olsNote, summary, anovaPanel, effectsPanel, diag, confirmPanel(ctx, fit));
@@ -186,7 +186,7 @@ function sitesPanel(study, m, ui, set) {
   m.rows.forEach((r, i) => { const k = String(r.obs.site); if (!by.has(k)) by.set(k, []); by.get(k).push(vals[i]); });
   const means = new Map([...by].map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length]));
   const radial = m.rows.map((r, i) => ({ x: P.get(String(r.obs.site))?.rho, y: dev[i] })).filter(p => Number.isFinite(p.x));
-  return h('section', { class: 'panel', id: 'sites' }, h('h2', {}, 'Sites'),
+  return h('section', { class: 'panel', id: 'sites' }, h('h2', {}, 'Sites', help('process','wafers-and-sites')),
     h('div', { class: 'row small', style: 'margin-bottom:8px' }, h('label', { class: 'inline' }, 'show', select([{ value: 'mean', label: `${m.response}, mean at each site` }, { value: 'residual', label: 'residual from the model, within wafer' }],
       view, (v) => set({ waferView: v }), { 'aria-label': 'wafer view' }))),
     h('div', { class: 'wafers' },
@@ -208,7 +208,7 @@ function mixedPanel(m, ui, set) {
   if (m.boundary.length) notes.push(`${m.boundary.join(', ')} variance estimated as 0: no variation at that level beyond what the levels below explain.`);
   const residualIs = m.random.some(r => r.id === 'wafer') ? 'within wafer (sites, repeats)' : m.random.some(r => r.id === 'run') ? 'within run (wafers, repeats)' : 'run to run';
   const terms = m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block);
-  return h('section', { class: 'panel', id: 'mixed' }, h('h2', {}, 'Mixed model (REML)'),
+  return h('section', { class: 'panel', id: 'mixed' }, h('h2', {}, 'Mixed model (REML)', help('analysis','mixed-models')),
     h('p', { class: 'small' }, `${m.n} readings from ${nRuns} runs. Random effects: ${m.random.map(r => `${r.name.toLowerCase()} (${new Set(r.labels).size})`).join(', ')}; residual: ${residualIs}. Each term is tested against the variation at the level where it was applied — whole-plot factors against the whole-plot variance.`),
     messages(notes, 'warning'),
     h('h3', {}, 'Variance components'),
