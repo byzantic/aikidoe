@@ -514,6 +514,17 @@ stage — without being taught the tool each time:
   pages.
 - **Optional:** an MCP server (`tools/mcp.mjs`) exposing the same commands as tools, for agents
   without a shell; a thin wrapper over the CLI's JSON mode.
+- Implementation (#40): `skills/aikidoe/SKILL.md` (front matter `name`, `description`; when to use,
+  setup, workflow, rules, references) with `references/elicitation.md`, `decisions.md` (the
+  recommender's logic as a table), `recipes.md` (six paths, 17 commands, outputs as run) and the
+  generated `cli.md` and `study-format.md` (`tools/gen-manual.mjs` writes both copies, with links
+  adjusted). `llms.txt` at the root (and on Pages, with `skills/`). `tools/mcp.mjs`: MCP over stdio
+  (JSON-RPC 2.0 per line; `initialize`, `tools/list`, `tools/call`, `ping`), one tool per command
+  (`doe_fit`, …) taking `{ args: [strings] }`, returning the command's `--json` object as text and
+  `structuredContent`, `isError` when `ok` is false; files in `--cwd`. `tools/agent-eval.mjs prepare
+  | score` and `docs/agent-eval.md` for the evaluation (class-mode exercises, briefs for the
+  simulated user, a score table). `tests/skill.test.mjs`: front matter, links, generated
+  references, recipes, llms.txt, the MCP server, the harness.
 - **Tested:** every recipe in the skill is executed in CI; the reference files are regenerated and
   diffed. Not in CI (needs a model): an evaluation in which an agent with only the skill solves
   generated exercises (§16.2) through a simulated user, scored by the exercise grader — the same

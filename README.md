@@ -3,6 +3,7 @@
 Design of Experiments assistant, in the browser: screening, response surfaces, split-plot and nested process experiments, gauge R&R, and simulator yield studies (comb-over adapter).
 
 - Manual: [docs/manual](docs/manual/index.md) (on the site at `/docs/manual/`; the pages read on GitHub too)
+- For AI agents: the skill [skills/aikidoe/SKILL.md](skills/aikidoe/SKILL.md), [llms.txt](llms.txt), an MCP server (`node tools/mcp.mjs`)
 - Specification: [docs/spec.md](docs/spec.md)
 - Work plan: GitHub issues and milestones (drafts in [planning/issues.md](planning/issues.md), filed by `tools/file-issues.py`).
 
