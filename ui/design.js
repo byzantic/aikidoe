@@ -86,6 +86,7 @@ export function render(ctx) {
     ], rows, { rowAttrs: (r) => ({ class: `click ${r.id === cand.id ? 'sel' : ''} ${rec && !recOf(r.id)?.rank ? 'muted' : ''}`, 'data-design': r.id, onclick: () => {
       const o = recOf(r.id), patch = { id: r.id, centre: undefined, blocks: undefined, rsmBlocks: false };
       if (o && (r.kind === 'optimal' || r.kind === 'sp-optimal')) Object.assign(patch, { optRuns: o.runs, optModel: rec.model, ...(o.wholePlots ? { optWholePlots: o.wholePlots } : {}) });
+      if (o && r.kind === 'sp-full' && o.runs > r.runs) patch.replicates = Math.round(o.runs / r.runs);
       set(patch);
     } }) }),
     h('p', { class: 'muted small' }, 'Resolution III: main effects aliased with two-factor interactions; IV: main effects clear, 2fis aliased with each other; V: main effects and 2fis clear. Response-surface designs (central composite, Box–Behnken) estimate a full quadratic.'));

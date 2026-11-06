@@ -3,9 +3,9 @@
 An anneal: furnace temperature T (900 … 1000 °C) is set once per furnace run; anneal time t and
 implant dose vary between the wafers in it. Each condition gets two wafers, placed in boat slots,
 and the sheet resistance Rs is measured at nine drop-in sites on each. The data are **simulated**
-(with a known structure: furnace-to-furnace, run-to-run and wafer-to-wafer variation, a bowl across
-the wafer that deepens with temperature, and a slot gradient), so the analysis can be checked
-against the truth. The study is `examples/furnace-anneal.aikidoe.json`, and in the app:
+by a virtual process with a known truth (furnace-to-furnace, run-to-run and wafer-to-wafer
+variation, a bowl across the wafer that deepens with temperature, and a slot gradient), so the
+analysis can be checked against it. The study is `examples/furnace-anneal.aikidoe.json`, and in the app:
 [open it](../../index.html#example=anneal-results).
 
 ## The structure
@@ -42,44 +42,49 @@ mixed model (REML): 432 readings from 24 runs; random effects: Whole plot (6), R
 variance components
 source      variance  std. dev.  95% CI (variance)  % of total
 ----------  --------  ---------  -----------------  ----------
-Whole plot     3.464      1.861  1.198 … 33.63      75.6
-Run           0.6072     0.7792  0.289 … 1.994      13.3
-Wafer         0.1264     0.3556  0.06693 … 0.3231   2.76
-Residual      0.3849     0.6204  0.3358 … 0.4457    8.4
+Whole plot     6.081      2.466  2.121 … 56.75      81.8
+Run           0.8631     0.9291  0.4263 … 2.585     11.6
+Wafer        0.07971     0.2823  0.03843 … 0.2532   1.07
+Residual       0.413     0.6427  0.3603 … 0.4783    5.55
 
 fixed effects (coded units; Kenward–Roger standard errors and df)
-term         estimate  std. error  df       t        p
------------  --------  ----------  --  ------  -------  ---
-(Intercept)     61.92      0.7786   4   79.52  <0.0001  ***
-T              -4.082      0.7786   4  -5.243  0.00633  **
-t              -2.147      0.1698  12  -12.65  <0.0001  ***
-dose           -5.941      0.1698  12  -34.99  <0.0001  ***
-T:t            0.3102      0.1698  12   1.827   0.0926  .
-T:dose          1.177      0.1698  12   6.934  <0.0001  ***
-t:dose        0.09699      0.1698  12  0.5713    0.578
-T:t:dose       0.0587      0.1698  12  0.3458    0.736
+term         estimate  std. error  df        t        p
+-----------  --------  ----------  --  -------  -------  ---
+(Intercept)     61.08       1.026   4    59.55  <0.0001  ***
+T              -2.729       1.026   4    -2.66   0.0564  .
+t              -2.261      0.1964  12   -11.51  <0.0001  ***
+dose           -6.017      0.1964  12   -30.63  <0.0001  ***
+T:t            0.2359      0.1964  12    1.201    0.253
+T:dose          1.147      0.1964  12    5.838  <0.0001  ***
+t:dose       -0.04479      0.1964  12   -0.228    0.823
+T:t:dose      -0.1857      0.1964  12  -0.9455    0.363
 
 tests of model terms (Kenward–Roger)
-term           F  ndf  ddf        p       tested in   p if independent
---------  ------  ---  ---  -------  ---  ----------  ----------------
-T          27.49    1    4  0.00633  **   whole plot           <0.0001
-t            160    1   12  <0.0001  ***  run                  <0.0001
-dose        1225    1   12  <0.0001  ***  run                  <0.0001
-T:t        3.339    1   12   0.0926  .    run                 0.000394
-T:dose     48.09    1   12  <0.0001  ***  run                  <0.0001
-t:dose    0.3263    1   12    0.578       run                    0.265
-T:t:dose  0.1195    1   12    0.736       run                    0.499
+term          F  ndf  ddf        p       tested in   p if independent
+--------  -----  ---  ---  -------  ---  ----------  ----------------
+T         7.077    1    4   0.0564  .    whole plot           <0.0001
+t         132.5    1   12  <0.0001  ***  run                  <0.0001
+dose      938.5    1   12  <0.0001  ***  run                  <0.0001
+T:t       1.442    1   12    0.253       run                   0.0321
+T:dose    34.09    1   12  <0.0001  ***  run                  <0.0001
+t:dose    0.052    1   12    0.823       run                    0.683
+T:t:dose  0.894    1   12    0.363       run                   0.0912
 strata (containment df): whole plot 4, run 12, wafer 24, residual 384
 "p if independent": least squares on the same 432 readings as if every reading were independent — what an analysis that ignores the whole plots, runs and wafers would claim
-REML criterion 947.78821
+REML criterion 973.4597
 ```
 
-Three quarters of the variation is between furnace runs. Every term is tested in its stratum:
+Four fifths of the variation is between furnace runs. Every term is tested in its stratum:
 T against the whole plots (4 degrees of freedom — six furnace runs, less the mean and T itself),
 the subplot terms against the run-to-run variation (12). The naive analysis is wrong in the
 dangerous direction: it counts 432 readings where there are 6 furnace runs and 24 runs, so every
-p-value shrinks — the time × temperature interaction `T:t` looks clearly significant (p = 0.0004)
-when the evidence is weak (p = 0.09).
+p-value shrinks. It calls the temperature effect certain (p < 0.0001) when six furnace runs leave
+it at p = 0.056, and it finds a time × temperature interaction (p = 0.03) that is not in the
+process at all (the mixed model: p = 0.25). The temperature effect is real — the truth has
+−4 Ω/sq per half-range — but with a furnace-to-furnace standard deviation estimated at about 2.5 Ω/sq (1.6 in the
+simulation; six whole plots estimate it poorly), six
+furnace runs are too few to establish it at 5 %: the design needs more whole plots, not more
+wafers or sites.
 
 ## Within-wafer patterns
 
@@ -94,45 +99,48 @@ mixed model (REML): 432 readings from 24 runs; random effects: Whole plot (6), R
 variance components
 source      variance  std. dev.  95% CI (variance)  % of total
 ----------  --------  ---------  -----------------  ----------
-Whole plot     3.526      1.878  1.236 … 32.21      86.4
-Run           0.3654     0.6045  0.1624 … 1.442     8.96
-Wafer         0.1534     0.3916  0.09206 … 0.3053   3.76
-Residual      0.0353     0.1879  0.03078 … 0.04089  0.865
+Whole plot      6.21      2.492  2.202 … 54.03      92.4
+Run           0.3396     0.5827  0.1521 … 1.311     5.05
+Wafer         0.1326     0.3641  0.07928 … 0.2657   1.97
+Residual     0.04064     0.2016  0.03544 … 0.04708  0.604
 
 fixed effects (coded units; Kenward–Roger standard errors and df)
 term         estimate  std. error     df        t        p
 -----------  --------  ----------  -----  -------  -------  ---
-(Intercept)     62.16      0.7786      4    79.84  <0.0001  ***
-T               -3.94      0.7786      4   -5.061  0.00717  **
-t              -2.273      0.1426  11.62   -15.94  <0.0001  ***
-dose           -6.004      0.1377  11.22    -43.6  <0.0001  ***
-radius2        0.9873     0.01844    382    53.54  <0.0001  ***
-slot           0.6589       0.225  20.26    2.928  0.00823  **
-T:t            0.1847      0.1426  11.62    1.295     0.22
-T:dose          1.177       0.136  11.08    8.655  <0.0001  ***
-t:dose        0.09699       0.136  11.08    0.713    0.491
-T:radius2      0.5649     0.01844    382    30.63  <0.0001  ***
-T:t:dose     -0.06679      0.1426  11.62  -0.4683    0.648
+(Intercept)     61.33       1.026      4    59.79  <0.0001  ***
+T              -2.576       1.026      4   -2.511    0.066  .
+t              -2.407      0.1366  11.64   -17.61  <0.0001  ***
+dose            -6.09       0.132  11.23   -46.14  <0.0001  ***
+radius2         1.003     0.01979    382    50.71  <0.0001  ***
+slot           0.7662      0.2143  20.75    3.575  0.00181  **
+T:t           0.08992      0.1366  11.64   0.6581    0.523
+T:dose          1.147      0.1304  11.09    8.794  <0.0001  ***
+t:dose       -0.04479      0.1304  11.09  -0.3435    0.738
+T:radius2      0.6099     0.01979    382    30.82  <0.0001  ***
+T:t:dose      -0.3317      0.1366  11.64   -2.427   0.0325  *
 
 tests of model terms (Kenward–Roger)
-term            F  ndf    ddf        p       tested in
----------  ------  ---  -----  -------  ---  ----------
-T           25.61    1      4  0.00717  **   whole plot
-t             254    1  11.62  <0.0001  ***  run
-dose         1901    1  11.22  <0.0001  ***  run
-radius2      2867    1    382  <0.0001  ***  residual
-slot        8.576    1  20.26  0.00823  **   wafer
-T:t         1.678    1  11.62     0.22       run
-T:dose      74.92    1  11.08  <0.0001  ***  run
-t:dose     0.5084    1  11.08    0.491       run
-T:radius2   938.3    1    382  <0.0001  ***  residual
-T:t:dose   0.2194    1  11.62    0.648       run
+term           F  ndf    ddf        p       tested in
+---------  -----  ---  -----  -------  ---  ----------
+T          6.305    1      4    0.066  .    whole plot
+t          310.2    1  11.64  <0.0001  ***  run
+dose        2129    1  11.23  <0.0001  ***  run
+radius2     2571    1    382  <0.0001  ***  residual
+slot       12.78    1  20.75  0.00181  **   wafer
+T:t        0.433    1  11.64    0.523       run
+T:dose     77.33    1  11.09  <0.0001  ***  run
+t:dose     0.118    1  11.09    0.738       run
+T:radius2  950.2    1    382  <0.0001  ***  residual
+T:t:dose   5.891    1  11.64   0.0325  *    run
 strata (containment df): whole plot 4, run 12, wafer 23, residual 382
-REML criterion 33.854201
+REML criterion 85.634592
 ```
 
 The bowl (`radius2`) and its growth with temperature (`T:radius2`) are detected, tested against
-the within-wafer variation; the slot gradient against the wafer-to-wafer variation.
+the within-wafer variation; the slot gradient (0.77 per half-range of slots 1 … 8, about 0.2 Ω/sq
+per slot, as simulated) against the wafer-to-wafer variation. One term, `T:t:dose`, comes out at
+p = 0.03 although the truth has no such effect: with ten tests at 5 %, a false alarm is not
+surprising, which is why a reduced model is a suggestion and a confirmation run the test.
 
 ## Uniformity as a response
 
@@ -146,33 +154,34 @@ Rs_logsd ~ T + t + dose
 mixed model (REML): 48 readings from 24 runs; random effects: Whole plot (6), Run (24); residual = within run
 
 variance components
-source       variance  std. dev.  95% CI (variance)             % of total
-----------  ---------  ---------  ----------------------------  ----------
-Whole plot  0.0002121    0.01456  1.857e-5 … 1.314e38           2.13
-Run                 0          0  estimate on the boundary (0)  0
-Residual     0.009738    0.09868  0.005937 … 0.01885            97.9
+source      variance  std. dev.  95% CI (variance)             % of total
+----------  --------  ---------  ----------------------------  ----------
+Whole plot         0          0  estimate on the boundary (0)  0
+Run         0.002272    0.04767  0.000884 … 0.01375            41.7
+Residual    0.003179    0.05639  0.001938 … 0.006153           58.3
 
 fixed effects (coded units; Kenward–Roger standard errors and df)
-term         estimate  std. error  df       t        p
------------  --------  ----------  --  ------  -------  ---
-(Intercept)   -0.3248     0.01543   4  -21.04  <0.0001  ***
-T              0.2402     0.01543   4   15.56  <0.0001  ***
-t              0.0164     0.01424  16   1.151    0.266
-dose          0.01444     0.01424  16   1.014    0.326
+term          estimate  std. error  df        t        p
+-----------  ---------  ----------  --  -------  -------  ---
+(Intercept)    -0.3199     0.01269   4   -25.22  <0.0001  ***
+T               0.2549     0.01269   4    20.09  <0.0001  ***
+t            -0.005217     0.01269  16  -0.4113    0.686
+dose          -0.01716     0.01269  16   -1.353    0.195
 
 tests of model terms (Kenward–Roger)
-term      F  ndf  ddf        p       tested in
-----  -----  ---  ---  -------  ---  ----------
-T     242.1    1    4  <0.0001  ***  whole plot
-t     1.326    1   16    0.266       run
-dose  1.028    1   16    0.326       run
+term       F  ndf  ddf        p       tested in
+----  ------  ---  ---  -------  ---  ----------
+T      403.7    1    4  <0.0001  ***  whole plot
+t     0.1691    1   16    0.686       run
+dose    1.83    1   16    0.195       run
 strata (containment df): whole plot 4, run 16, residual 24
-note: Run variance estimated as 0 (on the boundary): the data show no variation at that level beyond what the levels below explain
-REML criterion -62.802657
+note: Whole plot variance estimated as 0 (on the boundary): the data show no variation at that level beyond what the levels below explain
+REML criterion -94.941565
 ```
 
-The non-uniformity grows with temperature — the same finding as `T:radius2`, from a different
-angle. A [robust design](optimisation.md#robust-design) could now trade the mean against the
+The non-uniformity grows with temperature (p < 0.0001: the per-wafer spread is dominated by the
+bowl, which is the same in every furnace run at a given temperature) — the same finding as
+`T:radius2`, from a different angle. A [robust design](optimisation.md#robust-design) could now trade the mean against the
 uniformity.
 
 ## Predictions for new runs
@@ -183,6 +192,6 @@ Predictions for a new furnace run include its whole-plot, run and wafer variatio
 $ doe predict examples/furnace-anneal.aikidoe.json "Rs ~ T*t*dose + radius2 + T:radius2" --at "T=950,t=20,dose=2e15"
 settings                predicted  95% CI (mean, KR)  95% PI (one new run, measured like the others)
 ----------------------  ---------  -----------------  ----------------------------------------------
-T=950, t=20, dose=2e15      62.56  60.39 … 64.72      56.95 … 68.16 (df 5.01)
+T=950, t=20, dose=2e15      61.72  58.88 … 64.57      54.32 … 69.13 (df 4.78)
 mixed model: the prediction interval includes whole plot, run, wafer and residual variation (Satterthwaite df); position terms averaged over the sites
 ```

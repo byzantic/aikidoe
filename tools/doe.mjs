@@ -59,6 +59,16 @@
 //        Sobol first-order and total indices of each surrogate
 //   recommend STUDY [--goal screen|model|optimise] [--budget N] [--delta 2] [--eta 1] [--no-optimal]
 //        ranked design options with reasons: run counts, resolution, D-efficiency, power at Δ = delta·σ
+//   exercise new STUDY --topic T [--difficulty easy|medium|hard] [--seed S] [--scenario X]
+//        a self-study exercise: the study (no design yet), its questions and budget, the truth sealed
+//   exercise new --set N --topic T [--difficulty D] [--seed S] --out DIR
+//        class mode: DIR/ID.key.json (keep it) and DIR/ID.aikidoe.json (for the students) per exercise
+//   exercise run STUDY                     self-study: results for the runs of the design
+//   exercise run KEY SHEET.csv [--out RESULTS.csv]   class mode: results for a student's run sheet
+//   exercise answer STUDY [--active A,B] [--effect "A=est:lo:hi" …] [--best "A=…,B=…"] [--prediction v]
+//   exercise grade STUDY | exercise grade KEY STUDY   score, feedback, the model answer and the truth
+//        (without answers, the study's data are analysed the standard way and that is graded)
+//   exercise topics                        the topics, difficulties and scenarios
 //   report STUDY [--model "y ~ …" …] [--out FILE.html] [--date YYYY-MM-DD]
 //        self-contained HTML report (design, run sheet, fitted models, plots; the study embedded)
 //   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
@@ -96,8 +106,11 @@ import { studyAdapter, registerAdapter } from '../js/sim/adapters.js';
 import { combOverStudy } from '../js/sim/combover.js';
 import { recommend } from '../js/design/recommend.js';
 import { studyReport } from '../js/io/report.js';
+import { generateExercise, runExercise, gradeStudy, keyOf, studentOf, truthOf, TOPICS, DIFFICULTIES } from '../js/learn/exercise.js';
+import { SCENARIOS } from '../js/learn/scenarios.js';
+import { mkdirSync } from 'node:fs';
 import { toleranceSd } from '../js/sim/sample.js';
-import { dirname, resolve as resolvePath } from 'node:path';
+import { dirname, join, resolve as resolvePath } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { num, pval, stars, table } from '../js/format.js';
 
@@ -914,6 +927,125 @@ function cmdReport({ pos, opt }) {
   out(`wrote ${outFile} (${(Buffer.byteLength(html) / 1024).toFixed(0)} kB, self-contained; the study is embedded)`);
 }
 
+// ---------------------------------------------------------------- exercises (§16.2)
+
+// an exercise as stored in a study (self-study) or a key file (class mode), with its study
+const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [] }) });
+const loadKey = (file) => {
+  const k = JSON.parse(readFileSync(file, 'utf8'));
+  if (k.format !== 'aikidoe-exercise/1' || !k.truth) fail(`${file} is not an exercise key`);
+  return { ...k, study: createStudy(k.study) };
+};
+const showExercise = (ex) => {
+  out(`${ex.title} — ${ex.difficulty} (${ex.id})`);
+  out(ex.text);
+  out(`budget: ${ex.budget} runs`);
+  for (const q of ex.questions) out(`  - ${q.text}`);
+};
+
+async function cmdExercise({ pos, opt }) {
+  const sub = pos[0];
+  if (sub === 'topics') {
+    put({ topics: Object.entries(TOPICS).map(([id, t]) => ({ id, title: t.title, lesson: t.lesson })), difficulties: Object.keys(DIFFICULTIES), scenarios: Object.entries(SCENARIOS).map(([id, s]) => ({ id, title: s.title })) });
+    out(table([{ key: 'id', label: 'topic', align: 'left' }, { key: 'title', label: '', align: 'left' }, { key: 'lesson', label: 'lesson' }], Object.entries(TOPICS).map(([id, t]) => ({ id, ...t }))));
+    out(`difficulties: ${Object.keys(DIFFICULTIES).join(', ')}; scenarios: ${Object.keys(SCENARIOS).join(', ')}`);
+    return;
+  }
+  if (sub === 'new') {
+    if (!opt.topic) fail('exercise new: give --topic (see: doe exercise topics)');
+    const base = { topic: String(opt.topic), difficulty: opt.difficulty ? String(opt.difficulty) : 'medium', ...(opt.scenario ? { scenario: String(opt.scenario) } : {}) };
+    const seed0 = opt.seed !== undefined ? int(opt.seed, 'seed') : 1;
+    if (opt.set !== undefined) {
+      const n = int(opt.set, 'set'), dir = opt.out ? String(opt.out) : 'exercises';
+      mkdirSync(dir, { recursive: true });
+      const made = [];
+      for (let i = 0; i < n; i++) {
+        const ex = generateExercise({ ...base, seed: seed0 + i });
+        const key = keyOf(ex), { study, ...stu } = studentOf(ex);
+        writeFileSync(join(dir, `${ex.id}.key.json`), JSON.stringify(key, null, 2) + '\n');
+        writeFileSync(join(dir, `${ex.id}.aikidoe.json`), serializeStudy(createStudy({ ...study, exercise: stu })));
+        made.push(ex.id);
+      }
+      put({ dir, exercises: made });
+      out(`${dir}: ${n} exercises (${base.topic}, ${base.difficulty}): keep the *.key.json files; give the students the *.aikidoe.json studies`);
+      for (const id of made) out(`  ${id}`);
+      return;
+    }
+    const file = pos[1];
+    if (!file) fail('exercise new: give the study file to create (or --set N --out DIR)');
+    if (existsSync(file) && !opt.force) fail(`${file} exists (use --force to replace it)`);
+    const ex = generateExercise({ ...base, seed: seed0 });
+    const { study, ...rest } = ex;
+    save(file, createStudy({ ...study, exercise: rest }));
+    put({ file, exercise: { id: ex.id, topic: ex.topic, difficulty: ex.difficulty, budget: ex.budget, questions: ex.questions } });
+    showExercise(ex);
+    out(`\n${file}: design it (doe recommend / doe design), then "doe exercise run ${file}" for the results`);
+    return;
+  }
+  if (sub === 'run') {
+    if (pos.length === 3) {                                            // class mode: KEY SHEET.csv
+      const key = loadKey(pos[1]);
+      const { header: head, rows: body } = parseCSV(readFileSync(pos[2], 'utf8'));
+      const col = (n) => head.indexOf(n);
+      if (col('run') < 0) fail(`${pos[2]}: no "run" column (send the run sheet from doe sheet)`);
+      const runs = body.filter(r => r.some(c => c !== '')).map((r, i) => ({
+        run: Number(r[col('run')]), order: col('order') >= 0 ? Number(r[col('order')]) : i + 1,
+        ...(col('wholePlot') >= 0 && r[col('wholePlot')] !== '' ? { wholePlot: r[col('wholePlot')] } : {}), ...(col('block') >= 0 && r[col('block')] !== '' ? { block: r[col('block')] } : {}),
+        settings: Object.fromEntries(key.study.factors.map(f => { const j = col(f.id); if (j < 0) fail(`${pos[2]}: no column for factor ${f.id}`); return [f.id, f.type === 'categorical' ? r[j] : Number(r[j])]; })),
+      }));
+      const st = runExercise(key, createStudy({ ...key.study, design: { kind: 'custom', runs } }));
+      const csv = ['run,response,value', ...st.observations.map(o => `${o.run},${o.response},${o.value}`)].join('\n') + '\n';
+      const over = runs.length > key.budget;
+      put({ runs: runs.length, budget: key.budget, overBudget: over, ...(opt.out ? { file: String(opt.out) } : { csv }) });
+      if (opt.out) { writeFileSync(String(opt.out), csv); out(`${opt.out}: results for ${runs.length} runs (budget ${key.budget})${over ? ' — over budget' : ''}`); }
+      else if (RESULT) { /* in the JSON */ } else process.stdout.write(csv);
+      return;
+    }
+    const file = pos[1], study = load(file);
+    if (!study.exercise) fail(`${file} is not an exercise`);
+    if (!study.exercise.sealed) fail(`${file} is a class exercise: send your run sheet (doe sheet) to the instructor for results`);
+    if (!study.design) fail(`${file} has no design yet: make one first (doe design …)`);
+    const ex = exerciseOf(study);
+    let next;
+    try { next = runExercise(ex, study); } catch (e) { fail(e.message); }
+    save(file, next);
+    const n = study.design.runs.length, over = n > ex.budget;
+    put({ file, runs: n, budget: ex.budget, overBudget: over });
+    out(`${file}: results for ${new Set(next.observations.map(o => o.run)).size} runs (budget ${ex.budget})${over ? ` — ${n - ex.budget} over budget` : ''}`);
+    return;
+  }
+  if (sub === 'answer') {
+    const file = pos[1], study = load(file);
+    if (!study.exercise) fail(`${file} is not an exercise`);
+    const a = opt.clear ? {} : { ...(study.exercise.answers ?? {}) };
+    if (opt.active !== undefined) a.active = String(opt.active).split(',').map(x => x.trim()).filter(Boolean);
+    for (const e of list(opt.effect)) { const [id, v] = String(e).split('='); const [est, lo, hi] = (v ?? '').split(':').map(Number); if (![est, lo, hi].every(Number.isFinite)) fail(`--effect "${e}": give id=estimate:lower:upper`); (a.effects ??= {})[id.trim()] = { estimate: est, lower: lo, upper: hi }; }
+    if (opt.best) a.best = parseSettingsLoose(study, String(opt.best));
+    if (opt.prediction !== undefined) a.prediction = { value: Number(opt.prediction) };
+    save(file, createStudy({ ...study, exercise: { ...study.exercise, answers: a } }));
+    put({ file, answers: a });
+    out(`${file}: answers ${JSON.stringify(a)}`);
+    return;
+  }
+  if (sub === 'grade') {
+    let ex, study;
+    if (pos.length === 3) { ex = loadKey(pos[1]); study = load(pos[2]); }
+    else { study = load(pos[1]); if (!study.exercise) fail(`${pos[1]} is not an exercise`); ex = exerciseOf(study); }
+    if (!study.design) fail('nothing to grade: the study has no design yet');
+    const g = gradeStudy(ex, study, truthOf(ex));
+    put({ score: g.score, parts: g.parts, derived: g.derived, answers: g.answers, truth: g.truth, modelAnswer: g.modelAnswer });
+    out(`${ex.title} — ${ex.difficulty} (${ex.id})`);
+    if (g.derived) out(`no answers given: graded on the standard analysis of your data (${g.answers.formula}, terms with p < 0.05)`);
+    out(table([{ key: 'id', label: 'question', align: 'left' }, { key: 'pts', label: 'points' }, { key: 'note', label: '', align: 'left' }],
+      g.parts.map(p => ({ ...p, pts: p.max ? `${num(p.score, 3)} / ${num(p.max, 3)}` : num(p.score, 3) }))));
+    out(`score: ${g.score} / 100`);
+    out(`\ntruth: active ${g.truth.active.join(', ')}; effects ${Object.entries(g.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`);
+    if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(`  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
+    return;
+  }
+  fail('exercise: new, run, answer, grade or topics');
+}
+
 function cmdSchema({ opt }) {
   const which = opt.cli ? 'cli' : 'study';
   const schema = JSON.parse(readFileSync(new URL(`../schema/${which}.schema.json`, import.meta.url), 'utf8'));
@@ -940,7 +1072,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

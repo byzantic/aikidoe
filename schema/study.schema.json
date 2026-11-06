@@ -87,6 +87,49 @@
       },
       "additionalProperties": true,
       "description": "the simulator that runs the design (computer experiments): { adapter, …its options }"
+    },
+    "exercise": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": true,
+      "description": "an exercise this study answers (made by the exercise generator): its id, topic, difficulty, budget, questions, the sealed truth for self-study, and the student's answers",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "format": {
+          "const": "aikidoe-exercise/1"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "difficulty": {
+          "enum": [
+            "easy",
+            "medium",
+            "hard"
+          ]
+        },
+        "budget": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "sealed": {
+          "type": "string"
+        },
+        "answers": {
+          "type": "object",
+          "description": "{ active: [factor ids], effects: { id: { estimate, lower, upper } }, best: settings, prediction: { value } }"
+        }
+      }
     }
   },
   "$defs": {

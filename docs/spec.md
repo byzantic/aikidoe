@@ -394,6 +394,44 @@ questions, and the sealed truth.
   (`doe exercise run KEY sheet.csv`) and grades submissions (`doe exercise grade KEY study`) —
   much as a real lab returns measurements.
 
+Implementation (#38):
+
+- `js/learn/process.js` — virtual processes as plain data `{ seed, factors, responses: [{ id, truth:
+  { intercept, terms: { label: coef } }, sigma, transform, decimals }], nuisance }`. Truth labels over
+  coded factors: `A`, `A:B`, `I(A^2)`, a two-level categorical as ±1, `g.L` indicators, and the
+  position terms `radius2`, `slot`. Nuisance: run-to-run σ; whole plot (by label), block, drift per
+  run, outliers, gauge bias; wafers per run, wafer and site sd, slot gradient. Randomness is hashed
+  (FNV-1a + murmur finaliser → uniform → inverse normal) from (seed, response, kind, settings,
+  replicate index, …), so results are deterministic and independent of the run order except for
+  order-dependent nuisance.
+- `js/learn/scenarios.js` — five scenarios (gate oxide, plasma etch, CVD, reactor, coupler), each
+  with eight factors (one hard to change, one categorical), units, ranges, a response baseline and σ.
+- `js/learn/exercise.js` — six topics (factorial, fraction, screening, blocking, rsm, split-plot) ×
+  three difficulties (smallest active effect 4, 3, 2.4 σ). Truth: sparse main effects with random
+  signs, an interaction among active factors with the topic's probability (heredity), for rsm a
+  maximum inside the region (−Σ cᵢ(xᵢ − x*ᵢ)², x* in ±0.6, plus a small interaction). Order-dependent
+  nuisance follows the actual run order: day shifts (blocking: 8 runs a day, 3σ) and resets of the
+  hard-to-change factor (split-plot: 0.8σ per reset; every run of a design without whole plots is a
+  reset). Questions: active factors, effects with intervals, best settings, a prediction, the budget.
+  Solvability: truths are redrawn (≤ 40 attempts, recorded) until the reference strategy, within the
+  budget, has power ≥ 0.8 for every questioned term (rsm: the curvature terms) and earns 100; its path
+  is the model answer. Reference strategies: 2³ × 2; 8-run fraction + full fold-over; 16-run
+  resolution IV; 2⁴ in two blocks; rotatable CCD; split-plot full factorial with 6 whole plots.
+  One-factor-at-a-time: baseline at the low settings and each factor raised alone, repeated within
+  the budget, run in order. Grader: active factors 40 (F1 of precision and recall), effects 25 (half
+  for the sign, half for the interval containing the truth), best settings 25 (full at regret ≤ 5 %
+  of the true range, none at ≥ 50 %), prediction 10 (full within 1.5σ, none beyond 4σ), weights
+  renormalised to the questions asked; −20 over budget. Without answers, the study's data are
+  analysed the standard way and that is graded.
+- Self-study: the truth sealed in the study's `exercise` field (XOR keystream from the id, base64).
+  Class mode: `doe exercise new --set N --out DIR` writes keys and student studies; `exercise run KEY
+  sheet.csv` returns long-format results; `exercise grade KEY STUDY`.
+- The app's simulated examples (reactor-results, ccd-results, anneal-results) are now virtual
+  processes with the truths they always had.
+- Tested: hashed randomness, truth evaluation, determinism and replicate draws, nuisance; across the
+  6 topics × 3 difficulties × 50 seeds the reference strategy earns 100 every time and
+  one-factor-at-a-time averages 31–82; reproducible from the seed; the class-mode round trip.
+
 **Tutorial.** A sequence of lessons in the UI (a *Learn* mode beside the four steps), each a
 short explanation linked to the manual, a task on a generated exercise, checks with hints while
 working (e.g. "these two effects are aliased — can you tell them apart?"), and a graded result:

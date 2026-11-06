@@ -31,6 +31,7 @@ the library checks the rest when it reads a study:
 | `sites` | [sites](#sites) | drop-in measurement sites on the wafer |
 | `history` | list of [stage](#stage) | the stages of a sequential experiment |
 | `simulator` | object | the simulator that runs the design (computer experiments): { adapter, …its options } |
+| `exercise` | object | an exercise this study answers (made by the exercise generator): its id, topic, difficulty, budget, questions, the sealed truth for self-study, and the student's answers |
 
 ## factor
 

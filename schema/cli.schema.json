@@ -570,6 +570,25 @@
       "then": {
         "$ref": "#/$defs/report"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "exercise"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/exercise"
+      }
     }
   ],
   "$defs": {
@@ -2310,6 +2329,114 @@
         },
         "bytes": {
           "type": "integer"
+        }
+      }
+    },
+    "exercise": {
+      "type": "object",
+      "description": "exercise new / run / answer / grade / topics: the fields of the subcommand",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "dir": {
+          "type": "string"
+        },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exercise": {
+          "type": "object",
+          "required": [
+            "id",
+            "topic",
+            "difficulty",
+            "budget",
+            "questions"
+          ]
+        },
+        "runs": {
+          "type": "integer"
+        },
+        "budget": {
+          "type": "integer"
+        },
+        "overBudget": {
+          "type": "boolean"
+        },
+        "csv": {
+          "type": "string"
+        },
+        "answers": {
+          "type": "object"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "score",
+              "max"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "score": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "derived": {
+          "type": "boolean"
+        },
+        "truth": {
+          "type": "object",
+          "required": [
+            "active",
+            "effects"
+          ]
+        },
+        "modelAnswer": {
+          "type": "object"
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title"
+            ]
+          }
+        },
+        "difficulties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
       }
     }
