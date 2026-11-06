@@ -15,7 +15,7 @@ import { parseFormula } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
 import { designPower, detectableEffect } from '../js/model/power.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
-import { lhsDesign } from '../js/sim/surrogate.js';
+import { candidates, buildCandidate, intendedModel, wholePlotChoices, defaultWholePlots, recommend, GOALS } from '../js/design/recommend.js';
 
 // the optimal-design search runs in a worker; one search at a time
 let worker = null, searchId = 0;
@@ -29,100 +29,27 @@ function search(study, opts, onDone, extra = {}) {
 }
 const optKey = (o) => JSON.stringify([o.optRuns, o.optModel, o.optCriterion, o.optRestarts, o.seed, o.optWholePlots, o.optEta]);
 
-// whole-plot choices for a split-plot fraction of N runs: 2^q1 plots with room for the factors
-function wholePlotChoices(k1, k2, N) {
-  const out = [];
-  for (let W = 2; W < N; W *= 2) if (k1 <= W - 1 && k2 <= N - W) out.push(W);
-  return out;
-}
-const defaultWholePlots = (k1, k2, N) => { const c = wholePlotChoices(k1, k2, N); return c.find(W => W >= 2 ** k1) ?? c[c.length - 1]; };
-
 const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n] ?? String(n) : 'full');
-
-/** Candidate designs for a study's factors: [{ id, kind, label, runs, note, opts }]. */
-export function candidates(study) {
-  const f = study.factors, k = f.length;
-  const allCont = f.every(x => x.type === 'continuous');
-  const twoLevel = f.every(x => x.type === 'continuous' || x.levels.length === 2);
-  const levels = f.map(x => (x.type === 'categorical' ? x.levels.length : x.levels ? x.levels.length : 2));
-  const out = [];
-  const full = levels.reduce((a, b) => a * b, 1);
-  if (full <= 4096) out.push({ id: 'full', kind: 'full', label: 'Full factorial', runs: full, note: levels.every(m => m === 2) ? 'all effects estimable' : `mixed-level ${levels.join('×')}`, res: Infinity });
-  if (twoLevel && k >= 3) for (let q = Math.ceil(Math.log2(k + 1)); q < k && q <= 7; q++) {
-    const e = CATALOGUE[`${k}-${k - q}`];
-    if (e) out.push({ id: `frac-${1 << q}`, kind: 'fraction', label: `2^(${k}−${k - q}) fraction`, runs: 1 << q, res: e.resolution,
-      note: e.resolution >= 5 ? 'main effects and 2fis clear' : e.resolution === 4 ? 'main effects clear of 2fis; 2fis aliased in pairs' : 'main effects aliased with 2fis (screening)', opts: { runs: 1 << q } });
-  }
-  if (twoLevel && k >= 2) {
-    const N = PB_RUNS.find(n => n > k);
-    if (N && N % 4 === 0 && !Number.isInteger(Math.log2(N))) out.push({ id: `pb-${N}`, kind: 'pb', label: 'Plackett–Burman', runs: N, res: 3, note: 'main effects only; 2fis partially aliased', opts: { runs: N } });
-  }
-  if (allCont && k >= 2 && k <= 8) {
-    const cube = { 5: 16, 6: 32, 7: 64, 8: 64 }[k] ?? 2 ** k;
-    const d = ccd(k, { cubeRuns: cube });
-    out.push({ id: 'ccd', kind: 'ccd', label: 'Central composite', runs: d.X.length, note: `rotatable, α = ${num(d.params.alpha, 4)}; full quadratic`, opts: { cubeRuns: cube } });
-  }
-  if (allCont && k >= 3 && k <= 7) out.push({ id: 'bbd', kind: 'bbd', label: 'Box–Behnken', runs: boxBehnken(k).X.length, note: 'three levels, no corner points; full quadratic' });
-  if (twoLevel && k >= 3 && dsdOrder(k) && f.some(x => x.type === 'continuous')) {
-    const cats = f.map((x, j) => (x.type === 'categorical' ? j : -1)).filter(j => j >= 0);
-    out.push({ id: 'dsd', kind: 'dsd', label: 'Definitive screening', runs: definitiveScreening(k, { categorical: cats }).X.length, note: 'three levels; main effects clear of 2fis and curvature' });
-  }
-  const sorted = out.sort((a, b) => a.runs - b.runs);
-  // computer experiments (§10): a space-filling design for a simulator, listed first when the study has one
-  if (allCont) { const lhs = { id: 'lhs', kind: 'lhs', label: 'Latin hypercube (space-filling)', runs: Math.max(10 * k, (k + 1) * (k + 2) / 2 + 5), note: 'for a simulator: maximin; surrogate model fitted afterwards' }; if (study.simulator) sorted.unshift(lhs); else sorted.push(lhs); }
-  sorted.push({ id: 'optimal', kind: 'optimal', label: 'Optimal (custom)', runs: null, note: 'D-, I- or A-optimal for a model you choose; respects constraints' });
-  const htc = f.map(x => !!x.htc), k1 = htc.filter(Boolean).length;
-  if (!k1 || k1 === k) return sorted;
-  // hard-to-change factors: factorial designs become split-plots; the others ignore the restriction
-  const sp = [];
-  for (const c of sorted) {
-    if (c.kind === 'full') sp.push({ ...c, id: 'sp-full', kind: 'sp-full', label: 'Split-plot full factorial', note: `${new Set(fullFactorial(levels).X.map(r => r.filter((_, j) => htc[j]).join())).size} whole plots; ${c.note}` });
-    else if (c.kind === 'fraction') {
-      const W = defaultWholePlots(k1, k - k1, c.runs);
-      if (!W) continue;
-      let res = null; try { res = splitPlotFraction(htc, { runs: c.runs, wholePlots: W }).params.resolution; } catch { continue; }
-      sp.push({ ...c, id: `sp-frac-${c.runs}`, kind: 'sp-frac', label: `Split-plot 2^(${k}−${k - Math.log2(c.runs)}) fraction`, res, note: `${W} whole plots by default; whole-plot factors constant within each` });
-    } else if (c.kind === 'optimal') sp.push({ id: 'sp-optimal', kind: 'sp-optimal', label: 'Optimal split-plot', runs: null, note: 'D-optimal for your model, number of whole plots and assumed variance ratio η' });
-    else sp.push({ ...c, note: `${c.note}; ignores hard-to-change factors (completely randomised)`, ignoresHtc: true });
-  }
-  return sp;
-}
 
 const lhsCache = { key: null, d: null };
 
-/** Build the design object for a candidate and the UI options. */
+/** Build the design object for a candidate and the UI options (optimal designs: the worker's result). */
 function build(study, cand, o) {
-  const cont = study.factors.map(x => x.type === 'continuous');
-  const common = { centre: o.centre || 0, replicates: o.replicates || 1, continuous: cont, ...(o.blocks > 1 ? { blocks: o.blocks } : {}) };
-  switch (cand.kind) {
-    case 'full': return fullFactorial(study.factors.map(x => (x.type === 'categorical' ? x.levels.length : x.levels ? x.levels.length : 2)), common);
-    case 'fraction': return fractionalFactorial(study.factors.length, { runs: cand.opts.runs, ...common });
-    case 'pb': return plackettBurman(study.factors.length, { runs: cand.opts.runs });
-    case 'ccd': return ccd(study.factors.length, { cubeRuns: cand.opts.cubeRuns, alpha: o.alpha === 'number' ? Number(o.alphaValue) : o.alpha || undefined,
-      inscribed: !!o.inscribed, ...(o.rsmBlocks ? { blocks: true } : {}), ...(o.centre !== '' && o.centre !== undefined ? { centre: o.rsmBlocks ? [Number(o.centre), Number(o.centreAxial ?? o.centre)] : Number(o.centre) } : {}) });
-    case 'bbd': return boxBehnken(study.factors.length, { centre: o.centre === '' || o.centre === undefined ? 3 : Number(o.centre), blocks: !!o.rsmBlocks });
-    case 'dsd': return definitiveScreening(study.factors.length, { fake: o.fake ?? 0, centre: o.centre === '' || o.centre === undefined ? 1 : Number(o.centre),
-      categorical: study.factors.map((x, j) => (x.type === 'categorical' ? j : -1)).filter(j => j >= 0) });
-    case 'sp-full': return splitPlotFull(study.factors.map(x => (x.type === 'categorical' ? x.levels.length : x.levels ? x.levels.length : 2)), study.factors.map(x => !!x.htc), { replicates: o.replicates || 1 });
-    case 'sp-frac': {
-      const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length;
-      return splitPlotFraction(htc, { runs: cand.opts.runs, wholePlots: o.wholePlots ?? defaultWholePlots(k1, htc.length - k1, cand.opts.runs), replicates: o.replicates || 1, names: study.factors.map(x => x.id) });
-    }
-    case 'lhs': {
-      const key = `${o.lhsRuns ?? cand.runs}:${o.seed ?? study.seed}:${study.factors.map(f => f.id).join()}`;
-      if (lhsCache.key !== key) Object.assign(lhsCache, { key, d: lhsDesign(study, { runs: o.lhsRuns ?? cand.runs, seed: (o.seed ?? study.seed) >>> 0 }) });
-      return lhsCache.d;
-    }
-    case 'sp-optimal':
-    case 'optimal': {
-      const r = o.optResult;
-      if (!r || r.key !== optKey(o)) return null;          // not searched yet for these options
-      if (!r.ok) throw new Error(r.error);
-      return r.design;
-    }
+  if (cand.kind === 'optimal' || cand.kind === 'sp-optimal') {
+    const r = o.optResult;
+    if (!r || r.key !== optKey(o)) return null;          // not searched yet for these options
+    if (!r.ok) throw new Error(r.error);
+    return r.design;
   }
-  throw new Error(`unknown design ${cand.kind}`);
+  if (cand.kind === 'lhs') {
+    const key = `${o.lhsRuns ?? cand.runs}:${o.seed ?? study.seed}:${study.factors.map(f => f.id).join()}`;
+    if (lhsCache.key !== key) Object.assign(lhsCache, { key, d: buildCandidate(study, cand, o) });
+    return lhsCache.d;
+  }
+  return buildCandidate(study, cand, o);
 }
+
+export { candidates };
 
 export function render(ctx) {
   const { state, setDoc, setUI } = ctx;
@@ -134,12 +61,30 @@ export function render(ctx) {
   const cand = cands.find(c => c.id === ui.id) ?? cands.find(c => (c.kind === 'fraction' || c.kind === 'sp-frac') && c.res >= 4) ?? cands[0];
   const set = (patch) => setUI({ design: { ...ui, ...patch } });
 
-  // ---------------------------------------------------------------- candidates
-  const list = h('section', { class: 'panel' }, h('h2', {}, `Designs for ${study.factors.length} factors`),
+  // ---------------------------------------------------------------- recommender (shared with `doe recommend`)
+  const recKey = JSON.stringify([study.factors, study.simulator?.adapter ?? null, ui.goal ?? null, ui.budget ?? null]);
+  const rec = ui.rec?.key === recKey ? ui.rec.result : null;
+  const recRow = h('div', { class: 'row', id: 'recommend' },
+    h('label', { class: 'inline' }, 'goal', select([{ value: '', label: 'auto' }, ...Object.entries(GOALS).map(([value, g]) => ({ value, label: `${value} — ${g.what}` }))], ui.goal ?? '', (v) => set({ goal: v || undefined }), { 'aria-label': 'recommend goal' })),
+    h('label', { class: 'inline' }, 'budget (runs)', h('input', { class: 'num', type: 'number', min: 1, value: ui.budget ?? '', placeholder: 'any', 'aria-label': 'recommend budget', onchange: (e) => set({ budget: e.target.value === '' ? undefined : Number(e.target.value) }) })),
+    h('button', { class: 'btn primary', id: 'recommend-btn', onclick: () => {
+      try { set({ rec: { key: recKey, result: recommend(study, { goal: ui.goal, budget: ui.budget }) }, recError: null }); } catch (e) { set({ recError: e.message }); }
+    } }, 'Recommend'),
+    rec ? h('span', { class: 'muted small' }, `ranked for: ${rec.goalText} (${rec.model}, ${rec.terms} terms); power at Δ = ${rec.delta}σ`) : null);
+  const recOf = (id) => rec?.options.find(o => o.id === id);
+  const rows = rec ? [...cands].sort((a, b) => (recOf(a.id)?.rank ?? 1e9) - (recOf(b.id)?.rank ?? 1e9)) : cands;
+  const list = h('section', { class: 'panel' }, h('h2', {}, `Designs for ${study.factors.length} factors`), recRow, ui.recError ? h('div', { class: 'msg error' }, ui.recError) : null,
     dataTable([
-      { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n' },
-      { key: 'res', label: 'resolution', fmt: (v, r) => (['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full', 'lhs'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) }, { key: 'note', label: '' },
-    ], cands, { rowAttrs: (r) => ({ class: `click ${r.id === cand.id ? 'sel' : ''}`, 'data-design': r.id, onclick: () => set({ id: r.id, centre: undefined, blocks: undefined, rsmBlocks: false }) }) }),
+      ...(rec ? [{ key: 'rank', label: '#', cls: 'n', fmt: (_, r) => recOf(r.id)?.rank ?? '—' }] : []),
+      { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n', fmt: (v, r) => recOf(r.id)?.runs ?? v },
+      { key: 'res', label: 'resolution', fmt: (v, r) => (['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full', 'lhs'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) },
+      ...(rec ? [{ key: 'pw', label: 'min power', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return o?.minPower != null ? num(o.minPower, 2) : '—'; } }] : []),
+      { key: 'note', label: '', fmt: (v, r) => { const o = recOf(r.id); if (!o) return v; return h('div', { class: 'small', 'data-reasons': r.id }, o.reasons.length ? h('div', {}, o.reasons.join('; ')) : null, o.warnings.length ? h('div', { class: 'warn-text' }, o.warnings.join('; ')) : null); } },
+    ], rows, { rowAttrs: (r) => ({ class: `click ${r.id === cand.id ? 'sel' : ''} ${rec && !recOf(r.id)?.rank ? 'muted' : ''}`, 'data-design': r.id, onclick: () => {
+      const o = recOf(r.id), patch = { id: r.id, centre: undefined, blocks: undefined, rsmBlocks: false };
+      if (o && (r.kind === 'optimal' || r.kind === 'sp-optimal')) Object.assign(patch, { optRuns: o.runs, optModel: rec.model, ...(o.wholePlots ? { optWholePlots: o.wholePlots } : {}) });
+      set(patch);
+    } }) }),
     h('p', { class: 'muted small' }, 'Resolution III: main effects aliased with two-factor interactions; IV: main effects clear, 2fis aliased with each other; V: main effects and 2fis clear. Response-surface designs (central composite, Box–Behnken) estimate a full quadratic.'));
 
   // ---------------------------------------------------------------- options
@@ -258,18 +203,6 @@ function diagnostics(study, d, modelFor) {
         h('figure', {}, h('figcaption', {}, 'Correlations between model terms'), correlationMap(g.correlations))));
   }
   return h('div', {}, parts);
-}
-
-/** The model a design is meant for, as a starting point for its power table. */
-function intendedModel(study, d) {
-  if (d.kind === 'optimal' || d.kind === 'optimal-split-plot') return d.params.model;
-  if (d.kind === 'ccd' || d.kind === 'box-behnken') return 'quadratic';
-  if (d.params.resolution >= 5) return '2fi';
-  if (d.kind === 'full-factorial' || d.kind === 'split-plot-full') {
-    const k = study.factors.length;
-    return d.X.length > 1 + k + k * (k - 1) / 2 ? '2fi' : 'main';
-  }
-  return 'main';
 }
 
 function powerSection(study, d, cand, ui, set) {

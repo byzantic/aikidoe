@@ -105,8 +105,13 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `predict STUDY "y ~ formula" --at "A=…,B=…"` | predictions with 95% confidence and prediction intervals |
 | `power STUDY [--model …] [--delta Δ \| "A=3,default=2"] [--sigma σ] [--alpha α]` | power of each term, and the Δ detectable with 80% power |
 | `fit … --reduce p\|aicc [--alpha-out 0.1] [--keep A,B]` | backward elimination keeping hierarchy, then the fit |
+| `recommend STUDY [--goal screen\|model\|optimise] [--budget N]` | ranked design options with reasons: runs, resolution, D-efficiency, power |
+| `schema [--cli]` | JSON Schema of the study file (or of the `--json` output) |
 | `alias STUDY` or `alias --factors k --runs N` | alias structure |
 | `info STUDY` | summary |
+
+Every command takes `--json` and then writes one JSON object (`schema: "aikidoe-cli/1"`), described by
+[`schema/cli.schema.json`](schema/cli.schema.json); the study file format is [`schema/study.schema.json`](schema/study.schema.json).
 
 Formulas use R-style syntax over factor ids: `A*B`, `(A+B+C)^2`, `I(T^2)`, `- A:B`, `-1`, and
 the shortcuts `main`, `2fi`, `quadratic`. Coefficients are in coded units (−1 … +1).
