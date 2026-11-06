@@ -1,0 +1,376 @@
+{
+  "aikidoe": 1,
+  "name": "Reactor screening (Box, Hunter & Hunter)",
+  "description": "Data: Box, Hunter & Hunter, Statistics for Experimenters (1978), the 2^(5−1) reactor experiment (p. 379); percent reacted. Generator conc = feed·cat·agit·temp.",
+  "seed": 51,
+  "factors": [
+    {
+      "id": "feed",
+      "name": "Feed rate",
+      "type": "continuous",
+      "units": "L/min",
+      "htc": false,
+      "low": 10,
+      "high": 15,
+      "transform": "none"
+    },
+    {
+      "id": "cat",
+      "name": "Catalyst",
+      "type": "continuous",
+      "units": "%",
+      "htc": false,
+      "low": 1,
+      "high": 2,
+      "transform": "none"
+    },
+    {
+      "id": "agit",
+      "name": "Agitation",
+      "type": "continuous",
+      "units": "rpm",
+      "htc": false,
+      "low": 100,
+      "high": 120,
+      "transform": "none"
+    },
+    {
+      "id": "temp",
+      "name": "Temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": false,
+      "low": 140,
+      "high": 180,
+      "transform": "none"
+    },
+    {
+      "id": "conc",
+      "name": "Concentration",
+      "type": "continuous",
+      "units": "%",
+      "htc": false,
+      "low": 3,
+      "high": 6,
+      "transform": "none"
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "yield",
+      "name": "Percent reacted",
+      "units": "%",
+      "goal": "maximize",
+      "target": 95,
+      "lower": 60,
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "fractional-factorial",
+    "params": {
+      "runs": 16,
+      "generators": [
+        "E=ABCD"
+      ],
+      "definingRelation": [
+        "ABCDE"
+      ],
+      "wlp": [
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "resolution": 5,
+      "aliases": {
+        "main": [],
+        "fi2": []
+      },
+      "source": "user generators",
+      "seed": 51
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 2,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 1,
+          "agit": 100,
+          "temp": 140,
+          "conc": 6
+        }
+      },
+      {
+        "run": 2,
+        "order": 1,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 1,
+          "agit": 100,
+          "temp": 140,
+          "conc": 3
+        }
+      },
+      {
+        "run": 3,
+        "order": 8,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 2,
+          "agit": 100,
+          "temp": 140,
+          "conc": 3
+        }
+      },
+      {
+        "run": 4,
+        "order": 5,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 2,
+          "agit": 100,
+          "temp": 140,
+          "conc": 6
+        }
+      },
+      {
+        "run": 5,
+        "order": 13,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 1,
+          "agit": 120,
+          "temp": 140,
+          "conc": 3
+        }
+      },
+      {
+        "run": 6,
+        "order": 15,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 1,
+          "agit": 120,
+          "temp": 140,
+          "conc": 6
+        }
+      },
+      {
+        "run": 7,
+        "order": 14,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 2,
+          "agit": 120,
+          "temp": 140,
+          "conc": 6
+        }
+      },
+      {
+        "run": 8,
+        "order": 12,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 2,
+          "agit": 120,
+          "temp": 140,
+          "conc": 3
+        }
+      },
+      {
+        "run": 9,
+        "order": 6,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 1,
+          "agit": 100,
+          "temp": 180,
+          "conc": 3
+        }
+      },
+      {
+        "run": 10,
+        "order": 16,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 1,
+          "agit": 100,
+          "temp": 180,
+          "conc": 6
+        }
+      },
+      {
+        "run": 11,
+        "order": 4,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 2,
+          "agit": 100,
+          "temp": 180,
+          "conc": 6
+        }
+      },
+      {
+        "run": 12,
+        "order": 9,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 2,
+          "agit": 100,
+          "temp": 180,
+          "conc": 3
+        }
+      },
+      {
+        "run": 13,
+        "order": 11,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 1,
+          "agit": 120,
+          "temp": 180,
+          "conc": 6
+        }
+      },
+      {
+        "run": 14,
+        "order": 7,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 1,
+          "agit": 120,
+          "temp": 180,
+          "conc": 3
+        }
+      },
+      {
+        "run": 15,
+        "order": 10,
+        "kind": "fraction",
+        "settings": {
+          "feed": 10,
+          "cat": 2,
+          "agit": 120,
+          "temp": 180,
+          "conc": 3
+        }
+      },
+      {
+        "run": 16,
+        "order": 3,
+        "kind": "fraction",
+        "settings": {
+          "feed": 15,
+          "cat": 2,
+          "agit": 120,
+          "temp": 180,
+          "conc": 6
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "yield",
+      "value": 56
+    },
+    {
+      "run": 2,
+      "response": "yield",
+      "value": 53
+    },
+    {
+      "run": 3,
+      "response": "yield",
+      "value": 63
+    },
+    {
+      "run": 4,
+      "response": "yield",
+      "value": 65
+    },
+    {
+      "run": 5,
+      "response": "yield",
+      "value": 53
+    },
+    {
+      "run": 6,
+      "response": "yield",
+      "value": 55
+    },
+    {
+      "run": 7,
+      "response": "yield",
+      "value": 67
+    },
+    {
+      "run": 8,
+      "response": "yield",
+      "value": 61
+    },
+    {
+      "run": 9,
+      "response": "yield",
+      "value": 69
+    },
+    {
+      "run": 10,
+      "response": "yield",
+      "value": 45
+    },
+    {
+      "run": 11,
+      "response": "yield",
+      "value": 78
+    },
+    {
+      "run": 12,
+      "response": "yield",
+      "value": 93
+    },
+    {
+      "run": 13,
+      "response": "yield",
+      "value": 49
+    },
+    {
+      "run": 14,
+      "response": "yield",
+      "value": 60
+    },
+    {
+      "run": 15,
+      "response": "yield",
+      "value": 95
+    },
+    {
+      "run": 16,
+      "response": "yield",
+      "value": 82
+    }
+  ],
+  "history": []
+}

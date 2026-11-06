@@ -1,0 +1,22 @@
+/* The manual viewer (docs/manual/index.html). */
+body.manual .brand { color: inherit; text-decoration: none; }
+.manual-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 20px; max-width: 1180px; margin: 16px auto; padding: 0 16px; align-items: start; }
+#toc { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; max-height: calc(100vh - 24px); overflow: auto; }
+#toc a { color: var(--ink); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
+#toc a:hover { background: var(--line); }
+#toc a[aria-current="page"] { background: var(--accent); color: var(--accent-ink, #fff); }
+.toc-part { margin: 12px 8px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+#page { line-height: 1.6; max-width: 860px; overflow-wrap: break-word; }
+#page h1 { font-size: 28px; margin: 4px 0 12px; }
+#page h2 { font-size: 21px; margin: 28px 0 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+#page h3 { font-size: 17px; margin: 20px 0 6px; }
+#page pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: 13px; line-height: 1.45; }
+#page pre.code .file-name { display: inline-block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+#page code { font-family: 'IBM Plex Mono', monospace; font-size: .92em; }
+#page :not(pre) > code { background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+#page blockquote { margin: 12px 0; padding: 4px 14px; border-left: 3px solid var(--accent); color: var(--muted); }
+#page table.data { margin: 8px 0; }
+#page img { max-width: 100%; }
+.page-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; }
+.page-nav .next { margin-left: auto; }
+@media (max-width: 760px) { .manual-layout { grid-template-columns: 1fr; } #toc { position: static; max-height: none; } }

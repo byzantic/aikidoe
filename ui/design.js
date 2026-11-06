@@ -1,6 +1,6 @@
 // Design step: compare candidate designs, set options, inspect diagnostics, create the design
 // (spec §12 step 2).
-import { h, select, messages, dataTable } from './dom.js';
+import { h, select, messages, dataTable, help } from './dom.js';
 import { plot } from './plot.js';
 import { num } from '../js/format.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
@@ -51,6 +51,9 @@ function build(study, cand, o) {
 
 export { candidates };
 
+const designHelp = (kind) => [({ full: 'designs-factorial', fraction: 'designs-factorial', pb: 'designs-screening', dsd: 'designs-screening', ccd: 'designs-rsm', bbd: 'designs-rsm',
+  optimal: 'designs-optimal', lhs: 'designs-space-filling' })[kind] ?? (kind.startsWith('sp-') ? 'designs-split-plot' : 'designs-factorial')];
+
 export function render(ctx) {
   const { state, setDoc, setUI } = ctx;
   const study = state.study;
@@ -73,7 +76,7 @@ export function render(ctx) {
     rec ? h('span', { class: 'muted small' }, `ranked for: ${rec.goalText} (${rec.model}, ${rec.terms} terms); power at Δ = ${rec.delta}σ`) : null);
   const recOf = (id) => rec?.options.find(o => o.id === id);
   const rows = rec ? [...cands].sort((a, b) => (recOf(a.id)?.rank ?? 1e9) - (recOf(b.id)?.rank ?? 1e9)) : cands;
-  const list = h('section', { class: 'panel' }, h('h2', {}, `Designs for ${study.factors.length} factors`), recRow, ui.recError ? h('div', { class: 'msg error' }, ui.recError) : null,
+  const list = h('section', { class: 'panel' }, h('h2', {}, `Designs for ${study.factors.length} factors`, help('getting-started','choosing-a-design')), recRow, ui.recError ? h('div', { class: 'msg error' }, ui.recError) : null,
     dataTable([
       ...(rec ? [{ key: 'rank', label: '#', cls: 'n', fmt: (_, r) => recOf(r.id)?.rank ?? '—' }] : []),
       { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n', fmt: (v, r) => recOf(r.id)?.runs ?? v },
@@ -118,7 +121,7 @@ export function render(ctx) {
     diagnostics(study, d, cand.kind === 'dsd' || cand.kind === 'lhs' ? 'quadratic' : null),
     cand.kind === 'lhs' ? h('p', { class: 'small' }, `Each factor’s range is cut into ${d.X.length} equal slices with one run in each; among such designs this one keeps the runs as far apart as it can (smallest distance ${num(d.params.minDist, 3)} in coded units). A simulator gives the same answer every time, so there is no replication, randomisation or power: the question is how well a surrogate model fitted to these runs predicts between them — its cross-validated error, shown with the yield analysis.`)
       : powerSection(study, d, cand, ui, set));
-  const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label), options, body);
+  const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label, help(...designHelp(cand.kind))), options, body);
   if (!d) err = err ?? 'not searched';
 
   // ---------------------------------------------------------------- create

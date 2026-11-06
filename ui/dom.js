@@ -60,3 +60,7 @@ export function download(name, text, type = 'text/plain') {
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
+
+/** A "?" link to a manual section (docs/manual/PAGE.md#ANCHOR), opened in a new tab. */
+export const help = (page, anchor) => h('a', { class: 'help', href: `docs/manual/index.html?p=${page}${anchor ? `#${anchor}` : ''}`, target: '_blank', rel: 'noopener',
+  title: 'Open the manual', 'aria-label': `manual: ${page}${anchor ? ` ${anchor}` : ''}`, 'data-help': `${page}${anchor ? `#${anchor}` : ''}` }, '?');

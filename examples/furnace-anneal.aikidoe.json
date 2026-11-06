@@ -1,0 +1,3846 @@
+{
+  "aikidoe": 1,
+  "name": "Furnace anneal",
+  "description": "Split-plot: anneal temperature is set once per furnace run; time and implant dose vary within it. Two wafers per condition in boat slots, nine drop-in sites per wafer; Rs rises towards the edge, more at high temperature (simulated data).",
+  "seed": 41,
+  "factors": [
+    {
+      "id": "T",
+      "name": "Anneal temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": true,
+      "low": 900,
+      "high": 1000,
+      "transform": "none"
+    },
+    {
+      "id": "t",
+      "name": "Anneal time",
+      "type": "continuous",
+      "units": "min",
+      "htc": false,
+      "low": 10,
+      "high": 30,
+      "transform": "none"
+    },
+    {
+      "id": "dose",
+      "name": "Implant dose",
+      "type": "continuous",
+      "units": "cm-2",
+      "htc": false,
+      "low": 1000000000000000,
+      "high": 5000000000000000,
+      "transform": "log"
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "Rs",
+      "name": "Sheet resistance",
+      "units": "Ω/sq",
+      "goal": "target",
+      "target": 60,
+      "lower": 55,
+      "upper": 65,
+      "levels": [
+        "run",
+        "wafer",
+        "site"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "split-plot-full",
+    "params": {
+      "levels": [
+        2,
+        2,
+        2
+      ],
+      "wholePlots": 6,
+      "runsPerWholePlot": 4,
+      "replicates": 3,
+      "seed": 41
+    },
+    "randomisation": "restricted",
+    "runs": [
+      {
+        "run": 1,
+        "order": 24,
+        "wholePlot": 1,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 10,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 2,
+        "order": 16,
+        "wholePlot": 2,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 10,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 3,
+        "order": 22,
+        "wholePlot": 1,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 30,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 4,
+        "order": 14,
+        "wholePlot": 2,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 30,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 5,
+        "order": 23,
+        "wholePlot": 1,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 10,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 6,
+        "order": 13,
+        "wholePlot": 2,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 10,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 7,
+        "order": 21,
+        "wholePlot": 1,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 30,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 8,
+        "order": 15,
+        "wholePlot": 2,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 30,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 9,
+        "order": 17,
+        "wholePlot": 3,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 10,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 10,
+        "order": 9,
+        "wholePlot": 4,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 10,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 11,
+        "order": 19,
+        "wholePlot": 3,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 30,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 12,
+        "order": 11,
+        "wholePlot": 4,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 30,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 13,
+        "order": 20,
+        "wholePlot": 3,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 10,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 14,
+        "order": 10,
+        "wholePlot": 4,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 10,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 15,
+        "order": 18,
+        "wholePlot": 3,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 30,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 16,
+        "order": 12,
+        "wholePlot": 4,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 30,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 17,
+        "order": 5,
+        "wholePlot": 5,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 10,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 18,
+        "order": 1,
+        "wholePlot": 6,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 10,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 19,
+        "order": 7,
+        "wholePlot": 5,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 30,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 20,
+        "order": 3,
+        "wholePlot": 6,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 30,
+          "dose": 1000000000000000
+        }
+      },
+      {
+        "run": 21,
+        "order": 6,
+        "wholePlot": 5,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 10,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 22,
+        "order": 2,
+        "wholePlot": 6,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 10,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 23,
+        "order": 8,
+        "wholePlot": 5,
+        "kind": "factorial",
+        "settings": {
+          "T": 900,
+          "t": 30,
+          "dose": 4999999999999999
+        }
+      },
+      {
+        "run": 24,
+        "order": 4,
+        "wholePlot": 6,
+        "kind": "factorial",
+        "settings": {
+          "T": 1000,
+          "t": 30,
+          "dose": 4999999999999999
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "C",
+      "slot": 1,
+      "response": "Rs",
+      "value": 65.12
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "N1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 65.51
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "E1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 65.54
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "S1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 65.62
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "W1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 65.61
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "NE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 67.22
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "SE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 66.97
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "SW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 67.03
+    },
+    {
+      "run": 18,
+      "wafer": "18W1",
+      "site": "NW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 66.69
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "C",
+      "slot": 2,
+      "response": "Rs",
+      "value": 64.85
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "N1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 65.14
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "E1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 64.85
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "S1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 64.91
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "W1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 64.94
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "NE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 66.32
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "SE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 66.54
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "SW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 66.33
+    },
+    {
+      "run": 18,
+      "wafer": "18W2",
+      "site": "NW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 66.49
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "C",
+      "slot": 3,
+      "response": "Rs",
+      "value": 56.1
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "N1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 56.48
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "E1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 56.54
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "S1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 56.45
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "W1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 56.81
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "NE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.16
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "SE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.98
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "SW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.06
+    },
+    {
+      "run": 22,
+      "wafer": "22W1",
+      "site": "NW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.24
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "C",
+      "slot": 4,
+      "response": "Rs",
+      "value": 55.42
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "N1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 56.18
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "E1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 55.89
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "S1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 55.94
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "W1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 56.27
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "NE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 56.89
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "SE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.59
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "SW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.35
+    },
+    {
+      "run": 22,
+      "wafer": "22W2",
+      "site": "NW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.31
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "C",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.07
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "N1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.69
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "E1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.72
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "S1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.33
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "W1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.76
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "NE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 62.69
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "SE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 62.79
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "SW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 63.26
+    },
+    {
+      "run": 20,
+      "wafer": "20W1",
+      "site": "NW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 63.45
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "C",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.23
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "N1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.71
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "E1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.84
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "S1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.95
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "W1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.93
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "NE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 62.03
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "SE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 62.2
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "SW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 62.24
+    },
+    {
+      "run": 20,
+      "wafer": "20W2",
+      "site": "NW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 62.17
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "C",
+      "slot": 7,
+      "response": "Rs",
+      "value": 52.59
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "N1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 52.95
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "E1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 53.01
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "S1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 52.66
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "W1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 52.79
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "NE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 53.99
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "SE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 54.07
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "SW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 54.37
+    },
+    {
+      "run": 24,
+      "wafer": "24W1",
+      "site": "NW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 54.12
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "C",
+      "slot": 8,
+      "response": "Rs",
+      "value": 52.44
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "N1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 53.32
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "E1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 52.97
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "S1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 53.13
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "W1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 52.94
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "NE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 54.67
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "SE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 54.77
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "SW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 54.63
+    },
+    {
+      "run": 24,
+      "wafer": "24W2",
+      "site": "NW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 54.74
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "C",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.58
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "N1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.9
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "E1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.7
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "S1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.98
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "W1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.87
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "NE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 76.63
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "SE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 76.57
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "SW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 76
+    },
+    {
+      "run": 17,
+      "wafer": "17W1",
+      "site": "NW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 76.16
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "C",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.23
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "N1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.32
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "E1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.28
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "S1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 75.87
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "W1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.25
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "NE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.52
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "SE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.89
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "SW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.49
+    },
+    {
+      "run": 17,
+      "wafer": "17W2",
+      "site": "NW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.85
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "C",
+      "slot": 3,
+      "response": "Rs",
+      "value": 62.77
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "N1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 63.15
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "E1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 62.66
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "S1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 63.3
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "W1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 62.73
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "NE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 63.31
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "SE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 63.11
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "SW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 63.45
+    },
+    {
+      "run": 21,
+      "wafer": "21W1",
+      "site": "NW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 63.43
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "C",
+      "slot": 4,
+      "response": "Rs",
+      "value": 62.55
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "N1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 62.73
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "E1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 62.84
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "S1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 62.86
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "W1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 63.04
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "NE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 63.06
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "SE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 63.39
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "SW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 63.18
+    },
+    {
+      "run": 21,
+      "wafer": "21W2",
+      "site": "NW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 63.19
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "C",
+      "slot": 5,
+      "response": "Rs",
+      "value": 72.8
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "N1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 73.24
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "E1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 72.9
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "S1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 72.91
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "W1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 73.27
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "NE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 73.71
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "SE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 73.27
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "SW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 73.59
+    },
+    {
+      "run": 19,
+      "wafer": "19W1",
+      "site": "NW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 73.7
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "C",
+      "slot": 6,
+      "response": "Rs",
+      "value": 72.84
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "N1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.27
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "E1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.15
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "S1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.17
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "W1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.23
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "NE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.7
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "SE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.57
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "SW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.31
+    },
+    {
+      "run": 19,
+      "wafer": "19W2",
+      "site": "NW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 73.49
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "C",
+      "slot": 7,
+      "response": "Rs",
+      "value": 59
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "N1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 58.63
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "E1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 58.53
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "S1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 58.53
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "W1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 58.74
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "NE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 59.09
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "SE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 59.25
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "SW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 59.15
+    },
+    {
+      "run": 23,
+      "wafer": "23W1",
+      "site": "NW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 59.12
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "C",
+      "slot": 8,
+      "response": "Rs",
+      "value": 58.55
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "N1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 58.84
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "E1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 58.42
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "S1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 58.35
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "W1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 58.59
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "NE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 59.09
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "SE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 58.97
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "SW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 59.07
+    },
+    {
+      "run": 23,
+      "wafer": "23W2",
+      "site": "NW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 59.2
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "C",
+      "slot": 1,
+      "response": "Rs",
+      "value": 62.25
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "N1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 62.53
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "E1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 63
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "S1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 63.04
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "W1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 63.05
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "NE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 64.16
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "SE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 64.28
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "SW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 63.82
+    },
+    {
+      "run": 10,
+      "wafer": "10W1",
+      "site": "NW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 64.17
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "C",
+      "slot": 2,
+      "response": "Rs",
+      "value": 62.99
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "N1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 63.32
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "E1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 63.5
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "S1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 63.25
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "W1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 63.46
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "NE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 64.62
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "SE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 64.97
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "SW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 65.01
+    },
+    {
+      "run": 10,
+      "wafer": "10W2",
+      "site": "NW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 64.86
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "C",
+      "slot": 3,
+      "response": "Rs",
+      "value": 52.36
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "N1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 53.31
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "E1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 52.94
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "S1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 53
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "W1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 53.1
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "NE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 54.29
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "SE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 54.27
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "SW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 54.6
+    },
+    {
+      "run": 14,
+      "wafer": "14W1",
+      "site": "NW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 54.6
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "C",
+      "slot": 4,
+      "response": "Rs",
+      "value": 52.43
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "N1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 53.04
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "E1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 53.06
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "S1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 52.48
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "W1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 52.94
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "NE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 54.18
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "SE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 54.33
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "SW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 54.3
+    },
+    {
+      "run": 14,
+      "wafer": "14W2",
+      "site": "NW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 54.26
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "C",
+      "slot": 5,
+      "response": "Rs",
+      "value": 59.36
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "N1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 59.95
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "E1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 59.83
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "S1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 60.11
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "W1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 59.83
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "NE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.5
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "SE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "SW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.33
+    },
+    {
+      "run": 12,
+      "wafer": "12W1",
+      "site": "NW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 61.51
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "C",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.79
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "N1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 59.66
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "E1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 59.43
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "S1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 59.39
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "W1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 59.45
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "NE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.92
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "SE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.68
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "SW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.91
+    },
+    {
+      "run": 12,
+      "wafer": "12W2",
+      "site": "NW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 60.57
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "C",
+      "slot": 7,
+      "response": "Rs",
+      "value": 48.84
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "N1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 49.54
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "E1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 49.83
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "S1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 49.58
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "W1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 49.59
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "NE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 50.99
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "SE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 51.25
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "SW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 51.07
+    },
+    {
+      "run": 16,
+      "wafer": "16W1",
+      "site": "NW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 50.98
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "C",
+      "slot": 8,
+      "response": "Rs",
+      "value": 49.38
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "N1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 49.64
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "E1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 50.01
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "S1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 50.03
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "W1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 49.51
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "NE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 51.71
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "SE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 51.31
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "SW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 51.19
+    },
+    {
+      "run": 16,
+      "wafer": "16W2",
+      "site": "NW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 51.17
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "C",
+      "slot": 1,
+      "response": "Rs",
+      "value": 52.14
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "N1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 53.25
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "E1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 52.82
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "S1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 53.17
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "W1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 53.13
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "NE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 54.09
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "SE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 54.24
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "SW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 54.04
+    },
+    {
+      "run": 6,
+      "wafer": "6W1",
+      "site": "NW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 54.15
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "C",
+      "slot": 2,
+      "response": "Rs",
+      "value": 52.77
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "N1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.73
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "E1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.67
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "S1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.51
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "W1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.91
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "NE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 54.86
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "SE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 55.18
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "SW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 55.32
+    },
+    {
+      "run": 6,
+      "wafer": "6W2",
+      "site": "NW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 55.49
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "C",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.51
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "N1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 59.36
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "E1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 59.09
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "S1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.97
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "W1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.86
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "NE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 60.55
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "SE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 60.45
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "SW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 60.35
+    },
+    {
+      "run": 4,
+      "wafer": "4W1",
+      "site": "NW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 60.47
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "C",
+      "slot": 4,
+      "response": "Rs",
+      "value": 58.94
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "N1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 59.17
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "E1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 59.43
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "S1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 59.6
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "W1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 59.56
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "NE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 60.83
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "SE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 60.48
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "SW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 60.68
+    },
+    {
+      "run": 4,
+      "wafer": "4W2",
+      "site": "NW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 61.12
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "C",
+      "slot": 5,
+      "response": "Rs",
+      "value": 49.39
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "N1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 49.65
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "E1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 49.58
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "S1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 49.44
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "W1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 49.5
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "NE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 51.09
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "SE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 50.93
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "SW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 50.96
+    },
+    {
+      "run": 8,
+      "wafer": "8W1",
+      "site": "NW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 50.79
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "C",
+      "slot": 6,
+      "response": "Rs",
+      "value": 49.19
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "N1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 49.83
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "E1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 49.99
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "S1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 49.96
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "W1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 49.92
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "NE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 51.02
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "SE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 51.42
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "SW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 51.12
+    },
+    {
+      "run": 8,
+      "wafer": "8W2",
+      "site": "NW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 51.45
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "C",
+      "slot": 7,
+      "response": "Rs",
+      "value": 63
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "N1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 63.37
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "E1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 63.32
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "S1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 63.3
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "W1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 63.29
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "NE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 64.61
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "SE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 64.72
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "SW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 64.75
+    },
+    {
+      "run": 2,
+      "wafer": "2W1",
+      "site": "NW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 64.78
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "C",
+      "slot": 8,
+      "response": "Rs",
+      "value": 63.29
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "N1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 63.88
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "E1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 63.71
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "S1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 63.89
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "W1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 64.3
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "NE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 65.53
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "SE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 65.62
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "SW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 65.51
+    },
+    {
+      "run": 2,
+      "wafer": "2W2",
+      "site": "NW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 65.11
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "C",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.49
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "N1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.44
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "E1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.57
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "S1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.65
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "W1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.52
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "NE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.81
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "SE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 75.73
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "SW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 76.17
+    },
+    {
+      "run": 9,
+      "wafer": "9W1",
+      "site": "NW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 76.21
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "C",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.53
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "N1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.77
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "E1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.57
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "S1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.66
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "W1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.5
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "NE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.63
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "SE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.75
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "SW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.54
+    },
+    {
+      "run": 9,
+      "wafer": "9W2",
+      "site": "NW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 76.56
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "C",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.16
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "N1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.71
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "E1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.59
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "S1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.83
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "W1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.47
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "NE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.62
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "SE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.06
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "SW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 57.82
+    },
+    {
+      "run": 15,
+      "wafer": "15W1",
+      "site": "NW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 58.04
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "C",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.47
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "N1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.84
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "E1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.61
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "S1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.94
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "W1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.62
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "NE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 58.14
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "SE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 58.02
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "SW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 57.93
+    },
+    {
+      "run": 15,
+      "wafer": "15W2",
+      "site": "NW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 58.1
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "C",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.55
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "N1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.51
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "E1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.49
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "S1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.27
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "W1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.41
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "NE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.85
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "SE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.68
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "SW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.96
+    },
+    {
+      "run": 11,
+      "wafer": "11W1",
+      "site": "NW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 70.89
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "C",
+      "slot": 6,
+      "response": "Rs",
+      "value": 69.72
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "N1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.63
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "E1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.61
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "S1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.42
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "W1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.2
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "NE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.81
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "SE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.78
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "SW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.53
+    },
+    {
+      "run": 11,
+      "wafer": "11W2",
+      "site": "NW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 70.49
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "C",
+      "slot": 7,
+      "response": "Rs",
+      "value": 61.91
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "N1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 61.79
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "E1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 61.93
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "S1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 61.9
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "W1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 61.89
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "NE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 61.98
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "SE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 62.49
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "SW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 61.93
+    },
+    {
+      "run": 13,
+      "wafer": "13W1",
+      "site": "NW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 62.07
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "C",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.07
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "N1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.11
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "E1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.32
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "S1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.23
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "W1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.11
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "NE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.71
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "SE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.88
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "SW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.71
+    },
+    {
+      "run": 13,
+      "wafer": "13W2",
+      "site": "NW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 62.96
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "C",
+      "slot": 1,
+      "response": "Rs",
+      "value": 51.47
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "N1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 51.52
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "E1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 51.82
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "S1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 51.89
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "W1",
+      "slot": 1,
+      "response": "Rs",
+      "value": 51.83
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "NE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 51.92
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "SE",
+      "slot": 1,
+      "response": "Rs",
+      "value": 51.98
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "SW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 52.19
+    },
+    {
+      "run": 7,
+      "wafer": "7W1",
+      "site": "NW",
+      "slot": 1,
+      "response": "Rs",
+      "value": 52.25
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "C",
+      "slot": 2,
+      "response": "Rs",
+      "value": 52.92
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "N1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.55
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "E1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.67
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "S1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.87
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "W1",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.25
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "NE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.83
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "SE",
+      "slot": 2,
+      "response": "Rs",
+      "value": 54.14
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "SW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.83
+    },
+    {
+      "run": 7,
+      "wafer": "7W2",
+      "site": "NW",
+      "slot": 2,
+      "response": "Rs",
+      "value": 53.88
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "C",
+      "slot": 3,
+      "response": "Rs",
+      "value": 67.76
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "N1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 67.99
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "E1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 67.91
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "S1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 68.19
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "W1",
+      "slot": 3,
+      "response": "Rs",
+      "value": 67.97
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "NE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 68.58
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "SE",
+      "slot": 3,
+      "response": "Rs",
+      "value": 68.41
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "SW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 68.35
+    },
+    {
+      "run": 3,
+      "wafer": "3W1",
+      "site": "NW",
+      "slot": 3,
+      "response": "Rs",
+      "value": 68.35
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "C",
+      "slot": 4,
+      "response": "Rs",
+      "value": 67.29
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "N1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 67.61
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "E1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 68.13
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "S1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 67.93
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "W1",
+      "slot": 4,
+      "response": "Rs",
+      "value": 67.7
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "NE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 68.52
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "SE",
+      "slot": 4,
+      "response": "Rs",
+      "value": 68.05
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "SW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 67.93
+    },
+    {
+      "run": 3,
+      "wafer": "3W2",
+      "site": "NW",
+      "slot": 4,
+      "response": "Rs",
+      "value": 67.99
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "C",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.16
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "N1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.43
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "E1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.7
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "S1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.37
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "W1",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.42
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "NE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.9
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "SE",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.43
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "SW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.92
+    },
+    {
+      "run": 5,
+      "wafer": "5W1",
+      "site": "NW",
+      "slot": 5,
+      "response": "Rs",
+      "value": 58.91
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "C",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.42
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "N1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.31
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "E1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.25
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "S1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.53
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "W1",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.76
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "NE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 59.25
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "SE",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.94
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "SW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 58.73
+    },
+    {
+      "run": 5,
+      "wafer": "5W2",
+      "site": "NW",
+      "slot": 6,
+      "response": "Rs",
+      "value": 59.03
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "C",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.24
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "N1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.02
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "E1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.25
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "S1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 73.75
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "W1",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.37
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "NE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.79
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "SE",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.6
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "SW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.32
+    },
+    {
+      "run": 1,
+      "wafer": "1W1",
+      "site": "NW",
+      "slot": 7,
+      "response": "Rs",
+      "value": 74.49
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "C",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.68
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "N1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.54
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "E1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.39
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "S1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.46
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "W1",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.57
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "NE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.6
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "SE",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.83
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "SW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.48
+    },
+    {
+      "run": 1,
+      "wafer": "1W2",
+      "site": "NW",
+      "slot": 8,
+      "response": "Rs",
+      "value": 74.58
+    }
+  ],
+  "sites": {
+    "scheme": "dropin-9",
+    "positions": [
+      {
+        "id": "C",
+        "x": 0,
+        "y": 0
+      },
+      {
+        "id": "N1",
+        "x": 0,
+        "y": 45
+      },
+      {
+        "id": "E1",
+        "x": 45,
+        "y": 0
+      },
+      {
+        "id": "S1",
+        "x": 0,
+        "y": -45
+      },
+      {
+        "id": "W1",
+        "x": -45,
+        "y": 0
+      },
+      {
+        "id": "NE",
+        "x": 56.57,
+        "y": 56.57
+      },
+      {
+        "id": "SE",
+        "x": 56.57,
+        "y": -56.57
+      },
+      {
+        "id": "SW",
+        "x": -56.57,
+        "y": -56.57
+      },
+      {
+        "id": "NW",
+        "x": -56.57,
+        "y": 56.57
+      }
+    ],
+    "diameter": 200
+  },
+  "history": []
+}

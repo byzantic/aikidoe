@@ -29,6 +29,19 @@ const noise = (g) => Math.sqrt(-2 * Math.log(1 - g.random())) * Math.cos(2 * Mat
 export const EXAMPLES = [
   { id: 'reactor-plan', title: 'Reactor screening: plan', step: 'design',
     blurb: 'Five factors, no design yet. Choose a screening design on the Design page.', build: () => createStudy(reactor()) },
+  { id: 'reactor-bhh', title: 'Reactor screening: textbook data', step: 'analyse',
+    blurb: 'The 2⁵⁻¹ reactor experiment of Box, Hunter & Hunter (Statistics for Experimenters): feed rate, catalyst, agitation, temperature and concentration, 16 runs of real data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Reactor screening (Box, Hunter & Hunter)', seed: 51,
+        description: 'Data: Box, Hunter & Hunter, Statistics for Experimenters (1978), the 2^(5−1) reactor experiment (p. 379); percent reacted. Generator conc = feed·cat·agit·temp.',
+        factors: [{ id: 'feed', name: 'Feed rate', units: 'L/min', low: 10, high: 15 }, { id: 'cat', name: 'Catalyst', units: '%', low: 1, high: 2 },
+          { id: 'agit', name: 'Agitation', units: 'rpm', low: 100, high: 120 }, { id: 'temp', name: 'Temperature', units: '°C', low: 140, high: 180 },
+          { id: 'conc', name: 'Concentration', units: '%', low: 3, high: 6 }],
+        responses: [{ id: 'yield', name: 'Percent reacted', units: '%', goal: 'maximize', lower: 60, target: 95 }] });
+      const design = toStudyDesign(s, fractionalFactorial(5, { generators: 'E=ABCD' }), { seed: 51 });
+      const y = [56, 53, 63, 65, 53, 55, 67, 61, 69, 45, 78, 93, 49, 60, 95, 82];        // standard order, feed fastest
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'yield', value: y[r.run - 1] })) });
+    } },
   { id: 'reactor-results', title: 'Reactor screening: with results', step: 'analyse',
     blurb: 'A 2^(5−1) fraction with simulated yields; Lenth’s method picks out the active effects.',
     build: () => {

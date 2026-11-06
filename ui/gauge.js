@@ -1,6 +1,6 @@
 // Gauge R&R panel (issue #17): paste or import the gauge readings for a response, see the
 // ANOVA-method results, and keep σ_meas on the response (used for power, spec §6.4).
-import { h, select, dataTable, messages } from './dom.js';
+import { h, select, dataTable, messages, help } from './dom.js';
 import { plot } from './plot.js';
 import { num, pval } from '../js/format.js';
 import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
@@ -67,5 +67,5 @@ export function gaugePanel({ state, update, setUI }, rid) {
       h('div', { class: 'row' }, h('button', { class: 'btn primary', id: 'gauge-save', onclick: save }, m ? 'Update σ_meas on the response' : 'Keep σ_meas on the response'),
         h('span', { class: 'muted small' }, 'Kept with the study (with these readings); the Design step uses it in the power calculation.')));
   }
-  return h('section', { class: 'panel', id: 'gauge' }, h('h2', {}, `Gauge R&R — ${r.name}`), head, body);
+  return h('section', { class: 'panel', id: 'gauge' }, h('h2', {}, `Gauge R&R — ${r.name}`, help('process','gauge-rr')), head, body);
 }

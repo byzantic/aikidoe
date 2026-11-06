@@ -59,6 +59,8 @@
 //        Sobol first-order and total indices of each surrogate
 //   recommend STUDY [--goal screen|model|optimise] [--budget N] [--delta 2] [--eta 1] [--no-optimal]
 //        ranked design options with reasons: run counts, resolution, D-efficiency, power at Δ = delta·σ
+//   report STUDY [--model "y ~ …" …] [--out FILE.html] [--date YYYY-MM-DD]
+//        self-contained HTML report (design, run sheet, fitted models, plots; the study embedded)
 //   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
@@ -93,6 +95,7 @@ import { runOnSimulator } from '../js/sim/adapter.js';
 import { studyAdapter, registerAdapter } from '../js/sim/adapters.js';
 import { combOverStudy } from '../js/sim/combover.js';
 import { recommend } from '../js/design/recommend.js';
+import { studyReport } from '../js/io/report.js';
 import { toleranceSd } from '../js/sim/sample.js';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -311,7 +314,9 @@ function cmdFit({ pos, opt }) {
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
   out('');
-  const coefRows = fit.columns.map((c, j) => ({ term: c, est: fit.coef[j], se: fit.se[j], t: fit.t[j], p: fit.p[j] })).filter(r => !Number.isNaN(r.est));
+  // round-off (|b| < 1e-10 of the largest) shown as 0, so outputs do not depend on the platform's last bits
+  const big = Math.max(...fit.coef.filter(Number.isFinite).map(Math.abs), 1e-300), tidy = (v) => (Number.isFinite(v) && Math.abs(v) < 1e-10 * big ? 0 : v);
+  const coefRows = fit.columns.map((c, j) => ({ term: c, est: tidy(fit.coef[j]), se: fit.se[j], t: tidy(fit.t[j]), p: fit.p[j] })).filter(r => !Number.isNaN(r.est));
   put({ kind: 'ols', response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`, n: fit.n, rank: fit.rank, dfRes: fit.dfRes, aliased: fit.aliased,
     coefficients: coefRows.map(r => ({ term: r.term, estimate: r.est, se: r.se, t: r.t, p: r.p })), units: 'coded',
     ...(fit.dfRes > 0 ? { sigma: fit.sigma, r2: fit.r2, adjR2: fit.adjR2, predR2: fit.predR2, F: fit.fStat, dfModel: fit.dfModel, pF: fit.fP } : {}) });
@@ -346,7 +351,7 @@ function cmdFit({ pos, opt }) {
     out(table([
       { key: 'name', label: 'effect', align: 'left' }, { key: 'effect', label: 'estimate' }, { key: 't', label: 't (PSE)' },
       { key: 'flag', label: '', align: 'left' },
-    ], eff.map((e, i) => ({ ...e, t: L.t[i], flag: L.activeSME[i] ? '> SME' : L.active[i] ? '> ME' : '' })).sort((a, b) => Math.abs(b.effect) - Math.abs(a.effect))));
+    ], eff.map((e, i) => ({ ...e, effect: tidy(e.effect), t: tidy(L.t[i]), flag: L.activeSME[i] ? '> SME' : L.active[i] ? '> ME' : '' })).map((e, i) => ({ ...e, i })).sort((a, b) => (Math.abs(Math.abs(b.effect) - Math.abs(a.effect)) > 1e-9 * big ? Math.abs(b.effect) - Math.abs(a.effect) : a.i - b.i))));
     out('effect = 2 × coefficient (change from low to high)');
   }
   const conf = checkConfirmation(study, fit.response);
@@ -712,9 +717,11 @@ function cmdRobust({ pos, opt }) {
   const p = poe(at);
   put({ response: m.id, meanModel: m.formula, ...(sdModel ? { sdModel: sdModel.formula } : {}), settings: at, mean: mu(at), sd: sd(at), residualSd: sigma,
     ...(sdModel ? {} : { transmittedSd: Math.sqrt(p.transmitted), parts: p.parts.map(q => ({ id: q.id, sd: q.sd, slope: q.slope, share: q.contribution / p.var })), curvatureShare: p.curvature / p.var }) });
-  out(`mean ${num(mu(at))}, sd ${num(sd(at))}${sdModel ? '' : ` (transmitted ${num(Math.sqrt(p.transmitted))}, residual ${num(sigma)})`}`);
+  // optimiser round-off (a slope of 1e-8 where it cancels) shown as 0
+  const tiny = (v) => (Math.abs(v) < 1e-6 * Math.max(1, Math.sqrt(p.var)) ? 0 : v);
+  out(`mean ${num(mu(at))}, sd ${num(sd(at))}${sdModel ? '' : ` (transmitted ${num(tiny(Math.sqrt(p.transmitted)))}, residual ${num(sigma)})`}`);
   if (!sdModel && p.parts.length) out(table([{ key: 'id', label: 'source', align: 'left' }, { key: 'sd', label: 'sd' }, { key: 'slope', label: 'slope ∂y/∂x' }, { key: 'pct', label: '% of variance' }],
-    [...p.parts.map(q => ({ ...q, pct: 100 * q.contribution / p.var })), ...(p.curvature > 1e-12 ? [{ id: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { id: 'residual', sd: sigma, slope: '', pct: 100 * p.residual / p.var }]));
+    [...p.parts.map(q => ({ ...q, slope: tiny(q.slope), pct: tiny(100 * q.contribution / p.var) })), ...(p.curvature > 1e-12 ? [{ id: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { id: 'residual', sd: sigma, slope: '', pct: 100 * p.residual / p.var }]));
 }
 const decodeMid = (f) => (f.low + f.high) / 2;
 
@@ -896,6 +903,17 @@ function cmdRecommend({ pos, opt }) {
   if (no.length) out(`\nnot suitable for ${r.model}: ${no.map(o => `${o.label} (${o.warnings[0] ?? 'not estimable'})`).join('; ')}`);
 }
 
+function cmdReport({ pos, opt }) {
+  const file = pos[0], study = load(file);
+  const formulas = {};
+  for (const m of list(opt.model)) { const f = String(m); const id = f.slice(0, f.indexOf('~')).trim(); if (!f.includes('~') || !id) fail(`--model "${f}": give "response ~ terms"`); formulas[id] = f; }
+  const html = studyReport(study, { formulas, ...(opt.date ? { date: String(opt.date) } : {}) });
+  const outFile = opt.out ? String(opt.out) : file.replace(/(\.aikidoe)?\.json$/, '') + '.html';
+  writeFileSync(outFile, html);
+  put({ file: outFile, bytes: Buffer.byteLength(html) });
+  out(`wrote ${outFile} (${(Buffer.byteLength(html) / 1024).toFixed(0)} kB, self-contained; the study is embedded)`);
+}
+
 function cmdSchema({ opt }) {
   const which = opt.cli ? 'cli' : 'study';
   const schema = JSON.parse(readFileSync(new URL(`../schema/${which}.schema.json`, import.meta.url), 'utf8'));
@@ -922,7 +940,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

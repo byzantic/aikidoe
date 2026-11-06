@@ -1,6 +1,6 @@
 // Sequential experimentation in the UI (issue #11): the Design step's "Next stage" panel
 // (fold-over, axial points, optimal augmentation) and the Analyse step's confirmation panel.
-import { h, select, dataTable, messages } from './dom.js';
+import { h, select, dataTable, messages, help } from './dom.js';
 import { num } from '../js/format.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { predict } from '../js/model/ols.js';
@@ -79,7 +79,7 @@ export function nextStagePanel({ state, setDoc, setUI }) {
     body = h('div', {}, parts);
   }
   const stages = study.design.kind === 'sequential' ? study.design.params.stages.map(s => s.kind).join(' → ') : study.design.kind;
-  return h('section', { class: 'panel', id: 'next-stage' }, h('h2', {}, 'Next stage'),
+  return h('section', { class: 'panel', id: 'next-stage' }, h('h2', {}, 'Next stage', help('designs-sequential')),
     h('p', { class: 'small' }, `Current design: ${stages}, ${study.design.runs.length} runs${blocks.length > 1 ? ` in ${blocks.length} blocks` : ''}. Add runs to resolve aliasing, estimate curvature or support a larger model.`),
     options, body);
 }
@@ -128,7 +128,7 @@ export function confirmPanel({ state, setDoc, setUI }, fit) {
     conf.some(c => c.inside === false) ? messages(['A confirmation result is outside its prediction interval: the model may be missing a term, the process may have shifted, or the region of the optimum is not where the model says.'], 'warning') : null,
     h('p', { class: 'muted small' }, 'Each interval is the one stored when the runs were planned (for the mean of n runs where there are replicates), from the model then current.')) : null;
 
-  return h('section', { class: 'panel', id: 'confirm' }, h('h2', {}, 'Predict and confirm'),
+  return h('section', { class: 'panel', id: 'confirm' }, h('h2', {}, 'Predict and confirm', help('designs-sequential','confirmation-runs')),
     h('p', { class: 'small' }, `Predict ${fit.response} from this model at chosen settings, and plan confirmation runs there.`),
     inputs, out, check);
 }

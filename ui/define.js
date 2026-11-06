@@ -1,5 +1,5 @@
 // Define step: factors, responses, constraints, measurement structure (spec §12 step 1).
-import { h, select, messages } from './dom.js';
+import { h, select, messages, help } from './dom.js';
 import { siteScheme, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugePanel } from './gauge.js';
 import { num } from '../js/format.js';
@@ -46,7 +46,7 @@ export function render(ctx) {
       h('td', { class: 'n' }, h('input', { type: 'checkbox', checked: !!f.htc, 'aria-label': 'hard to change', title: 'hard to change: set once per batch / furnace run (whole plot)', onchange: (e) => set(o => { o.htc = e.target.checked; }) })),
       h('td', {}, h('button', { class: 'btn', disabled: locked || d.factors.length < 2, title: 'remove factor', onclick: () => update(x => { x.factors.splice(i, 1); x.constraints = []; }) }, '✕')));
   });
-  const factors = h('section', { class: 'panel' }, h('h2', {}, 'Factors'),
+  const factors = h('section', { class: 'panel' }, h('h2', {}, 'Factors', help('concepts','factors-and-coded-units')),
     lockNote,
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
       h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'type', 'low', 'high', 'scale', 'hard to change', ''].map(t => h('th', {}, t)))),
@@ -79,7 +79,7 @@ export function render(ctx) {
         r.measurement ? `σ_meas ${num(r.measurement.sigma, 3)}` : 'gauge…')),
       h('td', {}, h('button', { class: 'btn', title: 'remove response', disabled: (d.observations ?? []).some(o => o.response === r.id), onclick: () => update(x => { x.responses.splice(i, 1); }) }, '✕')));
   });
-  const responses = h('section', { class: 'panel' }, h('h2', {}, 'Responses'),
+  const responses = h('section', { class: 'panel' }, h('h2', {}, 'Responses', help('concepts','responses-and-measurement')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
       h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'goal', 'lower', 'target', 'upper', 'measured', 'measurement system', ''].map(t => h('th', {}, t)))), h('tbody', {}, rRows))),
     h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn', onclick: () => update(x => { x.responses ??= []; x.responses.push({ id: nextId(x.responses.map(r => r.id), 'y'), name: 'Response' }); }) }, '+ response'),
@@ -90,7 +90,7 @@ export function render(ctx) {
   const sites = anySite ? sitePanel(d, update) : null;
 
   // ---------------------------------------------------------------- constraints
-  const cons = h('section', { class: 'panel' }, h('h2', {}, 'Constraints'),
+  const cons = h('section', { class: 'panel' }, h('h2', {}, 'Constraints', help('designs-optimal','constraints')),
     h('p', { class: 'muted small' }, 'Linear limits on factor settings in natural units, e.g. ', h('span', { class: 'mono' }, 'T + 2*t <= 1050'), '. Designs from later steps (optimal designs) respect them; runs that break one are flagged.'),
     (d.constraints ?? []).map((c, i) => h('div', { class: 'row', style: 'margin-bottom:6px' },
       h('input', { type: 'text', class: 'formula', style: 'max-width:420px', value: typeof c === 'string' ? c : c.expr, 'aria-label': `constraint ${i + 1}`,
@@ -126,7 +126,7 @@ function simulatorPanel(d, update) {
   if (!sim) return h('section', { class: 'panel', id: 'simulator' }, h('details', {}, h('summary', {}, 'Simulator (computer experiments)'),
     h('p', { class: 'muted small' }, 'Run the design on a simulator instead of in the lab: the Run step fills in the results, and the Optimise step estimates yield and sensitivities from a surrogate model.'), choose));
   const ed = SIMULATOR_EDITORS[sim.adapter];
-  return h('section', { class: 'panel', id: 'simulator' }, h('h2', {}, 'Simulator'), choose,
+  return h('section', { class: 'panel', id: 'simulator' }, h('h2', {}, 'Simulator', help('simulation','simulators')), choose,
     ed ? ed(d, update) : h('div', { class: 'msg warning' }, `The "${sim.adapter}" simulator runs from the command line only.`));
 }
 
@@ -142,7 +142,7 @@ function siteResponses(d, update) {
 function sitePanel(d, update) {
   const pos = d.sites?.positions ?? [];
   const preset = (n) => update(x => { x.sites = siteScheme(n, { diameter: x.sites?.diameter ?? 200 }); });
-  return h('section', { class: 'panel' }, h('h2', {}, 'Drop-in sites'),
+  return h('section', { class: 'panel' }, h('h2', {}, 'Drop-in sites', help('process','wafers-and-sites')),
     h('p', { class: 'muted small' }, 'Positions of the test structures on the wafer (mm from the centre). Responses measured per site get one result column per site on the run sheet.'),
     h('div', { class: 'row', style: 'margin-bottom:8px' }, h('button', { class: 'btn', onclick: () => preset(5) }, '5-site preset'), h('button', { class: 'btn', onclick: () => preset(9) }, '9-site preset'),
       h('label', { class: 'inline' }, 'wafer diameter (mm)', h('input', { class: 'num', type: 'number', min: 1, value: d.sites?.diameter ?? '', placeholder: '—', 'aria-label': 'wafer diameter',

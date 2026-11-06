@@ -6,6 +6,7 @@
 import { h, $, clear, toast, download } from './dom.js';
 import { validateStudy, createStudy, parseStudy, serializeStudy, FORMAT_VERSION } from '../js/study.js';
 import { EXAMPLES } from './examples.js';
+import { studyReport, studyFromReport } from '../js/io/report.js';
 import * as Define from './define.js';
 import * as Design from './design.js';
 import * as Run from './run.js';
@@ -67,6 +68,7 @@ function welcome() {
     h('h2', {}, 'Design of experiments'),
     h('p', { class: 'muted' }, 'Define factors and responses, choose a design, run it and enter results, then fit and test models. Everything stays in this browser; save the study as a file to keep it.'),
     h('div', { class: 'row', style: 'margin: 10px 0 16px' }, h('button', { class: 'btn primary', onclick: newStudy }, 'New study'), h('button', { class: 'btn', onclick: () => $('#file-in').click() }, 'Open a study file…')),
+    h('p', { class: 'small' }, 'New to aikidoe or to designed experiments? The ', h('a', { href: 'docs/manual/index.html?p=getting-started', target: '_blank' }, 'manual'), ' walks through a complete study and explains each design and analysis.'),
     h('h3', {}, 'Examples'), exampleCards());
 }
 
@@ -88,7 +90,7 @@ function newStudy() {
 // ---------------------------------------------------------------- files and links
 
 async function openFile(file) {
-  try { const s = parseStudy(await file.text()); state.ui = {}; state.step = s.design ? (s.observations.length ? 'analyse' : 'run') : 'define'; setDoc(structuredClone(s)); toast(`Opened ${file.name}`); }
+  try { const text = await file.text(); const s = /\.html?$/i.test(file.name) ? createStudy(studyFromReport(text)) : parseStudy(text); state.ui = {}; state.step = s.design ? (s.observations.length ? 'analyse' : 'run') : 'define'; setDoc(structuredClone(s)); toast(`Opened ${file.name}`); }
   catch (e) { toast(e.message.split('\n').slice(0, 2).join(' ')); console.error(e); }
 }
 
@@ -96,6 +98,13 @@ function save() {
   if (!state.study) { toast('Fix the problems on the Define page before saving'); go('define'); return; }
   const base = (state.study.name || 'study').replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || 'study';
   download(`${base}.aikidoe.json`, serializeStudy(state.study), 'application/json');
+}
+
+function report() {
+  if (!state.study) { toast('Fix the problems on the Define page first'); go('define'); return; }
+  const base = (state.study.name || 'study').replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || 'study';
+  try { download(`${base}-report.html`, studyReport(state.study, { formulas: state.ui.analyse?.formulas ?? {} }), 'text/html'); toast('Report downloaded'); }
+  catch (e) { toast(`Report: ${e.message}`); }
 }
 
 const b64u = { enc: (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
@@ -122,6 +131,7 @@ async function start() {
   $('#file-in').onchange = (e) => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ''; };
   $('#btn-save').onclick = save;
   $('#btn-share').onclick = share;
+  $('#btn-report').onclick = report;
   $('#btn-examples').onclick = () => { state.doc ? (clear($('#main')).append(h('section', { class: 'panel' }, h('h2', {}, 'Examples'), h('p', { class: 'muted small' }, 'Opening an example replaces the current study (save it first if you want to keep it).'), exampleCards()))) : render(); };
   $('#study-name').onchange = (e) => { if (state.doc) update(d => { d.name = e.target.value || 'Untitled study'; }); };
   // drag a study file onto the page
@@ -130,6 +140,13 @@ async function start() {
 
   const m = location.hash.match(/^#study=([\w-]+)/);
   let loaded = false;
+  // links from the manual: index.html#example=ID opens a built-in example
+  const ex = location.hash.match(/^#example=([\w-]+)/);
+  if (ex) {
+    const e = EXAMPLES.find(x => x.id === ex[1]);
+    if (e) { await loadExample(e); history.replaceState(null, '', location.href.split('#')[0]); return; }
+    toast(`No example "${ex[1]}"`);
+  }
   if (m) {
     try { const s = parseStudy(await inflate(b64u.dec(m[1]))); setDoc(structuredClone(s), { quiet: true }); state.step = s.observations.length ? 'analyse' : s.design ? 'run' : 'define'; loaded = true; }
     catch (e) { toast(`The link could not be read: ${e.message}`); }

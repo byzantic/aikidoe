@@ -2,10 +2,11 @@
 
 Design of Experiments assistant, in the browser: screening, response surfaces, split-plot and nested process experiments, gauge R&R, and simulator yield studies (comb-over adapter).
 
+- Manual: [docs/manual](docs/manual/index.md) (on the site at `/docs/manual/`; the pages read on GitHub too)
 - Specification: [docs/spec.md](docs/spec.md)
 - Work plan: GitHub issues and milestones (drafts in [planning/issues.md](planning/issues.md), filed by `tools/file-issues.py`).
 
-Status: M1 (core) complete; M2 in progress — screening, response-surface designs and the first browser UI. MIT licence.
+Status: M1–M5 complete (core, screening and response surfaces, split-plot and nested process experiments, optimisation and robust design, simulation and yield); M6 (manual, tutorial, agent guidance) in progress. MIT licence.
 
 ## Development
 
@@ -106,6 +107,7 @@ doe augment reactor.aikidoe.json --confirm "F=15,Cat=1.5,RPM=110,T=150,Conc=4.5"
 | `power STUDY [--model …] [--delta Δ \| "A=3,default=2"] [--sigma σ] [--alpha α]` | power of each term, and the Δ detectable with 80% power |
 | `fit … --reduce p\|aicc [--alpha-out 0.1] [--keep A,B]` | backward elimination keeping hierarchy, then the fit |
 | `recommend STUDY [--goal screen\|model\|optimise] [--budget N]` | ranked design options with reasons: runs, resolution, D-efficiency, power |
+| `report STUDY [--model "y ~ …" …] [--out F.html]` | self-contained HTML report: design, results, fitted models, plots, the study embedded |
 | `schema [--cli]` | JSON Schema of the study file (or of the `--json` output) |
 | `alias STUDY` or `alias --factors k --runs N` | alias structure |
 | `info STUDY` | summary |

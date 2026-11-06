@@ -1,5 +1,5 @@
 // Run step: run sheet with results entered in place, downloads, results import (spec §12 step 3).
-import { h, messages, download, toast } from './dom.js';
+import { h, messages, download, toast, help } from './dom.js';
 import { num } from '../js/format.js';
 import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
 import { parseNumber } from '../js/io/csv.js';
@@ -18,7 +18,7 @@ export function render({ state, update, setDoc, setUI, go }) {
     const imp = importResults(study, await f.text());
     setUI({ run: { ...ui, pending: { name: f.name, imp } } });
   } });
-  const head = h('section', { class: 'panel' }, h('h2', {}, 'Run sheet'),
+  const head = h('section', { class: 'panel' }, h('h2', {}, 'Run sheet', help('getting-started','run')),
     h('div', { class: 'row small', style: 'margin-bottom:10px' },
       h('span', { class: 'stat' }, h('b', {}, runs.length), ' runs'),
       h('span', { class: 'stat' }, 'results for ', h('b', { 'data-done': done.size }, done.size), ` of ${runs.length} `, h('span', { class: 'progress' }, h('span', { style: `width:${(100 * done.size / runs.length).toFixed(1)}%` }))),
