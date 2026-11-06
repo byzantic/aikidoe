@@ -8,7 +8,7 @@ table to explain the choice.
 | situation | design | notes |
 |---|---|---|
 | 2–4 factors, interactions matter, runs affordable | full factorial 2ᵏ, replicated or with centre points | everything estimable; centre points test curvature |
-| 5–8 factors, interactions likely | resolution V fraction (16 runs for 5, 32 for 6–8) | `doe design --runs N`; check `doe alias` |
+| 5–8 factors, interactions likely | resolution V fraction (16 runs for 5, 32 for 6, 64 for 7–8) | `doe design --runs N`; check `doe alias` |
 | many factors, screening, interactions possible | resolution IV fraction (16 runs for 6–8) | main effects clear of 2fis; 2fis aliased in pairs |
 | many factors, few runs, interactions unlikely | resolution III fraction or Plackett–Burman (12, 20, 24 …) | plan a fold-over |
 | 4–10 continuous factors, curvature possible | definitive screening | main effects clear of 2fis and curvature |

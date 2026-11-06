@@ -13,8 +13,10 @@ import * as Run from './run.js';
 import * as Analyse from './analyse.js';
 import * as Optimise from './optimise.js';
 import * as Learn from './learn.js';
+import * as Guide from './guide.js';
 
 const STEPS = [
+  { id: 'guide', label: 'Guide', mod: Guide, enabled: () => true },
   { id: 'learn', label: 'Learn', mod: Learn, enabled: () => true },
   { id: 'define', label: 'Define', mod: Define, enabled: () => true },
   { id: 'design', label: 'Design', mod: Design, enabled: (s) => !!s.study },
@@ -59,9 +61,9 @@ function render() {
   if (document.activeElement !== name) name.value = state.doc?.name ?? '';
   const focused = document.activeElement, focusLabel = focused?.closest?.('#main') ? focused.getAttribute('aria-label') : null;
   const main = clear($('#main'));
-  if (!state.doc && state.step !== 'learn') { main.append(welcome()); return; }
+  if (!state.doc && state.step !== 'learn' && state.step !== 'guide') { main.append(welcome()); return; }
   try {
-    if (state.study?.exercise && state.step !== 'learn') main.append(Learn.banner(ctx));
+    if (state.study?.exercise && state.step !== 'learn' && state.step !== 'guide') main.append(Learn.banner(ctx));
     main.append(STEPS.find(s => s.id === state.step).mod.render(ctx));
   }
   catch (e) { console.error(e); main.append(h('div', { class: 'msg error' }, `Something went wrong drawing this page: ${e.message}`)); }
@@ -74,6 +76,7 @@ function welcome() {
     h('p', { class: 'muted' }, 'Define factors and responses, choose a design, run it and enter results, then fit and test models. Everything stays in this browser; save the study as a file to keep it.'),
     h('div', { class: 'row', style: 'margin: 10px 0 16px' }, h('button', { class: 'btn primary', onclick: newStudy }, 'New study'), h('button', { class: 'btn', onclick: () => $('#file-in').click() }, 'Open a study file…')),
     h('p', { class: 'small' }, 'New to aikidoe or to designed experiments? The ', h('a', { href: 'docs/manual/index.html?p=getting-started', target: '_blank' }, 'manual'), ' walks through a complete study and explains each design and analysis.'),
+    h('p', { class: 'small' }, 'Not sure which design you need? The ', h('a', { href: '#', id: 'welcome-guide', onclick: (e) => { e.preventDefault(); go('guide'); } }, 'Guide'), ' asks a few questions and suggests a plan.'),
     h('p', { class: 'small' }, 'Learning DOE? ', h('a', { href: '#', id: 'welcome-learn', onclick: (e) => { e.preventDefault(); go('learn'); } }, 'Learn'), ' has lessons on generated exercises, graded against a hidden truth.'),
     h('h3', {}, 'Examples'), exampleCards());
 }
@@ -165,7 +168,9 @@ async function start() {
   }
   // a shared exercise: #lesson=ID&difficulty=D&seed=S (also when only the hash changes)
   if (openLessonLink()) { render(); return; }
-  window.addEventListener('hashchange', () => { if (openLessonLink()) render(); });
+  // the guide: index.html#guide
+  if (location.hash === '#guide') state.step = 'guide';
+  window.addEventListener('hashchange', () => { if (location.hash === '#guide') go('guide'); else if (openLessonLink()) render(); });
   if (m) {
     try { const s = parseStudy(await inflate(b64u.dec(m[1]))); setDoc(structuredClone(s), { quiet: true }); state.step = s.observations.length ? 'analyse' : s.design ? 'run' : 'define'; loaded = true; }
     catch (e) { toast(`The link could not be read: ${e.message}`); }

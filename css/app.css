@@ -124,3 +124,12 @@ a.help:hover { color: var(--accent); border-color: var(--accent); }
 section.exercise { border-left: 3px solid var(--accent); }
 .msg.hint { background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
 .grade .row { flex-wrap: wrap; }
+
+/* the Guide */
+.guide-q { border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 10px 0; }
+.guide-q h3.guide-text { text-transform: none; letter-spacing: 0; font-size: 15px; color: var(--ink); margin: 4px 0 10px; }
+.guide-why { margin-top: 12px; color: var(--muted); line-height: 1.45; }
+.guide-options .card span { display: block; }
+.guide-plan li, .guide-notes li { margin: 4px 0; line-height: 1.45; }
+.guide-answers ol { padding-left: 20px; } .guide-answers li { margin: 2px 0; }
+.guide-result table.data td:last-child { white-space: normal; }

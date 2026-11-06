@@ -8,6 +8,10 @@ experiment of Box, Hunter and Hunter — and the same steps on the command line 
 [Open the example in the app](../../index.html#example=reactor-bhh), or start a **New** study
 and follow along with your own.
 
+Not sure what kind of experiment you need? The app's [Guide](../../index.html#guide) asks a few
+questions and suggests a plan and a design; the [cheat sheet](cheat-sheet.md) has the same
+questions on one page.
+
 ## The steps
 
 The app has one tab per step. Each works on the same study, which is saved in the browser as you

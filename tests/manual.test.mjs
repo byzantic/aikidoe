@@ -45,6 +45,7 @@ section('links');
       if ((m = /^#(.+)$/.exec(href))) { if (!anchors[id].has(m[1])) bad.push(href); continue; }
       if ((m = /^([\w-]+)\.md(?:#(.+))?$/.exec(href))) { if (!pages[m[1]] || (m[2] && !anchors[m[1]].has(m[2]))) bad.push(href); continue; }
       if ((m = /^\.\.\/\.\.\/index\.html#example=([\w-]+)$/.exec(href))) { if (!exampleIds.has(m[1])) bad.push(href); continue; }
+      if (href === '../../index.html#guide') continue;                     // the app's Guide step
       if ((m = /^\.\.\/\.\.\/([^#?]+)$/.exec(href))) { if (!existsSync(join(ROOT, m[1]))) bad.push(href); continue; }
       bad.push(href);
     }
@@ -59,6 +60,13 @@ section('links');
   check(`the app's ${helps.length} "?" links and design-page links point at existing sections`, helps.length >= 20 && !bad.length, bad.map(x => x.join('#')).join(', '));
   const manualLinks = [...ui.matchAll(/docs\/manual\/index\.html\?p=([\w-]+)/g)].map(m => m[1]);
   check('other links from the app into the manual', manualLinks.every(p => pages[p]), manualLinks.join(', '));
+  // the guide's questions and advice link to manual sections
+  const G = await import('../js/guide.js');
+  const guideLinks = [...G.QUESTIONS.map(q => [q.id, ...q.help])];
+  for (const aim of G.QUESTIONS[0].options.map(o => o.value)) for (const extra of [{}, { htc: 1, groups: 'yes', groupSize: 4, effect: 'small', measurement: 'poor', types: 'multi', categorical: 1 }, { constraints: 'combos' }, { constraints: 'corners', stages: 'no' }])
+    for (const k of [2, 3, 6, 10]) guideLinks.push(...G.advise({ aim, factors: k, types: 'continuous', htc: 0, groups: 'no', constraints: 'none', curvature: 'yes', effect: 'medium', stages: 'yes', ...extra }).manual.map(m => [aim, m.page, m.anchor]));
+  const badG = guideLinks.filter(([, p, a]) => !pages[p] || (a && !anchors[p].has(a)));
+  check(`the guide's ${guideLinks.length} manual links resolve to sections`, guideLinks.length > 50 && !badG.length, [...new Set(badG.map(x => x.join(' → ')))].join(', '));
   // the tutorial's lesson texts link to manual sections
   const { LESSONS } = await import('../js/learn/lessons.js');
   const lessonLinks = LESSONS.flatMap(l => [l.text, ...l.manual].flatMap(t => [...t.matchAll(/docs\/manual\/index\.html\?p=([\w-]+)(?:#([\w-]+))?/g)].map(m => [l.id, m[1], m[2]])));
