@@ -1,6 +1,6 @@
 # Publish the browser UI with GitHub Pages on every push to main (and on demand).
 # Published: the app (index.html, css/, ui/, js/, vendor/, examples/), the manual (docs/manual/,
-# with /manual/ redirecting to it) and the JSON Schemas (schema/).
+# with /manual/ redirecting to it), the JSON Schemas (schema/), the agent skill (skills/) and llms.txt.
 # One-time setup in the repository: Settings → Pages → Build and deployment → Source: GitHub Actions.
 name: pages
 on:
@@ -26,7 +26,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir -p _site/docs _site/manual
-          cp -r index.html css ui js vendor examples schema _site/
+          cp -r index.html llms.txt css ui js vendor examples schema skills _site/
           cp -r docs/manual _site/docs/
           printf '<!doctype html><meta charset="utf-8"><title>aikidoe manual</title><meta http-equiv="refresh" content="0; url=../docs/manual/"><a href="../docs/manual/">aikidoe manual</a>\n' > _site/manual/index.html
           cp LICENSE _site/

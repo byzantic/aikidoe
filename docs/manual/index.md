@@ -60,3 +60,11 @@ Each is executable: its commands are run by the test suite and the numbers check
 - [Study file format](reference-study-format.md)
 - [Formula syntax](reference-formulas.md)
 - [Glossary](glossary.md) and [bibliography](bibliography.md)
+
+## For AI agents
+
+An agent helping someone with an experiment should load the [aikidoe skill](../../skills/aikidoe/SKILL.md)
+(Agent Skills format: when to use it, the workflow, what to ask, how to choose a design, rules such
+as *never invent results*, and tested command recipes). Every `doe` command takes `--json`;
+`tools/mcp.mjs` serves the same commands over MCP; [llms.txt](../../llms.txt) lists it all. How well
+an agent does with only the skill is recorded in [the agent evaluation](../../docs/agent-eval.md).

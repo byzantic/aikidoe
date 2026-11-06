@@ -1,0 +1,33 @@
+# aikidoe
+
+> Design of experiments in the browser and on the command line: screening, factorials, response surfaces, split-plot and wafer/site process experiments, gauge R&R, robust design and simulator yield. Everything runs locally; a study is one JSON file. MIT licence.
+
+An agent helping a user plan or analyse an experiment should load the skill first: it says when to use aikidoe, the workflow (elicit → define → recommend → design → run sheet → import → analyse → next stage → report), what to ask the user, how to choose a design, the rules (never invent results, keep randomisation, check estimability and power, state aliasing, give intervals, hand cost and safety decisions back to the user) and tested command recipes. Every `doe` command takes `--json`.
+
+## Agent skill
+
+- [SKILL.md](skills/aikidoe/SKILL.md): the skill (Agent Skills format)
+- [Elicitation checklist](skills/aikidoe/references/elicitation.md)
+- [Choosing a design](skills/aikidoe/references/decisions.md)
+- [Recipes](skills/aikidoe/references/recipes.md): command sequences with real outputs
+- [Command line reference](skills/aikidoe/references/cli.md) and its JSON output
+- [Study file format](skills/aikidoe/references/study-format.md)
+
+## Schemas
+
+- [Study file JSON Schema](schema/study.schema.json)
+- [CLI --json output JSON Schema](schema/cli.schema.json)
+
+## Manual
+
+- [Manual contents](docs/manual/index.md)
+- [Getting started](docs/manual/getting-started.md)
+- [Concepts](docs/manual/concepts.md)
+- [Analysis](docs/manual/analysis.md)
+- [Worked example: a 2⁵⁻¹ screening experiment](docs/manual/example-screening.md)
+
+## Optional
+
+- [MCP server](https://github.com/byzantic/aikidoe/blob/main/tools/mcp.mjs): the same commands as MCP tools over stdio, for agents without a shell
+- [Exercises and virtual processes](docs/manual/exercises.md): practice and evaluation with a hidden truth
+- [Source](https://github.com/byzantic/aikidoe)
