@@ -451,7 +451,24 @@ working (e.g. "these two effects are aliased — can you tell them apart?"), and
 13. Simulation and yield (M5).
 
 Lessons for features not yet built are listed but locked. Progress is kept in the browser
-(per viewer). **Tested:** for each lesson and a range of seeds and difficulties, the reference
+(per viewer).
+
+Implementation (#39): a *Learn* tab (`ui/learn.js`, lessons in `js/learn/lessons.js`). Available:
+lessons 1–7 and 10 on the #38 topics (1 and 2 on `factorial`, 3 on `factorial`/hard with power on
+the Design step, 4 `fraction`, 5 `screening`, 6 `blocking`, 7 `rsm`, 10 `split-plot`); 8, 9, 11, 12
+and 13 are locked until their exercise topics exist (the features are built). While a study carries
+an exercise, a banner above the steps shows the task, budget, hints (`hints(lesson, exercise,
+study)`: no design yet; over budget; unblocked days; no whole plots; no curvature for an optimum;
+an unresolved resolution III fraction; runs without results), **Get results** (the sealed truth via
+`runExercise`) and **Answer and grade** (a form for each question, prefilled from the standard
+analysis if asked; or grade the standard analysis directly). Feedback: score per question, the
+truth, the model answer; lesson 1 adds the one-factor-at-a-time score on the same process.
+Progress: best score per lesson in `localStorage` (`aikidoe:learn`, guarded). Links:
+`index.html#lesson=ID&difficulty=D&seed=S`, also on hash change. Tested (`tests/ui/learn.mjs`,
+in CI): for every available lesson and two exercises each, the reference strategy driven through
+the UI — design chosen on the Design step, results, the fold-over as a next stage — produces the
+reference design and gets 100; hints, the answer form, progress and locked lessons; every manual
+link in the lesson texts resolves (manual tests). **Tested:** for each lesson and a range of seeds and difficulties, the reference
 strategy solves the generated exercise and the grader gives it full marks; a deliberately poor
 strategy (one-factor-at-a-time, ignoring blocks) scores lower; generation is reproducible from
 the seed.

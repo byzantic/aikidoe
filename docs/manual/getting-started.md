@@ -82,5 +82,5 @@ Robust design (noise factors, tolerances) and yield are here too
 
 Experiments are sequential: a screening fraction is followed by a fold-over to separate aliased
 effects, axial points to fit curvature, or optimal augmentation; and a model is confirmed by
-running its best settings. The Analyse step's **Next stage** panel adds these as new blocks of
+running its best settings. The Design step's **Next stage** panel (once the study has a design) adds these as new blocks of
 the same study ([sequential experiments](designs-sequential.md)).

@@ -12,8 +12,10 @@ import * as Design from './design.js';
 import * as Run from './run.js';
 import * as Analyse from './analyse.js';
 import * as Optimise from './optimise.js';
+import * as Learn from './learn.js';
 
 const STEPS = [
+  { id: 'learn', label: 'Learn', mod: Learn, enabled: () => true },
   { id: 'define', label: 'Define', mod: Define, enabled: () => true },
   { id: 'design', label: 'Design', mod: Design, enabled: (s) => !!s.study },
   { id: 'run', label: 'Run', mod: Run, enabled: (s) => !!s.study?.design },
@@ -57,8 +59,11 @@ function render() {
   if (document.activeElement !== name) name.value = state.doc?.name ?? '';
   const focused = document.activeElement, focusLabel = focused?.closest?.('#main') ? focused.getAttribute('aria-label') : null;
   const main = clear($('#main'));
-  if (!state.doc) { main.append(welcome()); return; }
-  try { main.append(STEPS.find(s => s.id === state.step).mod.render(ctx)); }
+  if (!state.doc && state.step !== 'learn') { main.append(welcome()); return; }
+  try {
+    if (state.study?.exercise && state.step !== 'learn') main.append(Learn.banner(ctx));
+    main.append(STEPS.find(s => s.id === state.step).mod.render(ctx));
+  }
   catch (e) { console.error(e); main.append(h('div', { class: 'msg error' }, `Something went wrong drawing this page: ${e.message}`)); }
   if (focusLabel) { const el = [...main.querySelectorAll('[aria-label]')].find(x => x.getAttribute('aria-label') === focusLabel); if (el) { el.focus(); if (el.select && el.type === 'text') el.select(); } }
 }
@@ -69,6 +74,7 @@ function welcome() {
     h('p', { class: 'muted' }, 'Define factors and responses, choose a design, run it and enter results, then fit and test models. Everything stays in this browser; save the study as a file to keep it.'),
     h('div', { class: 'row', style: 'margin: 10px 0 16px' }, h('button', { class: 'btn primary', onclick: newStudy }, 'New study'), h('button', { class: 'btn', onclick: () => $('#file-in').click() }, 'Open a study file…')),
     h('p', { class: 'small' }, 'New to aikidoe or to designed experiments? The ', h('a', { href: 'docs/manual/index.html?p=getting-started', target: '_blank' }, 'manual'), ' walks through a complete study and explains each design and analysis.'),
+    h('p', { class: 'small' }, 'Learning DOE? ', h('a', { href: '#', id: 'welcome-learn', onclick: (e) => { e.preventDefault(); go('learn'); } }, 'Learn'), ' has lessons on generated exercises, graded against a hidden truth.'),
     h('h3', {}, 'Examples'), exampleCards());
 }
 
@@ -125,6 +131,16 @@ async function share() {
   catch { toast('Link is in the address bar'); }
 }
 
+function openLessonLink() {
+  const lm = location.hash.match(/^#lesson=([\w-]+)&difficulty=(\w+)&seed=(\d+)/);
+  if (!lm) return false;
+  const cur = state.study?.exercise;
+  if (cur && cur.lesson === lm[1] && cur.difficulty === lm[2] && cur.seed === Number(lm[3])) return false;   // already open
+  const lesson = Learn.LESSON(lm[1]);
+  if (!lesson?.topic) { toast(`No lesson "${lm[1]}"`); return false; }
+  try { Learn.startLesson(ctx, lesson, { difficulty: lm[2], seed: Number(lm[3]) }); return true; } catch (e) { toast(e.message); return false; }
+}
+
 async function start() {
   $('#btn-new').onclick = newStudy;
   $('#btn-open').onclick = () => $('#file-in').click();
@@ -147,6 +163,9 @@ async function start() {
     if (e) { await loadExample(e); history.replaceState(null, '', location.href.split('#')[0]); return; }
     toast(`No example "${ex[1]}"`);
   }
+  // a shared exercise: #lesson=ID&difficulty=D&seed=S (also when only the hash changes)
+  if (openLessonLink()) { render(); return; }
+  window.addEventListener('hashchange', () => { if (openLessonLink()) render(); });
   if (m) {
     try { const s = parseStudy(await inflate(b64u.dec(m[1]))); setDoc(structuredClone(s), { quiet: true }); state.step = s.observations.length ? 'analyse' : s.design ? 'run' : 'define'; loaded = true; }
     catch (e) { toast(`The link could not be read: ${e.message}`); }

@@ -117,3 +117,10 @@ tr.muted td { color: var(--muted, #888); }
 /* "?" links from the app's panels to the manual */
 a.help { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 50%; border: 1px solid var(--line); font-size: 12px; font-weight: 500; color: var(--muted); text-decoration: none; vertical-align: 2px; }
 a.help:hover { color: var(--accent); border-color: var(--accent); }
+/* Learn mode (#39) */
+.lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.card.lesson.locked { opacity: .55; cursor: not-allowed; }
+.lesson-text p { max-width: 75ch; line-height: 1.55; }
+section.exercise { border-left: 3px solid var(--accent); }
+.msg.hint { background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.grade .row { flex-wrap: wrap; }

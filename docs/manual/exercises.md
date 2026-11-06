@@ -6,6 +6,22 @@ furnace resets, wafers and sites — but have a known truth, so every analysis c
 **Exercises** wrap a virtual process in an engineering scenario with a run budget and questions,
 and grade the answers against the truth.
 
+## Learn mode
+
+The app's **Learn** tab is a tutorial built on these exercises: thirteen lessons, from why
+one-factor-at-a-time falls short to split-plots. Each lesson is a short explanation with links into
+this manual and a task on a generated exercise. While you work, a banner over the four steps
+shows the task, the budget and hints (a design over budget, days that are not blocked, a
+hard-to-change factor reset every run, a fraction whose effects are aliased). **Get results** asks
+the virtual process for the runs you designed; **Answer and grade** takes your answers — or grades
+the standard analysis of your data — and shows the score, the truth and the model answer. Lesson 1
+also shows what one-factor-at-a-time would have scored on the same process.
+
+Lessons whose exercises are not written yet (constraints, several responses, gauge studies,
+robust design, simulation) are listed but locked; the features themselves are in the app. Progress
+is kept in the browser. Every exercise has a link — `index.html#lesson=ID&difficulty=D&seed=S` — so
+the same exercise can be shared, or set for a class.
+
 ## A virtual process
 
 A virtual process has a true model in coded units — a few active factors (effect sparsity),
