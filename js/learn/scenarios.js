@@ -1,0 +1,81 @@
+// Scenario templates for exercises (spec §16.2): engineering names, units and plausible ranges,
+// so exercises read like real problems. Each has at least eight factors, one of them a natural
+// hard-to-change factor (htc: true) and one categorical; the response's baseline and run-to-run σ
+// are in its units. The numbers are plausible, not data: the truth is generated per exercise.
+export const SCENARIOS = {
+  'gate-oxide': {
+    title: 'Gate oxide growth',
+    text: 'A thermal-oxidation step grows the gate oxide of a CMOS process. The furnace recipe has drifted out of its window and engineering wants to know which settings control the oxide thickness, and how.',
+    response: { id: 'tox', name: 'Oxide thickness', units: 'nm', base: 6.5, sigma: 0.05, goal: 'maximize', decimals: 3 },
+    factors: [
+      { id: 'T', name: 'Furnace temperature', units: '°C', low: 850, high: 950, htc: true },
+      { id: 'time', name: 'Oxidation time', units: 'min', low: 10, high: 40, transform: 'log' },
+      { id: 'O2', name: 'O₂ flow', units: 'slm', low: 2, high: 8 },
+      { id: 'HCl', name: 'HCl fraction', units: '%', low: 0, high: 3 },
+      { id: 'ramp', name: 'Ramp rate', units: '°C/min', low: 5, high: 15 },
+      { id: 'P', name: 'Pressure', units: 'Torr', low: 600, high: 760 },
+      { id: 'anneal', name: 'N₂ anneal', units: 'min', low: 0, high: 20 },
+      { id: 'clean', name: 'Pre-clean', levels: ['SC1', 'HF-last'] },
+    ],
+  },
+  'plasma-etch': {
+    title: 'Plasma etch rate',
+    text: 'A dielectric etch in a parallel-plate plasma chamber is too slow. Before touching the recipe in production, the process engineer plans an experiment to find what drives the etch rate.',
+    response: { id: 'rate', name: 'Etch rate', units: 'nm/min', base: 420, sigma: 6, goal: 'maximize', decimals: 1 },
+    factors: [
+      { id: 'power', name: 'RF power', units: 'W', low: 200, high: 400 },
+      { id: 'press', name: 'Chamber pressure', units: 'mTorr', low: 20, high: 80 },
+      { id: 'CF4', name: 'CF₄ flow', units: 'sccm', low: 30, high: 90 },
+      { id: 'O2', name: 'O₂ flow', units: 'sccm', low: 0, high: 10 },
+      { id: 'gap', name: 'Electrode gap', units: 'mm', low: 8, high: 14, htc: true },
+      { id: 'Ar', name: 'Ar flow', units: 'sccm', low: 0, high: 100 },
+      { id: 'temp', name: 'Chuck temperature', units: '°C', low: 20, high: 60 },
+      { id: 'chem', name: 'Chemistry', levels: ['CF4', 'C2F6'] },
+    ],
+  },
+  'cvd': {
+    title: 'CVD deposition rate',
+    text: 'A low-pressure CVD polysilicon deposition feeds several products. The tube is being requalified and the team wants a model of the deposition rate in terms of the recipe.',
+    response: { id: 'dep', name: 'Deposition rate', units: 'nm/min', base: 12, sigma: 0.15, goal: 'maximize', decimals: 3 },
+    factors: [
+      { id: 'T', name: 'Tube temperature', units: '°C', low: 600, high: 640, htc: true },
+      { id: 'SiH4', name: 'SiH₄ flow', units: 'sccm', low: 100, high: 200 },
+      { id: 'press', name: 'Pressure', units: 'mTorr', low: 150, high: 300 },
+      { id: 'N2', name: 'N₂ dilution', units: 'sccm', low: 0, high: 200 },
+      { id: 'rot', name: 'Boat rotation', units: 'rpm', low: 0, high: 10 },
+      { id: 'spacing', name: 'Wafer spacing', units: 'mm', low: 4, high: 8 },
+      { id: 'dopant', name: 'PH₃ flow', units: 'sccm', low: 0, high: 5 },
+      { id: 'boat', name: 'Boat type', levels: ['quartz', 'SiC'] },
+    ],
+  },
+  'reactor': {
+    title: 'Reactor yield',
+    text: 'A batch chemical reactor makes an intermediate whose yield has been disappointing. Pilot-plant time is expensive, so every run must count.',
+    response: { id: 'yield', name: 'Yield', units: '%', base: 70, sigma: 1.2, goal: 'maximize', decimals: 2 },
+    factors: [
+      { id: 'temp', name: 'Temperature', units: '°C', low: 140, high: 180, htc: true },
+      { id: 'cat', name: 'Catalyst loading', units: '%', low: 1, high: 2 },
+      { id: 'conc', name: 'Concentration', units: '%', low: 3, high: 6 },
+      { id: 'feed', name: 'Feed rate', units: 'L/min', low: 10, high: 15 },
+      { id: 'agit', name: 'Agitation', units: 'rpm', low: 100, high: 120 },
+      { id: 'press', name: 'Pressure', units: 'bar', low: 1, high: 3 },
+      { id: 'time', name: 'Hold time', units: 'h', low: 2, high: 6 },
+      { id: 'solvent', name: 'Solvent', levels: ['toluene', 'xylene'] },
+    ],
+  },
+  'coupler': {
+    title: 'Coupler tuning',
+    text: 'A microstrip directional coupler is built on a new laminate. Its measured coupling depends on the layout and the board; the RF designer wants to know which matter before freezing the layout.',
+    response: { id: 'S31', name: 'Coupling magnitude', units: 'dB', base: -10, sigma: 0.04, goal: 'maximize', decimals: 3 },
+    factors: [
+      { id: 'w', name: 'Line width', units: 'mm', low: 0.8, high: 0.96 },
+      { id: 's', name: 'Gap', units: 'mm', low: 0.09, high: 0.12 },
+      { id: 'len', name: 'Coupled length', units: 'mm', low: 8.5, high: 9.5 },
+      { id: 'h', name: 'Laminate thickness', units: 'mm', low: 0.48, high: 0.53, htc: true },
+      { id: 'cu', name: 'Copper thickness', units: 'µm', low: 17, high: 35 },
+      { id: 'mask', name: 'Solder-mask thickness', units: 'µm', low: 0, high: 25 },
+      { id: 'miter', name: 'Corner miter', units: '%', low: 40, high: 70 },
+      { id: 'finish', name: 'Surface finish', levels: ['ENIG', 'HASL'] },
+    ],
+  },
+};

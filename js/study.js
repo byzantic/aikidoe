@@ -34,7 +34,7 @@ const LEVELS = ['lot', 'run', 'wholePlot', 'wafer', 'site'];
 const TRANSFORMS = ['none', 'log'];
 
 const KEYS = {
-  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'simulator', 'history'],
+  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'simulator', 'exercise', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
   response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
@@ -518,6 +518,11 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   const sites = normSites(d.sites, errors);
   if (sites) study.sites = sites;
   study.history = normHistory(d.history, design, errors);
+  // an exercise (§16.2): { format, id, topic, …, sealed?, answers? }, kept as given
+  if (d.exercise !== undefined) {
+    if (!isObj(d.exercise) || typeof d.exercise.id !== 'string') errors.push('exercise: must be { id, topic, … } (made by the exercise generator)');
+    else study.exercise = JSON.parse(JSON.stringify(d.exercise));
+  }
   // the simulator that runs the design (§10): { adapter: name, ...its options }, kept as given
   if (d.simulator !== undefined) {
     if (!isObj(d.simulator) || typeof d.simulator.adapter !== 'string') errors.push('simulator: must be { adapter: name, … }');

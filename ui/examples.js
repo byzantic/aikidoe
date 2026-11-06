@@ -3,11 +3,11 @@
 import { createStudy, FORMAT_VERSION, code } from '../js/study.js';
 import { fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { ccd } from '../js/design/rsm.js';
-import { rng } from '../js/design/rng.js';
 import { splitPlotFull } from '../js/design/splitplot.js';
 import { fullFactorial } from '../js/design/factorial.js';
-import { siteScheme, sitePositions } from '../js/model/sites.js';
+import { siteScheme } from '../js/model/sites.js';
 import { lhsDesign } from '../js/sim/surrogate.js';
+import { observeRuns } from '../js/learn/process.js';
 import { compileExpression } from '../js/sim/expression.js';
 
 const reactor = () => ({
@@ -24,7 +24,6 @@ const reactor = () => ({
 });
 
 // normal deviates from the seeded generator (Box–Muller)
-const noise = (g) => Math.sqrt(-2 * Math.log(1 - g.random())) * Math.cos(2 * Math.PI * g.random());
 
 export const EXAMPLES = [
   { id: 'reactor-plan', title: 'Reactor screening: plan', step: 'design',
@@ -45,11 +44,11 @@ export const EXAMPLES = [
   { id: 'reactor-results', title: 'Reactor screening: with results', step: 'analyse',
     blurb: 'A 2^(5−1) fraction with simulated yields; Lenth’s method picks out the active effects.',
     build: () => {
-      const s = createStudy(reactor()), g = rng(11);
+      const s = createStudy(reactor());
       const design = toStudyDesign(s, fractionalFactorial(5, { runs: 16 }));
-      const c = (r, id) => code(s.factors.find(f => f.id === id), r.settings[id]);
-      const observations = design.runs.map(r => ({ run: r.run, response: 'yield',
-        value: +(65 + 10 * c(r, 'F') - 6 * c(r, 'T') + 5 * c(r, 'F') * c(r, 'T') + 2 * c(r, 'Conc') + 0.8 * noise(g)).toFixed(1) }));
+      // a virtual process (js/learn/process.js) with a known truth
+      const observations = observeRuns({ seed: 11, factors: s.factors, responses: [{ id: 'yield', sigma: 0.8, decimals: 1,
+        truth: { intercept: 65, terms: { F: 10, T: -6, 'F:T': 5, Conc: 2 } } }] }, { ...s, design });
       return createStudy({ ...s, description: 'Five process factors screened for their effect on yield (simulated data).', design, observations });
     } },
   { id: 'ccd-results', title: 'Response surface: CCD with results', step: 'analyse',
@@ -59,14 +58,12 @@ export const EXAMPLES = [
         description: 'Rotatable CCD, two factors; simulated data with a maximum inside the region.',
         factors: [{ id: 'T', name: 'Temperature', units: '°C', low: 150, high: 170 }, { id: 'time', name: 'Time', units: 'min', low: 20, high: 80, transform: 'log' }],
         responses: [{ id: 'conv', name: 'Conversion', units: '%', goal: 'maximize', lower: 74, target: 80 }, { id: 'bypr', name: 'By-product', units: '%', goal: 'minimize', target: 2, upper: 6 }] });
-      const design = toStudyDesign(s, ccd(2)), g = rng(5);
-      const observations = design.runs.map(r => {
-        const x1 = code(s.factors[0], r.settings.T), x2 = code(s.factors[1], r.settings.time);
-        return { run: r.run, response: 'conv', value: +(78 + 3.5 * x1 + 2 * x2 - 4 * x1 * x1 - 2.5 * x2 * x2 + 1.5 * x1 * x2 + 0.6 * noise(g)).toFixed(2) };
-      });
-      // a by-product that rises with temperature: the two goals pull apart (desirability, #18)
-      for (const r of design.runs) { const x1 = code(s.factors[0], r.settings.T), x2 = code(s.factors[1], r.settings.time);
-        observations.push({ run: r.run, response: 'bypr', value: +(3.5 + 1.6 * x1 + 0.4 * x2 + 0.5 * x1 * x1 + 0.2 * noise(g)).toFixed(2) }); }
+      const design = toStudyDesign(s, ccd(2));
+      // a maximum inside the region for conversion; a by-product that rises with temperature, so
+      // the two goals pull apart (desirability, #18). Virtual process with a known truth.
+      const observations = observeRuns({ seed: 5, factors: s.factors, responses: [
+        { id: 'conv', sigma: 0.6, decimals: 2, truth: { intercept: 78, terms: { T: 3.5, time: 2, 'I(T^2)': -4, 'I(time^2)': -2.5, 'T:time': 1.5 } } },
+        { id: 'bypr', sigma: 0.2, decimals: 2, truth: { intercept: 3.5, terms: { T: 1.6, time: 0.4, 'I(T^2)': 0.5 } } }] }, { ...s, design });
       return createStudy({ ...s, design, observations });
     } },
   { id: 'anneal-results', title: 'Furnace anneal: split-plot with wafers and sites', step: 'analyse',
@@ -78,20 +75,12 @@ export const EXAMPLES = [
         factors: [{ id: 'T', name: 'Anneal temperature', units: '°C', low: 900, high: 1000, htc: true }, { id: 't', name: 'Anneal time', units: 'min', low: 10, high: 30 },
           { id: 'dose', name: 'Implant dose', units: 'cm-2', low: 1e15, high: 5e15, transform: 'log' }],
         responses: [{ id: 'Rs', name: 'Sheet resistance', units: 'Ω/sq', goal: 'target', lower: 55, target: 60, upper: 65, levels: ['run', 'wafer', 'site'] }] });
-      const P = sitePositions(s);
-      const design = toStudyDesign(s, splitPlotFull([2, 2, 2], [true, false, false], { replicates: 3 })), g = rng(17);
-      const furnace = {}, observations = [];
-      const slotOf = new Map();       // wafers fill the boat from slot 1 within each furnace run
-      for (const r of design.runs.slice().sort((a, b) => a.order - b.order)) {
-        furnace[r.wholePlot] ??= 1.6 * noise(g);
-        const x = (id) => code(s.factors.find(f => f.id === id), r.settings[id]), runDev = 0.5 * noise(g);
-        for (const w of ['W1', 'W2']) {
-          const waf = 0.35 * noise(g), slot = (slotOf.get(r.wholePlot) ?? 0) + 1; slotOf.set(r.wholePlot, slot);
-          for (const [site, p] of P) observations.push({ run: r.run, wafer: `${r.run}${w}`, site, slot, response: 'Rs',
-            value: +(62 - 4 * x('T') - 2.5 * x('t') - 6 * x('dose') + 1.2 * x('T') * x('dose') + furnace[r.wholePlot] + runDev + waf
-              + (1.0 + 0.6 * x('T')) * (2 * p.rho ** 2 - 1) + 0.2 * (slot - 4.5) + 0.2 * noise(g)).toFixed(2) });
-        }
-      }
+      const design = toStudyDesign(s, splitPlotFull([2, 2, 2], [true, false, false], { replicates: 3 }));
+      // virtual process: furnace-to-furnace (whole plot) 1.6, run 0.5, wafer 0.35 and site 0.2 Ω/sq;
+      // an edge-high bowl that deepens with temperature; a slot gradient of 0.2 Ω/sq per slot
+      const observations = observeRuns({ seed: 17, factors: s.factors,
+        responses: [{ id: 'Rs', sigma: 0.5, decimals: 2, truth: { intercept: 62, terms: { T: -4, t: -2.5, dose: -6, 'T:dose': 1.2, radius2: 1.0, 'T:radius2': 0.6 } } }],
+        nuisance: { wholePlot: 1.6, wafers: 2, wafer: 0.35, site: 0.2, slot: 0.2, slotCentre: 4.5 } }, { ...s, design });
       return createStudy({ ...s, design, observations });
     } },
   { id: 'filtration', title: 'Filtration rate: robust design', step: 'analyse',

@@ -40,6 +40,11 @@ One page per family: what it estimates, how many runs, its options and diagnosti
   per-wafer summaries, gauge R&R
 - [Simulation and yield](simulation.md): simulators, surrogates, sensitivity, Monte Carlo yield
 
+## Learning
+
+- [Exercises and virtual processes](exercises.md): generated exercises with a hidden truth, graded;
+  self-study and class mode
+
 ## Worked examples
 
 Each is executable: its commands are run by the test suite and the numbers checked.

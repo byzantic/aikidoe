@@ -71,6 +71,16 @@ Commands
        Sobol first-order and total indices of each surrogate
   recommend STUDY [--goal screen|model|optimise] [--budget N] [--delta 2] [--eta 1] [--no-optimal]
        ranked design options with reasons: run counts, resolution, D-efficiency, power at Δ = delta·σ
+  exercise new STUDY --topic T [--difficulty easy|medium|hard] [--seed S] [--scenario X]
+       a self-study exercise: the study (no design yet), its questions and budget, the truth sealed
+  exercise new --set N --topic T [--difficulty D] [--seed S] --out DIR
+       class mode: DIR/ID.key.json (keep it) and DIR/ID.aikidoe.json (for the students) per exercise
+  exercise run STUDY                     self-study: results for the runs of the design
+  exercise run KEY SHEET.csv [--out RESULTS.csv]   class mode: results for a student's run sheet
+  exercise answer STUDY [--active A,B] [--effect "A=est:lo:hi" …] [--best "A=…,B=…"] [--prediction v]
+  exercise grade STUDY | exercise grade KEY STUDY   score, feedback, the model answer and the truth
+       (without answers, the study's data are analysed the standard way and that is graded)
+  exercise topics                        the topics, difficulties and scenarios
   report STUDY [--model "y ~ …" …] [--out FILE.html] [--date YYYY-MM-DD]
        self-contained HTML report (design, run sheet, fitted models, plots; the study embedded)
   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
@@ -95,7 +105,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

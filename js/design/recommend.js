@@ -160,13 +160,18 @@ export function recommend(study, { goal, budget, delta = 2, alpha = 0.05, eta = 
         const htc = study.factors.filter(f => f.htc).length;
         const W = c.kind === 'sp-optimal' ? Math.max(htc + 2, Math.min(Math.floor(runs / 2), 2 ** htc + 2)) : undefined;
         d = buildCandidate(study, c, { search: { runs: c.kind === 'sp-optimal' ? W * Math.max(2, Math.floor(runs / W)) : runs, model, restarts, wholePlots: W, eta } });
+      } else if (c.kind === 'sp-full') {
+        // whole plots need replicating for a whole-plot error: as many replicates as the budget allows
+        const reps = budget ? Math.max(1, Math.floor(budget / c.runs)) : 2;
+        d = buildCandidate(study, c, { replicates: reps });
       } else d = buildCandidate(study, c, {});
     } catch (e) { options.push(entry(c, null, { runs: c.runs, estimable: false, reasons: [], warnings: [e.message] })); continue; }
     options.push(assess(study, c, d, { model, goal, budget, delta, alpha, eta, p }));
   }
-  // rank: estimable and within budget first; then adequate power (fewest runs first; below 0.8, most
+  // rank: estimable and within budget first (designs that ignore hard-to-change factors after those
+  // that respect them); then adequate power (fewest runs first; below 0.8, most
   // power first); then efficiency
-  const score = (o) => { const ok = o.minPower >= 0.8; return [o.estimable && o.withinBudget ? 0 : o.estimable ? 1 : 2, ok ? 0 : o.minPower === null ? 2 : 1, !o.estimable ? 0 : ok ? o.runs : -(o.minPower ?? 0), -(o.dEfficiency ?? 0)]; };
+  const score = (o) => { const ok = o.minPower >= 0.8; return [o.estimable && o.withinBudget ? (o.ignoresHtc ? 1 : 0) : o.estimable ? 2 : 3, ok ? 0 : o.minPower === null ? 2 : 1, !o.estimable ? 0 : ok ? o.runs : -(o.minPower ?? 0), -(o.dEfficiency ?? 0)]; };
   options.sort((a, b) => { const x = score(a), y = score(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0; });
   options.forEach((o, i) => { o.rank = o.estimable ? i + 1 : null; });
   return { goal, goalText: GOALS[goal].what, model, terms: p, budget: budget ?? null, delta, alpha, options };
@@ -220,6 +225,6 @@ function assess(study, c, d, { model, goal, budget, delta, alpha, eta, p }) {
   if (budget !== undefined && estimable) (within ? reasons : warnings).push(within ? `fits the budget (${n} of ${budget} runs)` : `over budget: ${n} runs, budget ${budget}`);
   if (goal === 'screen' && (c.kind === 'ccd' || c.kind === 'bbd')) warnings.push('a response-surface design: more than screening needs');
   if (c.kind === 'full' && n > 64 && goal !== 'optimise') warnings.push('large: a fraction would answer the same question in fewer runs');
-  return { id: c.id, kind: c.kind, label: c.label, runs: n, ...(wholePlots ? { wholePlots } : {}), note: c.note, resolution: res === Infinity ? null : res,
+  return { id: c.id, kind: c.kind, label: c.label, runs: n, ...(wholePlots ? { wholePlots } : {}), ...(c.ignoresHtc ? { ignoresHtc: true } : {}), note: c.note, resolution: res === Infinity ? null : res,
     dEfficiency: dEff, minPower, estimable, withinBudget: within, reasons, warnings };
 }

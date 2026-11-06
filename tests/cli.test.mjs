@@ -303,6 +303,14 @@ try {
   js('comb-over', 'jcpl2.aikidoe.json', 'cpl.cir', '--factor', 'etch=8', '--metric', 'c=-db(S31) @ 5G');
   o = js('report', 'jccd.aikidoe.json', '--date', '2026-01-01');
   check('report --json: a self-contained HTML file with the study embedded', o.file === 'jccd.html' && /id="aikidoe-study"/.test(readFileSync(join(dir, 'jccd.html'), 'utf8')) && !/<link|<script src/.test(readFileSync(join(dir, 'jccd.html'), 'utf8')));
+  o = js('exercise', 'new', 'jex.aikidoe.json', '--topic', 'factorial', '--seed', '4');
+  check('exercise new --json: the questions and budget', o.exercise?.budget === 16 && o.exercise.questions.length === 4);
+  js('design', 'jex.aikidoe.json', '--full', '--replicates', '2');
+  o = js('exercise', 'run', 'jex.aikidoe.json');
+  check('exercise run --json', o.runs === 16 && o.overBudget === false);
+  o = js('exercise', 'grade', 'jex.aikidoe.json');
+  check('exercise grade --json: the reference-like design earns full marks', o.score === 100 && o.derived === true && o.truth.active.length >= 2, JSON.stringify(o.parts));
+  js('exercise', 'topics');
   o = js('schema');
   check('schema --json: the study schema', o.jsonSchema?.title === 'aikidoe study');
   o = js('info', 'jseq.aikidoe.json');
