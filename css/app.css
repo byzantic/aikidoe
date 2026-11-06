@@ -111,3 +111,6 @@ svg.plot .ribbon { fill: var(--accent); opacity: .15; stroke: none; }
 svg.plot .ref.cur { stroke: var(--ink); stroke-dasharray: none; opacity: .5; } svg.plot .ref.lim { stroke: var(--muted, #888); }
 #opt-result table input.num { max-width: 9em; }
 #robust table input.num, #optimise-goals input.num { max-width: 9em; }
+.warn-text { color: #8a6d00; } @media (prefers-color-scheme: dark) { .warn-text { color: #d9b44a; } }
+tr.muted td { color: var(--muted, #888); }
+[data-reasons] { white-space: normal; min-width: 24em; max-width: 60em; line-height: 1.35; }

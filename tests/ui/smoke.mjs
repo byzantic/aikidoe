@@ -38,6 +38,14 @@ try {
   section('Design: reactor screening');
   await page.click('#btn-examples'); await page.click('[data-example="reactor-plan"]'); await settle();
   check('example opens on Design with candidates', (await page.locator('tr[data-design]').count()) >= 5);
+  await page.selectOption('select[aria-label="recommend goal"]', 'model'); await settle();
+  await page.fill('input[aria-label="recommend budget"]', '20'); await page.keyboard.press('Tab'); await settle();
+  await page.click('#recommend-btn'); await settle();
+  const firstRec = await page.locator('tr[data-design]').first().getAttribute('data-design');
+  check(`recommender (goal model, budget 20): ranked, reasons shown, first ${firstRec}`, firstRec === 'optimal' && /fits the budget \(20 of 20 runs\)/.test(await page.textContent('[data-reasons="optimal"]')) && /cannot estimate 2fi/.test(await page.textContent('[data-reasons="frac-8"]')));
+  await page.locator('tr[data-design]').first().click(); await settle();
+  check('choosing the recommended optimal design presets its runs and model', (await page.inputValue('input[aria-label="optimal runs"]')) === '20' && /2fi/.test(await page.inputValue('[aria-label="optimal model"]')));
+  await shot('2-recommend');
   await page.click('tr[data-design="frac-16"]'); await settle();
   check('2^(5−1) selected: no aliasing message, generator in factor ids', /Conc = F:Cat:RPM:T/.test(await page.textContent('main')) && /No aliasing among main effects/.test(await page.textContent('main')));
   check('power table for the 2^(5−1) with its 2fi model: saturated, no power', /no residual degrees of freedom/.test(await page.textContent('#power')));

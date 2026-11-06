@@ -1,0 +1,2283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://byzantic.github.io/aikidoe/schema/cli.schema.json",
+  "title": "aikidoe CLI --json output",
+  "description": "Every doe command run with --json writes one JSON object to stdout: an envelope (schema version, command, ok, text — the notes the command would have printed) and the command's results; on failure ok is false, error.message says why, and the exit code is non-zero. Numbers that are not finite (NaN, ±Infinity) are written as null. Coefficients are in coded units.",
+  "type": "object",
+  "required": [
+    "schema",
+    "command",
+    "ok"
+  ],
+  "properties": {
+    "schema": {
+      "const": "aikidoe-cli/1"
+    },
+    "command": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "text": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "init"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/init"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "design"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/design"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "sheet"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/sheet"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "import"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/import"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "fit"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/fit"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "augment"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/augment"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "predict"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/predict"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "power"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/power"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "alias"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/alias"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "sites"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/sites"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "summary"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/summary"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "gauge"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/gauge"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "goal"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/goal"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "optimise"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/optimise"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "robust"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/robust"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "simulator"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/simulator"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "comb-over"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/comb-over"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "simulate"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/simulate"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "tolerance"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/tolerance"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "spec"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/spec"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "yield"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/yield"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "sensitivity"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/sensitivity"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "recommend"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/recommend"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "schema"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/schema"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "info"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/info"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "optimize"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/optimize"
+      }
+    }
+  ],
+  "$defs": {
+    "init": {
+      "type": "object",
+      "required": [
+        "file",
+        "study"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "study": {
+          "type": "object",
+          "required": [
+            "name",
+            "seed",
+            "factors",
+            "responses",
+            "design",
+            "observations"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "seed": {
+              "type": "integer"
+            },
+            "factors": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "responses": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "design": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "observations": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "design": {
+      "type": "object",
+      "required": [
+        "file",
+        "design"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "design": {
+          "type": "object",
+          "required": [
+            "kind",
+            "randomisation",
+            "seed",
+            "runs"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "params": {
+              "type": "object"
+            },
+            "randomisation": {
+              "type": "string"
+            },
+            "seed": {
+              "type": "integer"
+            },
+            "runs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "run",
+                  "order",
+                  "settings"
+                ],
+                "properties": {
+                  "run": {
+                    "type": "integer"
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "settings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "sheet": {
+      "type": "object",
+      "required": [
+        "files"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "csv": {
+          "type": "string"
+        }
+      }
+    },
+    "import": {
+      "type": "object",
+      "required": [
+        "file",
+        "format",
+        "values",
+        "problems",
+        "imported"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "values": {
+          "type": "integer"
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "severity",
+              "message"
+            ],
+            "properties": {
+              "severity": {
+                "enum": [
+                  "error",
+                  "warning",
+                  "info"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "imported": {
+          "type": "boolean"
+        },
+        "observations": {
+          "type": "integer"
+        }
+      }
+    },
+    "fit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "response",
+            "formula",
+            "n",
+            "rank",
+            "dfRes",
+            "coefficients",
+            "aliased"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ols"
+            },
+            "response": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "n": {
+              "type": "integer"
+            },
+            "rank": {
+              "type": "integer"
+            },
+            "dfRes": {
+              "type": "integer"
+            },
+            "aliased": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "coefficients": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "estimate"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "se": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "t": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "df": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "sigma": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "r2": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "adjR2": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "predR2": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "F": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "pF": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "anova": {
+              "type": "object",
+              "required": [
+                "type",
+                "rows"
+              ],
+              "properties": {
+                "type": {
+                  "type": "integer"
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "term",
+                      "df"
+                    ],
+                    "properties": {
+                      "term": {
+                        "type": "string"
+                      },
+                      "df": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "lenth": {
+              "type": "object"
+            },
+            "boxCox": {
+              "type": "object"
+            },
+            "reduction": {
+              "type": "object",
+              "required": [
+                "method",
+                "from",
+                "formula",
+                "steps"
+              ],
+              "properties": {
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            },
+            "confirmation": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "response",
+            "formula",
+            "n",
+            "varcomp",
+            "coefficients",
+            "tests",
+            "REML",
+            "converged"
+          ],
+          "properties": {
+            "kind": {
+              "const": "mixed"
+            },
+            "response": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "n": {
+              "type": "integer"
+            },
+            "runs": {
+              "type": "integer"
+            },
+            "converged": {
+              "type": "boolean"
+            },
+            "REML": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "random": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "levels"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "levels": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "varcomp": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "variance"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "variance": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "lower": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "upper": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "coefficients": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "estimate"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "se": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "t": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "df": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "tests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "df",
+                  "F",
+                  "ddf",
+                  "p"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "df": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "F": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "ddf": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "reduction": {
+              "type": "object"
+            },
+            "confirmation": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "augment": {
+      "type": "object",
+      "required": [
+        "file",
+        "stage",
+        "totalRuns"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "object",
+          "required": [
+            "kind",
+            "note",
+            "runs"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "runs": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "totalRuns": {
+          "type": "integer"
+        },
+        "predictions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "aliasChains": {
+          "type": "array",
+          "items": true
+        }
+      }
+    },
+    "predict": {
+      "type": "object",
+      "required": [
+        "kind",
+        "response",
+        "predictions",
+        "level"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "ols",
+            "mixed"
+          ]
+        },
+        "response": {
+          "type": "string"
+        },
+        "predictions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "settings",
+              "fit",
+              "lower",
+              "upper",
+              "predLower",
+              "predUpper"
+            ],
+            "properties": {
+              "settings": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "number",
+                    "string"
+                  ]
+                }
+              },
+              "fit": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lower": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "upper": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "predLower": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "predUpper": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "predDf": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "level": {
+          "type": "number"
+        }
+      }
+    },
+    "power": {
+      "type": "object",
+      "required": [
+        "model",
+        "n",
+        "rank",
+        "dfRes",
+        "alpha",
+        "sigma",
+        "terms"
+      ],
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "n": {
+          "type": "integer"
+        },
+        "rank": {
+          "type": "integer"
+        },
+        "dfRes": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "alpha": {
+          "type": "number"
+        },
+        "sigma": {
+          "type": "number"
+        },
+        "terms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "term",
+              "df",
+              "power"
+            ],
+            "properties": {
+              "term": {
+                "type": "string"
+              },
+              "df": {
+                "type": "integer"
+              },
+              "power": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "detectable": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "ratio": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "alias": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "regular-fraction",
+            "split-plot-fraction",
+            "plackett-burman",
+            "full-factorial",
+            "sequential"
+          ]
+        },
+        "aliasChains": {
+          "type": "array",
+          "items": true
+        },
+        "resolution": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "generators": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "definingRelation": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "correlations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "sites": {
+      "type": "object",
+      "required": [
+        "sites"
+      ],
+      "properties": {
+        "scheme": {
+          "type": "string"
+        },
+        "diameter": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sites": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "x",
+              "y"
+            ],
+            "properties": {
+              "x": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "y": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "file",
+        "derived"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "derived": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "from",
+              "stat"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "stat": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "gauge": {
+      "type": "object",
+      "required": [
+        "gauge"
+      ],
+      "properties": {
+        "gauge": {
+          "type": "object",
+          "required": [
+            "kind",
+            "components",
+            "pctGRR",
+            "ndc",
+            "sigmaMeas"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "anova": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "components": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "pctGRR": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "ndc": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "sigmaMeas": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "recorded": {
+          "type": "object"
+        }
+      }
+    },
+    "goal": {
+      "type": "object",
+      "required": [
+        "file",
+        "response"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "response": {
+          "type": "object",
+          "required": [
+            "id",
+            "goal"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "goal": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "optimise": {
+      "type": "object",
+      "required": [
+        "settings",
+        "D",
+        "responses"
+      ],
+      "properties": {
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "D": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "feasible": {
+          "type": "boolean"
+        },
+        "region": {
+          "type": "string"
+        },
+        "responses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "predicted",
+              "d"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "predicted": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lower": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "upper": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "d": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "robust": {
+      "type": "object",
+      "required": [
+        "response",
+        "settings",
+        "mean",
+        "sd"
+      ],
+      "properties": {
+        "response": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "residualSd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "sd",
+              "share"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sd": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "slope": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "share": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "goal": {
+          "type": "string"
+        },
+        "feasible": {
+          "type": "boolean"
+        }
+      }
+    },
+    "simulator": {
+      "type": "object",
+      "required": [
+        "file",
+        "simulator"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "simulator": {
+          "type": "object",
+          "required": [
+            "adapter"
+          ],
+          "properties": {
+            "adapter": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "comb-over": {
+      "type": "object",
+      "required": [
+        "file",
+        "study",
+        "metrics"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "study": {
+          "type": "object",
+          "required": [
+            "name",
+            "seed",
+            "factors",
+            "responses",
+            "design",
+            "observations"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "seed": {
+              "type": "integer"
+            },
+            "factors": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "responses": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "design": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "observations": {
+              "type": "integer"
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "simulate": {
+      "type": "object",
+      "required": [
+        "file",
+        "simulator",
+        "runs",
+        "observations",
+        "missing"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "simulator": {
+          "type": "string"
+        },
+        "runs": {
+          "type": "integer"
+        },
+        "observations": {
+          "type": "integer"
+        },
+        "missing": {
+          "type": "integer"
+        },
+        "seconds": {
+          "type": "number"
+        }
+      }
+    },
+    "tolerance": {
+      "type": "object",
+      "required": [
+        "file",
+        "tolerances"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "tolerances": {
+          "type": "object"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "file",
+        "response",
+        "spec"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "response": {
+          "type": "string"
+        },
+        "spec": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "yield": {
+      "type": "object",
+      "required": [
+        "surrogates",
+        "yield",
+        "nominal",
+        "responses"
+      ],
+      "properties": {
+        "surrogates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "formula",
+              "n",
+              "cvRmse"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "formula": {
+                "type": "string"
+              },
+              "n": {
+                "type": "integer"
+              },
+              "cvRmse": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "yield": {
+          "type": "object",
+          "required": [
+            "estimate",
+            "lower",
+            "upper",
+            "N",
+            "trust"
+          ],
+          "properties": {
+            "estimate": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "lower": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "upper": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "N": {
+              "type": "integer"
+            },
+            "trust": {
+              "enum": [
+                "good",
+                "fair",
+                "poor"
+              ]
+            },
+            "bounds": {
+              "type": "object",
+              "required": [
+                "strict",
+                "loose"
+              ],
+              "properties": {
+                "strict": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "loose": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "nominal": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "responses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "nominal",
+              "margin",
+              "below",
+              "above"
+            ],
+            "properties": {}
+          }
+        },
+        "check": {
+          "type": "object",
+          "required": [
+            "estimate",
+            "lower",
+            "upper",
+            "rmse",
+            "agree",
+            "overlap"
+          ],
+          "properties": {
+            "overlap": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "sensitivity": {
+      "type": "object",
+      "required": [
+        "surrogates",
+        "over",
+        "indices"
+      ],
+      "properties": {
+        "surrogates": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "over": {
+          "enum": [
+            "range",
+            "tolerance"
+          ]
+        },
+        "indices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "variance",
+              "factors"
+            ],
+            "properties": {
+              "factors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "factor",
+                    "S",
+                    "ST"
+                  ],
+                  "properties": {
+                    "factor": {
+                      "type": "string"
+                    },
+                    "S": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "ST": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "recommend": {
+      "type": "object",
+      "required": [
+        "goal",
+        "model",
+        "terms",
+        "options"
+      ],
+      "properties": {
+        "goal": {
+          "enum": [
+            "screen",
+            "model",
+            "optimise"
+          ]
+        },
+        "goalText": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "terms": {
+          "type": "integer"
+        },
+        "budget": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "delta": {
+          "type": "number"
+        },
+        "alpha": {
+          "type": "number"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "rank",
+              "id",
+              "kind",
+              "label",
+              "runs",
+              "estimable",
+              "withinBudget",
+              "reasons",
+              "warnings"
+            ],
+            "properties": {
+              "rank": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "runs": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "resolution": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "dEfficiency": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "minPower": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "estimable": {
+                "type": "boolean"
+              },
+              "withinBudget": {
+                "type": "boolean"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schema": {
+      "type": "object",
+      "required": [
+        "which",
+        "jsonSchema"
+      ],
+      "properties": {
+        "which": {
+          "enum": [
+            "study",
+            "cli"
+          ]
+        },
+        "jsonSchema": {
+          "type": "object"
+        }
+      }
+    },
+    "info": {
+      "type": "object",
+      "required": [
+        "study"
+      ],
+      "properties": {
+        "study": {
+          "type": "object",
+          "required": [
+            "name",
+            "seed",
+            "factors",
+            "responses",
+            "design",
+            "observations"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "seed": {
+              "type": "integer"
+            },
+            "factors": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "responses": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "design": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "observations": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "optimize": {
+      "type": "object",
+      "required": [
+        "settings",
+        "D",
+        "responses"
+      ],
+      "properties": {
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "D": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "feasible": {
+          "type": "boolean"
+        },
+        "region": {
+          "type": "string"
+        },
+        "responses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "predicted",
+              "d"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "predicted": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lower": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "upper": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "d": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

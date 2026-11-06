@@ -57,9 +57,14 @@
 //        --check M runs M samples on the simulator directly and compares
 //   sensitivity STUDY [--model …] [--over range|tolerance] [--n 16384] [--at …]
 //        Sobol first-order and total indices of each surrogate
+//   recommend STUDY [--goal screen|model|optimise] [--budget N] [--delta 2] [--eta 1] [--no-optimal]
+//        ranked design options with reasons: run counts, resolution, D-efficiency, power at Δ = delta·σ
+//   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   info STUDY
 //
+// Every command takes --json: one JSON object on stdout ({ schema: "aikidoe-cli/1", command, ok,
+// …results, text: [the notes] }, or { ok: false, error: { message } } with a non-zero exit).
 // STUDY is a *.aikidoe.json file. Commands that change it write it back in place.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createStudy, parseStudy, serializeStudy, StudyError } from '../js/study.js';
@@ -87,6 +92,7 @@ import { lhsDesign, fitSurrogates, surrogateYield, surrogateSensitivity, directY
 import { runOnSimulator } from '../js/sim/adapter.js';
 import { studyAdapter, registerAdapter } from '../js/sim/adapters.js';
 import { combOverStudy } from '../js/sim/combover.js';
+import { recommend } from '../js/design/recommend.js';
 import { toleranceSd } from '../js/sim/sample.js';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -110,7 +116,15 @@ const int = (v, name) => { const n = Number(v); if (!Number.isInteger(n)) fail(`
 
 class CliError extends Error {}
 const fail = (msg) => { throw new CliError(msg); };
-const out = (s = '') => process.stdout.write(s + '\n');
+// --json (§16.3): commands put() their results; text output is collected as notes instead of printed
+let RESULT = null, TEXT = null;
+const out = (s = '') => { if (TEXT) TEXT.push(...String(s).split('\n')); else process.stdout.write(s + '\n'); };
+const put = (o) => { if (RESULT) Object.assign(RESULT, o); };
+export const CLI_SCHEMA_VERSION = 'aikidoe-cli/1';
+// JSON-safe: NaN and ±Infinity → null, typed arrays → arrays
+const jsonSafe = (v) => JSON.parse(JSON.stringify(v, (k, x) => (typeof x === 'number' && !Number.isFinite(x) ? null : ArrayBuffer.isView(x) ? Array.from(x) : x)));
+const studySummary = (s) => ({ name: s.name, seed: s.seed, factors: s.factors, responses: s.responses, design: s.design ? { kind: s.design.kind, runs: s.design.runs.length, randomisation: s.design.randomisation } : null,
+  observations: s.observations.length, ...(s.simulator ? { simulator: s.simulator.adapter } : {}) });
 
 const load = (file) => {
   if (!file) fail('give the study file');
@@ -138,6 +152,7 @@ function cmdInit({ pos, opt }) {
   const responses = list(opt.response).map(spec => { const [id, units] = String(spec).split(':'); return units ? { id, units } : { id }; });
   const study = createStudy({ name: opt.name ?? file.replace(/\.aikidoe\.json$|\.json$/, ''), ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), factors, responses });
   save(file, study);
+  put({ file, study: studySummary(study) });
   out(`created ${file}: ${factors.length} factors, ${responses.length} responses, seed ${study.seed}`);
 }
 
@@ -190,6 +205,7 @@ function cmdDesign({ pos, opt }) {
   const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
   const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed, ...(opt['no-split-plot'] && htc.some(Boolean) ? { randomise: 'complete' } : {}) }), observations: [] });
   save(file, next);
+  put({ file, design: { kind: d.kind, params: d.params, randomisation: next.design.randomisation, seed, runs: next.design.runs } });
   out(`${file}: ${d.kind}, ${next.design.runs.length} runs, randomisation ${next.design.randomisation}, seed ${seed}`);
   if (d.wholePlot) {
     const W = new Set(d.wholePlot).size;
@@ -232,7 +248,8 @@ function cmdSheet({ pos, opt }) {
   const delimiter = opt.delimiter === 'tab' ? '\t' : opt.delimiter ?? ',';
   if (opt.html) { writeFileSync(opt.html, runSheetHTML(study)); out(`wrote ${opt.html}`); }
   if (opt.csv) { writeFileSync(opt.csv, runSheetCSV(study, { delimiter })); out(`wrote ${opt.csv}`); }
-  if (!opt.html && !opt.csv) process.stdout.write(runSheetCSV(study, { delimiter }));
+  put({ files: [opt.html, opt.csv].filter(Boolean).map(String) });
+  if (!opt.html && !opt.csv) { if (RESULT) put({ csv: runSheetCSV(study, { delimiter }) }); else process.stdout.write(runSheetCSV(study, { delimiter })); }
 }
 
 function cmdImport({ pos, opt }) {
@@ -242,11 +259,13 @@ function cmdImport({ pos, opt }) {
   const imp = importResults(study, readFileSync(results, 'utf8'));
   for (const p of imp.problems) out(`${p.severity.padEnd(7)} ${p.line ? `line ${p.line}${p.column ? `, ${p.column}` : ''}: ` : ''}${p.message}`);
   const nerr = imp.problems.filter(p => p.severity === 'error').length;
+  put({ file, format: imp.format, values: imp.observations.length, problems: imp.problems, imported: false });
   out(`${imp.observations.length} value(s) read (${imp.format} format)${nerr ? `, ${nerr} error(s)` : ''}`);
   if (opt['dry-run']) { out('dry run: study not changed'); return; }
   if (nerr && !opt.force) fail('not imported because of the errors above (fix the file, or --force to import the valid values)');
   const next = applyResults(study, imp, { mode: opt.mode ?? 'replace', force: !!opt.force });
   save(file, next);
+  put({ imported: true, observations: next.observations.length });
   out(`${file}: ${next.observations.length} observation(s)`);
 }
 
@@ -269,6 +288,7 @@ function cmdFit({ pos, opt }) {
         if (!r.steps.length) out('  nothing to remove');
         for (const st of r.steps) out(`  drop ${st.drop.padEnd(12)} ${method === 'p' ? `F = ${num(st.F, 4)} on ${num(st.ddf, 4)} df, p = ${pval(st.p)}` : `AICc → ${num(st.aicc, 7)}`}`);
         out(`reduced model: ${r.formula}   (a suggestion: put a term back by editing the formula)\n`);
+        put({ reduction: { method, from: r.start.formula, formula: r.formula, steps: r.steps } });
         f = r.formula;
       }
       return printMixed(study, f, requested, opt);
@@ -282,6 +302,7 @@ function cmdFit({ pos, opt }) {
     if (!r.steps.length) out('  nothing to remove');
     for (const st of r.steps) out(`  drop ${st.drop.padEnd(10)} ${r.method === 'p' ? `F = ${num(st.F, 4)}, p = ${pval(st.p)}` : ''}  AICc → ${num(st.aicc, 6)}`);
     out(`reduced model: ${r.formula}   (a suggestion: put a term back by editing the formula)\n`);
+    put({ reduction: { method: r.method, from: r.start.formula, formula: r.formula, steps: r.steps.map(st => ({ drop: st.drop, F: st.F, p: st.p, aicc: st.aicc })) } });
     fit = r.fit;
   }
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
@@ -291,6 +312,9 @@ function cmdFit({ pos, opt }) {
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
   out('');
   const coefRows = fit.columns.map((c, j) => ({ term: c, est: fit.coef[j], se: fit.se[j], t: fit.t[j], p: fit.p[j] })).filter(r => !Number.isNaN(r.est));
+  put({ kind: 'ols', response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`, n: fit.n, rank: fit.rank, dfRes: fit.dfRes, aliased: fit.aliased,
+    coefficients: coefRows.map(r => ({ term: r.term, estimate: r.est, se: r.se, t: r.t, p: r.p })), units: 'coded',
+    ...(fit.dfRes > 0 ? { sigma: fit.sigma, r2: fit.r2, adjR2: fit.adjR2, predR2: fit.predR2, F: fit.fStat, dfModel: fit.dfModel, pF: fit.fP } : {}) });
   out(table(fit.dfRes > 0 ? [
     { key: 'term', label: 'term', align: 'left' }, { key: 'est', label: 'estimate' }, { key: 'se', label: 'std. error' },
     { key: 't', label: 't' }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars },
@@ -303,6 +327,7 @@ function cmdFit({ pos, opt }) {
     out(`\nANOVA (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'})`);
     const rows = anova(fit, type);
     const lof = lackOfFit(fit);
+    put({ anova: { type, rows: rows.map(r => ({ ...r })) }, ...(lof && lof.lackOfFit ? { lackOfFit: { lackOfFit: lof.lackOfFit, pureError: lof.pureError } } : {}) });
     if (lof && lof.lackOfFit) {
       const res = rows.pop();
       rows.push(res, { term: '  lack of fit', ...lof.lackOfFit }, { term: '  pure error', ...lof.pureError });
@@ -316,6 +341,7 @@ function cmdFit({ pos, opt }) {
     const eff = twoLevelEffects(fit);
     if (study.factors.some(f => f.type === 'categorical' && f.levels.length > 2)) out('\nnote: Lenth effects assume two-level factors');
     const L = lenth(eff.map(e => e.effect));
+    put({ lenth: { pse: L.pse, me: L.me, sme: L.sme, df: L.df, effects: eff.map((e, i) => ({ name: e.name, effect: e.effect, t: L.t[i], active: L.active[i], activeSME: L.activeSME[i] })) } });
     out(`\nLenth: PSE = ${num(L.pse)}, ME = ${num(L.me)}, SME = ${num(L.sme)} (${eff.length} effects, d = ${num(L.df)})`);
     out(table([
       { key: 'name', label: 'effect', align: 'left' }, { key: 'effect', label: 'estimate' }, { key: 't', label: 't (PSE)' },
@@ -324,6 +350,7 @@ function cmdFit({ pos, opt }) {
     out('effect = 2 × coefficient (change from low to high)');
   }
   const conf = checkConfirmation(study, fit.response);
+  if (conf.length) put({ confirmation: conf });
   if (conf.length) {
     out('\nconfirmation runs (left out of the fit), against the predictions made when they were planned:');
     out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'n', label: 'n' }, { key: 'observed', label: 'observed' }, { key: 'predicted', label: 'predicted' },
@@ -332,6 +359,7 @@ function cmdFit({ pos, opt }) {
   }
   if (opt.boxcox) {
     const b = boxCox(fit);
+    put({ boxCox: { lambda: b.best, ci: b.ci } });
     out(`\nBox–Cox: λ̂ = ${num(b.best, 3)}, 95% interval [${num(b.ci[0], 3)}, ${num(b.ci[1], 3)}]${b.ci[0] <= 1 && b.ci[1] >= 1 ? ' (includes 1: no transform needed)' : b.ci[0] <= 0 && b.ci[1] >= 0 ? ' (includes 0: consider log)' : ''}`);
   }
 }
@@ -373,9 +401,12 @@ function cmdAugment({ pos, opt }) {
   const next = appendStage(study, stage, opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {});
   save(file, next);
   const added = next.history[next.history.length - 1].runs;
+  put({ file, stage: { kind: stage.kind, note: stage.note, block: next.design.runs.find(r => r.run === added[0]).block, runs: next.design.runs.filter(r => added.includes(r.run)) }, totalRuns: next.design.runs.length,
+    ...(stage.params?.predictions ? { predictions: stage.params.predictions } : {}) });
   out(`${file}: ${stage.note}; ${added.length} runs added as block ${next.design.runs.find(r => r.run === added[0]).block} (runs ${added[0]}–${added[added.length - 1]}), ${next.design.runs.length} runs in all`);
   if (stage.kind === 'foldover') {
     const a = sequentialAliases(next);
+    put({ aliasChains: a.chains });
     out(a.chains.length ? `combined design: ${a.chains.length} alias chains among main effects and 2fis (see: alias ${file})` : 'combined design: no aliasing among main effects and two-factor interactions');
   }
   if (opt.sheet) { writeFileSync(opt.sheet, runSheetCSV(next)); out(`run sheet: ${opt.sheet}`); }
@@ -398,6 +429,7 @@ function cmdPredict({ pos, opt }) {
   if (mixed) {
     const runs = opt.runs ? int(opt.runs, 'runs') : 1, sep = !!opt['separate-whole-plots'];
     const p = predictMixed(mixed, at, { weights: runMeanWeights(mixed, { runs, inOneWholePlot: !sep }) });
+    put({ kind: 'mixed', response: mixed.response, predictions: at.map((s, i) => ({ settings: s, fit: p[i].fit, lower: p[i].lower, upper: p[i].upper, predLower: p[i].predLower, predUpper: p[i].predUpper, predDf: p[i].predDf })), runs, level: 0.95 });
     const what = `${runs > 1 ? `mean of ${runs} runs${mixed.random.some(r => r.id === 'wholePlot') ? (sep ? ', each in its own whole plot' : ' in one new whole plot') : ''}` : 'one new run'}, measured like the others`;
     out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean, KR)', align: 'left' }, { key: 'pi', label: `95% PI (${what})`, align: 'left' }],
       at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)} (df ${num(p[i].predDf, 3)})` }))));
@@ -406,6 +438,7 @@ function cmdPredict({ pos, opt }) {
   }
   const fit = fitModel(study, formula);
   const p = predict(fit, at);
+  put({ kind: 'ols', response: fit.response, predictions: at.map((s, i) => ({ settings: s, fit: p[i].fit, lower: p[i].lower, upper: p[i].upper, predLower: p[i].predLower, predUpper: p[i].predUpper })), level: 0.95 });
   out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: '95% PI (one run)', align: 'left' }],
     at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)}` }))));
   if (fit.model.terms[0]?.block) out('(for the average block)');
@@ -432,8 +465,10 @@ function cmdPower({ pos, opt }) {
   const p = studyPower(study, { model, delta, sigma, alpha, ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}) });
   if (p.strata) out(`split-plot: whole-plot terms tested against the whole-plot error (assumed σ²_wp/σ² = η = ${p.eta}; --eta to change), subplot terms against the residual`);
   out(`power for ${model}: ${p.n} runs, ${p.rank} coefficients, ${p.dfRes} residual df; α = ${alpha}, σ = ${sigma}${typeof delta === 'number' ? `, Δ = ${delta} (low → high)` : ''}`);
+  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, alpha, sigma, delta, target, ...(p.strata ? { strata: p.strata, eta: p.eta } : {}), terms: [] });
   if (p.dfRes < 1) { out('no residual degrees of freedom: power is not defined (add runs, or a smaller model)'); return; }
   const det = Object.fromEntries(detectableEffect(p, { power: target }).map(d => [d.term, d]));
+  put({ terms: p.terms.filter(t => !t.block).map(t => ({ term: t.term, df: t.df, ...(t.ddf !== undefined ? { ddf: t.ddf } : {}), delta: t.delta, power: t.power, detectable: det[t.term].delta, ratio: det[t.term].ratio })) });
   out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, ...(p.strata ? [{ key: 'ddf', label: 'ddf' }] : []), { key: 'delta', label: 'Δ' }, { key: 'power', label: 'power' }, { key: 'det', label: `Δ for ${target * 100}%` }, { key: 'ratio', label: 'Δ/σ' }],
     p.terms.filter(t => !t.block).map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: det[t.term].delta, ratio: det[t.term].ratio }))));
   if (p.terms.some(t => t.block)) out('(blocks fitted as fixed effects)');
@@ -448,6 +483,11 @@ function printMixed(study, formula, random, opt) {
   if (!m.converged) out('warning: the REML optimisation did not fully converge');
   if (m.aliased.length) out(`aliased (not estimable): ${m.aliased.join(', ')}`);
   const total = m.varcomp.reduce((a, v) => a + v.variance, 0);
+  put({ kind: 'mixed', response: m.response, formula: `${m.response} ~ ${m.model.terms.map(t => t.label).join(' + ') || '1'}`, n: m.n, runs: nRuns, converged: m.converged, aliased: m.aliased, REML: m.REML,
+    random: m.random.map(r => ({ id: r.id, name: r.name, levels: new Set(r.labels).size })), varcomp: m.varcomp, boundary: m.boundary, units: 'coded',
+    coefficients: m.columns.map((c, j) => ({ term: c, estimate: m.coef[j], se: m.seKR[j], df: m.dfKR[j], t: m.t[j], p: m.pKR[j] })).filter(r => Number.isFinite(r.estimate)),
+    tests: m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block).map(t => ({ term: t.term, df: t.df, F: t.FKR, ddf: t.ddfKR, p: t.pKR, FContainment: t.F, ddfContainment: t.ddfContainment, pContainment: t.pContainment, stratum: t.stratum, ...(opt.compare ? { naiveP: t.naiveP } : {}) })),
+    ...(m.strata ? { strata: m.strata } : {}) });
   out('\nvariance components');
   out(table([{ key: 'name', label: 'source', align: 'left' }, { key: 'variance', label: 'variance' }, { key: 'sd', label: 'std. dev.' }, { key: 'ci', label: '95% CI (variance)', align: 'left' }, { key: 'pct', label: '% of total' }],
     m.varcomp.map(v => ({ ...v, ci: v.boundary ? 'estimate on the boundary (0)' : `${num(v.lower)} … ${num(v.upper)}`, pct: num(100 * v.variance / total, 3) }))));
@@ -465,6 +505,7 @@ function printMixed(study, formula, random, opt) {
   if (m.boundary.length) out(`note: ${m.boundary.join(', ')} variance estimated as 0 (on the boundary): the data show no variation at that level beyond what the levels below explain`);
   out(`REML criterion ${num(m.REML, 8)}`);
   const conf = checkConfirmation(study, m.response);
+  if (conf.length) put({ confirmation: conf });
   if (conf.length) {
     out('\nconfirmation runs (left out of the fit), against the intervals stored when they were planned:');
     out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'n', label: 'runs' }, { key: 'observed', label: 'observed' }, { key: 'predicted', label: 'predicted' },
@@ -481,6 +522,7 @@ function cmdAlias({ pos, opt }) {
     const p = study.design?.params;
     if (!p) fail('the study has no design');
     if (study.design.kind === 'split-plot-fraction') {
+      put({ kind: 'split-plot-fraction', runs: p.runs, wholePlots: p.wholePlots, resolution: p.resolution, generators: p.generators, definingRelation: p.definingRelation, wlp: p.wlp, aliasChains: p.aliasChains, wholePlotEffects: p.wholePlotEffects });
       out(`split-plot fraction: ${p.runs} runs in ${p.wholePlots} whole plots; whole-plot factors ${p.wholePlotFactors.join(', ')}; resolution ${roman(p.resolution)}`);
       out(`generators: ${p.generators.join(', ') || 'none'}`);
       out(`defining relation: I = ${p.definingRelation.join(' = ') || '(none)'}`);
@@ -494,12 +536,14 @@ function cmdAlias({ pos, opt }) {
       const X = study.design.runs.map(r => study.factors.map(f => ((f.type === 'categorical' ? r.settings[f.id] === f.levels[1] : r.settings[f.id] === f.high) ? 1 : -1)));
       out(`Plackett–Burman design: main effects are orthogonal; two-factor interactions are partially aliased with them`);
       const t = correlationTable(X, study.factors.map(f => f.id));
+      put({ kind: 'plackett-burman', correlations: t });
       out(table([{ key: 'effect', label: 'main effect', align: 'left' }, { key: 'with', label: '2fi', align: 'left' }, { key: 'r', label: 'correlation' }], t.slice(0, 30)));
       if (t.length > 30) out(`… ${t.length - 30} more`);
       return;
-    } else if (study.design.kind === 'full-factorial') { out('full factorial: no aliasing'); return; }
+    } else if (study.design.kind === 'full-factorial') { put({ kind: 'full-factorial', aliasChains: [] }); out('full factorial: no aliasing'); return; }
     else if (study.design.kind === 'sequential') {
       const a = sequentialAliases(study, { order: opt.order ? int(opt.order, 'order') : 2 });
+      put({ kind: 'sequential', runs: a.runs, aliasChains: a.chains.map(c => c.join(' = ')), withBlocks: a.withBlocks });
       out(`sequential design: ${study.design.params.stages.map(x => x.kind).join(' → ')}; ${a.runs} two-level runs`);
       out(a.chains.length ? `alias chains:\n${a.chains.map(c => `  ${c.join(' = ')}`).join('\n')}` : 'no aliasing among the effects');
       if (a.withBlocks.length) out(`confounded with blocks: ${a.withBlocks.join(', ')}`);
@@ -509,7 +553,7 @@ function cmdAlias({ pos, opt }) {
   } else {
     const k = int(opt.factors ?? fail('alias: give a study, or --factors k with --runs N or --generators'), 'factors');
     if (opt.generators) { const g = String(opt.generators).split(/[,;\s]+/).filter(Boolean).map(s => s.replace(/^[A-Z]=/, '')); d = T.regularDesign(k - g.length, g); }
-    else { const N = int(opt.runs ?? fail('alias: give --runs or --generators'), 'runs'), q = Math.log2(N); if (k === q) { out('full factorial: no aliasing'); return; } const e = CATALOGUE[`${k}-${k - q}`] ?? fail(`no catalogued design for ${k} factors in ${N} runs`); d = T.regularDesign(q, e.gens); }
+    else { const N = int(opt.runs ?? fail('alias: give --runs or --generators'), 'runs'), q = Math.log2(N); if (k === q) { put({ kind: 'full-factorial', aliasChains: [] }); out('full factorial: no aliasing'); return; } const e = CATALOGUE[`${k}-${k - q}`] ?? fail(`no catalogued design for ${k} factors in ${N} runs`); d = T.regularDesign(q, e.gens); }
     label = `${k} factors in ${d.runs} runs`;
   }
   const order = opt.order ? int(opt.order, 'order') : 2;
@@ -520,6 +564,8 @@ function cmdAlias({ pos, opt }) {
   out(`defining relation: I = ${rel.slice(0, 15).join(' = ')}${rel.length > 15 ? ` = … (${rel.length} words)` : ''}`);
   out(`word-length pattern (A3, A4, …): ${T.wordLengthPattern(d).slice(2).join(', ')}`);
   const chains = T.aliasChains(d, order, names).filter(c => c.effects.length > 1);
+  put({ kind: 'regular-fraction', factors: d.k, runs: d.runs, resolution: T.resolution(d), generators: d.cols.slice(d.q).map((m, j) => `${nm(names, d.q + j)} = ${d.signs[d.q + j] < 0 ? '-' : ''}${maskNames(m, names)}`),
+    definingRelation: rel, wlp: T.wordLengthPattern(d).slice(2), order, aliasChains: chains.map(c => c.effects.join(' = ')) });
   if (!chains.length) out(`\nno aliasing among effects up to order ${order}`);
   else { out(`\nalias chains among effects up to order ${order}:`); for (const c of chains) out(`  ${c.effects.join(' = ')}`); }
 }
@@ -539,8 +585,9 @@ function cmdSites({ pos, opt }) {
     save(file, next);
     study.sites = next.sites;
   }
-  if (!study.sites) { out('no site scheme (set one with --scheme 5|9 or --site id:x:y …)'); return; }
+  if (!study.sites) { put({ sites: null }); out('no site scheme (set one with --scheme 5|9 or --site id:x:y …)'); return; }
   const P = sitePositions(study);
+  put({ scheme: study.sites.scheme, diameter: study.sites.diameter ?? null, sites: [...P].map(([id, q]) => ({ id, ...q })) });
   out(`${study.sites.scheme}${study.sites.diameter ? `, ${study.sites.diameter} mm wafer` : ''}: ${P.size} sites`);
   out(table([{ key: 'id', label: 'site', align: 'left' }, { key: 'x', label: 'x (mm)' }, { key: 'y', label: 'y (mm)' }, { key: 'r', label: 'r (mm)' }, { key: 'rho', label: 'r / R' }],
     [...P].map(([id, p]) => ({ id, ...p }))));
@@ -552,6 +599,7 @@ function cmdSummary({ pos, opt }) {
   const stats = String(opt.stats ?? 'mean,sd').split(',').map(x => x.trim()).filter(Boolean);
   const next = createStudy(addSummaries(study, resp, stats));
   save(file, next);
+  put({ file, derived: stats.map(st => ({ id: `${resp}_${st}`, from: resp, stat: st })) });
   for (const st of stats) out(`${resp}_${st}: per-wafer ${SUMMARY_STATS[st].name} of ${resp} (computed from the readings; fit it like any response)`);
 }
 
@@ -563,6 +611,7 @@ function cmdGauge({ pos, opt }) {
   const tolerance = opt.tolerance !== undefined ? Number(opt.tolerance) : opt.usl !== undefined && opt.lsl !== undefined ? Number(opt.usl) - Number(opt.lsl) : undefined;
   const k = opt.k !== undefined ? Number(opt.k) : 6;
   const g = gaugeRR(rows, { design: opt.design ?? 'auto', tolerance, k });
+  put({ gauge: g });
   out(`gauge R&R (${g.kind}, ANOVA method): ${g.parts} parts${g.operators ? `, ${g.operators} operators` : ''}, ${g.repeats} repeats, ${g.N} readings`);
   out(table([{ key: 'source', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ss', label: 'sum of sq.' }, { key: 'ms', label: 'mean sq.' }, { key: 'F', label: 'F' }, { key: 'p', label: 'p', fmt: pval }], g.anova));
   if (g.kind === 'crossed') out(g.pooled ? `operator × part interaction not significant (p = ${pval(g.interactionP)} > 0.05): pooled into repeatability` : `operator × part interaction significant (p ${pval(g.interactionP)}): kept`);
@@ -581,6 +630,7 @@ function cmdGauge({ pos, opt }) {
     responses[i] = { ...responses[i], measurement: { sigma: g.sigmaMeas, method: 'gauge R&R (ANOVA)', design: g.kind, parts: g.parts, operators: g.operators, repeats: g.repeats,
       ...(tolerance > 0 ? { tolerance } : {}), pctGRR: g.pctGRR, ndc: g.ndc, data: rows } };
     save(String(opt.into), createStudy({ ...study, responses }));
+    put({ recorded: { study: String(opt.into), response: rid } });
     out(`${opt.into}: σ_meas of ${rid} recorded (used by power: doe power ${opt.into} --response ${rid})`);
   }
 }
@@ -598,6 +648,7 @@ function cmdGoal({ pos, opt }) {
   if (opt.weight !== undefined) { const w = String(opt.weight).split(',').map(Number); r.weight = w.length === 2 ? w : w[0]; }
   const responses = study.responses.slice(); responses[i] = r;
   save(file, createStudy({ ...study, responses }));
+  put({ file, response: r });
   out(`${rid}: ${r.goal}${r.lower !== undefined ? `, lower ${r.lower}` : ''}${r.target !== undefined ? `, target ${r.target}` : ''}${r.upper !== undefined ? `, upper ${r.upper}` : ''}${r.weight !== undefined ? `, weight ${r.weight}` : ''}${r.importance !== undefined ? `, importance ${r.importance}` : ''}`);
 }
 
@@ -612,6 +663,8 @@ function cmdOptimise({ pos, opt }) {
   if (!['cube', 'sphere'].includes(region)) fail('--region cube or sphere');
   const fixed = opt.fix ? Object.fromEntries(String(opt.fix).split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? fail(`unknown factor "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })) : {};
   const o = optimiseDesirability(study, models, { region, ...(opt.radius !== undefined ? { radius: Number(opt.radius) } : {}), fixed, seed: study.seed });
+  put({ models: models.map(m => ({ id: m.id, formula: m.formula, mixed: m.fit.kind === 'mixed' })), region, fixed, settings: o.settings, D: o.D, feasible: o.feasible,
+    responses: models.map((m, i) => { const b = m.predictBand(o.settings); return { id: m.id, predicted: o.d[i].y, lower: b.lower, upper: b.upper, d: o.d[i].d, goal: m.spec }; }) });
   out(`models: ${models.map(m => m.formula + (m.fit.kind === 'mixed' ? ' (mixed)' : '')).join('; ')}`);
   out(`region: ${region}${opt.radius !== undefined ? ` (${region === 'sphere' ? 'radius' : 'half-width'} ${opt.radius} coded)` : ''}${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ''}`);
   out(`\nbest settings: ${showSettings(o.settings)}${o.feasible ? '' : '  (violates a constraint)'}`);
@@ -654,8 +707,11 @@ function cmdRobust({ pos, opt }) {
     out(`\n${{ target: `minimum sd with the mean on target ${opt.target}`, mse: `minimum (mean − ${opt.target})² + sd²`, maximize: `maximum mean with sd ≤ ${opt['max-sd'] ?? '∞'}`, minimize: `minimum mean with sd ≤ ${opt['max-sd'] ?? '∞'}` }[goal]}:`);
     out(`settings: ${showSettings(Object.fromEntries(Object.entries(r.settings).filter(([k]) => !study.factors.find(f => f.id === k)?.noise)))}${r.feasible ? '' : '  (the constraint cannot be met in the region: closest found)'}`);
     at = r.settings;
+    put({ goal, feasible: r.feasible });
   }
   const p = poe(at);
+  put({ response: m.id, meanModel: m.formula, ...(sdModel ? { sdModel: sdModel.formula } : {}), settings: at, mean: mu(at), sd: sd(at), residualSd: sigma,
+    ...(sdModel ? {} : { transmittedSd: Math.sqrt(p.transmitted), parts: p.parts.map(q => ({ id: q.id, sd: q.sd, slope: q.slope, share: q.contribution / p.var })), curvatureShare: p.curvature / p.var }) });
   out(`mean ${num(mu(at))}, sd ${num(sd(at))}${sdModel ? '' : ` (transmitted ${num(Math.sqrt(p.transmitted))}, residual ${num(sigma)})`}`);
   if (!sdModel && p.parts.length) out(table([{ key: 'id', label: 'source', align: 'left' }, { key: 'sd', label: 'sd' }, { key: 'slope', label: 'slope ∂y/∂x' }, { key: 'pct', label: '% of variance' }],
     [...p.parts.map(q => ({ ...q, pct: 100 * q.contribution / p.var })), ...(p.curvature > 1e-12 ? [{ id: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { id: 'residual', sd: sigma, slope: '', pct: 100 * p.residual / p.var }]));
@@ -686,6 +742,7 @@ function cmdSimulator({ pos, opt }) {
   } else if (opt.module) sim = { adapter: 'module', path: String(opt.module), ...(opt.export ? { export: String(opt.export) } : {}) };
   else fail('simulator: give --expression "y=…" … or --module FILE.mjs');
   save(file, createStudy({ ...study, simulator: sim }));
+  put({ file, simulator: sim });
   out(`${file}: simulator ${sim.adapter}${sim.path ? ' ' + sim.path : ''}`);
 }
 
@@ -710,6 +767,7 @@ function cmdCombOver({ pos, opt }) {
   const doc = combOverStudy(readFileSync(cir, 'utf8'), { factors, metrics, specs, ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), ...(opt.name ? { name: String(opt.name) } : {}) });
   const study = createStudy(doc);
   save(file, study);
+  put({ file, study: studySummary(study), metrics });
   out(`created ${file}: comb-over simulator on ${cir}`);
   out(table([{ key: 'id', label: 'factor', align: 'left' }, { key: 'name', label: 'netlist', align: 'left' }, { key: 'range', label: 'range', align: 'left' }, { key: 'note', label: '', align: 'left' }, { key: 'tol', label: 'tolerance', align: 'left' }],
     study.factors.map(f => ({ ...f, range: `${num(f.low, 6)} … ${num(f.high, 6)}${f.units ? ' ' + f.units : ''}`, tol: f.tolerance !== undefined ? showTol(f.tolerance) : '' }))));
@@ -725,6 +783,7 @@ async function cmdSimulate({ pos, opt }) {
   const n = new Set(next.observations.map(o => o.run)).size - (opt.all ? 0 : new Set(study.observations.map(o => o.run)).size);
   out(`${file}: ran ${n} runs on ${ad.name} in ${((Date.now() - t0) / 1000).toFixed(2)} s`);
   const bad = next.observations.filter(o => o.value === null).length;
+  put({ file, simulator: ad.name, runs: n, observations: next.observations.length, missing: bad, seconds: (Date.now() - t0) / 1000 });
   if (bad) out(`note: ${bad} results were not finite numbers and were left empty`);
 }
 
@@ -745,6 +804,7 @@ function cmdTolerance({ pos, opt }) {
   const factors = study.factors.map(f => { const g = { ...f }; if (clear.includes(f.id)) delete g.tolerance; if (set[f.id] !== undefined) g.tolerance = set[f.id]; return g; });
   const next = createStudy({ ...study, factors });
   save(file, next);
+  put({ file, tolerances: Object.fromEntries(next.factors.filter(f => f.tolerance !== undefined).map(f => [f.id, f.tolerance])) });
   for (const f of next.factors) if (f.tolerance !== undefined) out(`${f.id}: ${showTol(f.tolerance)}${f.units ? ' ' + f.units : ''}`);
 }
 
@@ -757,6 +817,7 @@ function cmdSpec({ pos, opt }) {
   else r.spec = { ...(opt.lower !== undefined ? { lower: Number(opt.lower) } : {}), ...(opt.upper !== undefined ? { upper: Number(opt.upper) } : {}) };
   const responses = study.responses.slice(); responses[i] = r;
   save(file, createStudy({ ...study, responses }));
+  put({ file, response: rid, spec: r.spec ?? null });
   out(r.spec ? `${rid}: spec ${r.spec.lower ?? '−∞'} … ${r.spec.upper ?? '∞'}` : `${rid}: no spec limits`);
 }
 
@@ -766,6 +827,7 @@ function surrogatesFor(study, opt, only) {
   const { models, missing } = fitSurrogates(study, { formulas, only });
   for (const m of missing) out(`note: ${m.id} left out (${m.reason})`);
   if (!models.length) fail('no response has a fitted surrogate: run the design first (simulate) or import results');
+  put({ surrogates: models.map(m => ({ id: m.id, formula: m.formula, n: m.n, r2: m.r2, predR2: m.predR2, rmse: m.rmse, cvRmse: m.cvRmse })) });
   out(table([{ key: 'id', label: 'surrogate', align: 'left' }, { key: 'formula', label: 'model', align: 'left' }, { key: 'n', label: 'runs' }, { key: 'r2', label: 'R²' }, { key: 'predR2', label: 'pred R²' }, { key: 'rmse', label: 'RMSE' }, { key: 'cvRmse', label: 'RMSE_cv (LOO)' }], models));
   return models;
 }
@@ -779,6 +841,8 @@ async function cmdYield({ pos, opt }) {
   const tolerances = opt.tolerance ? kvTol(study, opt.tolerance) : {};
   const N = opt.n ? int(opt.n, 'n') : 20000;
   const y = surrogateYield(study, models, { settings, tolerances, N, seed: study.seed >>> 0 });
+  put({ yield: { estimate: y.yield, lower: y.lower, upper: y.upper, N: y.N, trust: y.trust, ...(y.bounds ? { bounds: y.bounds } : {}) }, nominal: y.nominal, tolerances: y.tolerances,
+    responses: y.margins.map((m, i) => ({ ...m, lower: y.specs[i].lower ?? null, upper: y.specs[i].upper ?? null, below: y.perResponse[i].below, above: y.perResponse[i].above })) });
   out(`\nnominal: ${showSettings(y.nominal)}`);
   out(`tolerances: ${Object.entries(y.tolerances).map(([k, t]) => `${k} ${showTol(t)}`).join(', ')}`);
   out(table([{ key: 'id', label: 'response', align: 'left' }, { key: 'spec', label: 'spec', align: 'left' }, { key: 'nominal', label: 'at nominal' }, { key: 'margin', label: 'margin' }, { key: 'cvError', label: 'RMSE_cv' }, { key: 'below', label: '% below' }, { key: 'above', label: '% above' }],
@@ -794,6 +858,7 @@ async function cmdYield({ pos, opt }) {
     out(`\ndirect check on ${ad.name}: yield ${num(100 * d.yield, 4)} % (95% CI ${num(100 * d.lower, 4)} … ${num(100 * d.upper, 4)} %, ${M} runs)`);
     out(`surrogate vs simulator at those points: RMS error ${Object.entries(d.rmse).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}; same pass/fail for ${num(100 * d.agree, 4)} %`);
     const overlap = d.lower <= y.upper && y.lower <= d.upper;
+    put({ check: { simulator: ad.name, M, estimate: d.yield, lower: d.lower, upper: d.upper, rmse: d.rmse, agree: d.agree, overlap } });
     out(overlap ? 'the two yield intervals overlap' : 'warning: the direct yield disagrees with the surrogate\'s');
   }
 }
@@ -803,6 +868,7 @@ function cmdSensitivity({ pos, opt }) {
   const models = surrogatesFor(study, opt, null);
   const over = opt.over ? String(opt.over) : 'range';
   const res = surrogateSensitivity(study, models, { over, settings: opt.at ? parseSettingsLoose(study, String(opt.at)) : {}, ...(opt.n ? { N: int(opt.n, 'n') } : {}), seed: study.seed >>> 0 });
+  put({ over, indices: res.map(r => ({ id: r.id, variance: r.V, evaluations: r.evaluations, factors: r.factors.map((f, i) => ({ factor: f, S: r.first[i].S, SLower: r.first[i].lower, SUpper: r.first[i].upper, ST: r.total[i].S, STLower: r.total[i].lower, STUpper: r.total[i].upper })) })) });
   for (const r of res) {
     out(`\n${r.id}: Sobol indices over ${over === 'range' ? 'the factor ranges (uniform)' : 'the tolerances about nominal'}; variance ${num(r.V, 4)}, ${r.evaluations} surrogate evaluations`);
     out(table([{ key: 'f', label: 'factor', align: 'left' }, { key: 's', label: 'first-order S' }, { key: 'sci', label: '95% CI', align: 'left' }, { key: 't', label: 'total ST' }, { key: 'tci', label: '95% CI', align: 'left' }],
@@ -813,8 +879,33 @@ function cmdSensitivity({ pos, opt }) {
 }
 function parseSettingsLoose(study, text) { return Object.fromEntries(text.split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? fail(`unknown factor "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })); }
 
+function cmdRecommend({ pos, opt }) {
+  const study = load(pos[0]);
+  const r = recommend(study, { ...(opt.goal ? { goal: String(opt.goal) } : {}), ...(opt.budget !== undefined ? { budget: int(opt.budget, 'budget') } : {}),
+    ...(opt.delta !== undefined ? { delta: Number(opt.delta) } : {}), ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}), optimal: !opt['no-optimal'] });
+  put(r);
+  out(`goal: ${r.goal} — ${r.goalText}; model ${r.model} (${r.terms} terms); power at Δ = ${r.delta}σ, α = ${r.alpha}${r.budget ? `; budget ${r.budget} runs` : ''}`);
+  out(table([{ key: 'rank', label: '#' }, { key: 'label', label: 'design', align: 'left' }, { key: 'runs', label: 'runs' }, { key: 'res', label: 'res.', align: 'left' }, { key: 'dEff', label: 'D-eff %' }, { key: 'pw', label: 'min power' }],
+    r.options.map(o => ({ ...o, rank: o.rank ?? '–', res: o.resolution ? roman(o.resolution) : '', dEff: o.dEfficiency ?? '', pw: o.minPower ?? '' }))));
+  for (const o of r.options.filter(x => x.rank && x.rank <= 3)) {
+    out(`\n${o.rank}. ${o.label} (${o.runs} runs${o.wholePlots ? `, ${o.wholePlots} whole plots` : ''})`);
+    for (const x of o.reasons) out(`   + ${x}`);
+    for (const x of o.warnings) out(`   ! ${x}`);
+  }
+  const no = r.options.filter(x => !x.rank);
+  if (no.length) out(`\nnot suitable for ${r.model}: ${no.map(o => `${o.label} (${o.warnings[0] ?? 'not estimable'})`).join('; ')}`);
+}
+
+function cmdSchema({ opt }) {
+  const which = opt.cli ? 'cli' : 'study';
+  const schema = JSON.parse(readFileSync(new URL(`../schema/${which}.schema.json`, import.meta.url), 'utf8'));
+  if (RESULT) put({ which, jsonSchema: schema });
+  else process.stdout.write(JSON.stringify(schema, null, 2) + '\n');
+}
+
 function cmdInfo({ pos }) {
   const s = load(pos[0]);
+  put({ study: { ...studySummary(s), resultsFor: s.design ? new Set(s.observations.filter(o => o.value !== null).map(o => o.run)).size : 0, ...(s.sites ? { sites: s.sites } : {}) } });
   out(`${s.name}  (seed ${s.seed})`);
   const named = s.factors.some(f => f.name !== f.id);
   out(table([{ key: 'id', label: 'factor', align: 'left' }, ...(named ? [{ key: 'name', label: 'name', align: 'left' }] : []), { key: 'range', label: 'range / levels', align: 'left' }, { key: 'note', label: '', align: 'left' }],
@@ -831,7 +922,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;
@@ -840,12 +931,21 @@ async function main(argv) {
     const head = src.split('\n').filter(l => l.startsWith('//')); out(head.slice(1, head.findIndex(l => l.includes('STUDY is a')) + 1).map(l => l.slice(3)).join('\n'));
     return 0;
   }
+  const json = rest.includes('--json');
+  const args = parseArgs(rest.filter(a => a !== '--json'));
   const f = COMMANDS[cmd];
-  if (!f) { process.stderr.write(`unknown command "${cmd}" (try: ${Object.keys(COMMANDS).join(', ')})\n`); return 2; }
-  try { await f(parseArgs(rest)); return 0; }
-  catch (e) {
-    if (e instanceof CliError) process.stderr.write(`error: ${e.message}\n`);
-    else if (e instanceof StudyError) process.stderr.write(`error: ${e.message}\n`);
+  if (!f) {
+    const msg = `unknown command "${cmd}" (try: ${Object.keys(COMMANDS).join(', ')})`;
+    if (json) process.stdout.write(JSON.stringify({ schema: CLI_SCHEMA_VERSION, command: cmd, ok: false, error: { message: msg } }) + '\n'); else process.stderr.write(msg + '\n');
+    return 2;
+  }
+  if (json) { RESULT = {}; TEXT = []; }
+  try {
+    await f(args);
+    if (json) process.stdout.write(JSON.stringify(jsonSafe({ schema: CLI_SCHEMA_VERSION, command: cmd, ok: true, ...RESULT, text: TEXT })) + '\n');
+    return 0;
+  } catch (e) {
+    if (json) process.stdout.write(JSON.stringify(jsonSafe({ schema: CLI_SCHEMA_VERSION, command: cmd, ok: false, error: { message: e.message, ...(e instanceof StudyError ? { errors: e.errors } : {}) }, text: TEXT })) + '\n');
     else process.stderr.write(`error: ${e.message}\n`);
     return 1;
   }

@@ -1,0 +1,641 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://byzantic.github.io/aikidoe/schema/study.schema.json",
+  "title": "aikidoe study",
+  "description": "An aikidoe study file (*.aikidoe.json), format version 1: factors, responses, constraints, the design and its run order, observations, drop-in sites, the stage history and an optional simulator. Comments and trailing commas are allowed in the file (JSON with comments); this schema describes the JSON value.",
+  "$comment": "Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.",
+  "type": "object",
+  "required": [
+    "aikidoe",
+    "seed",
+    "factors"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "aikidoe": {
+      "const": 1,
+      "description": "study format version"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295,
+      "description": "seed of every random step (randomisation, searches)"
+    },
+    "factors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/factor"
+      }
+    },
+    "responses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/response"
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/constraint"
+      }
+    },
+    "design": {
+      "$ref": "#/$defs/design"
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "sites": {
+      "$ref": "#/$defs/sites"
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    },
+    "simulator": {
+      "type": "object",
+      "required": [
+        "adapter"
+      ],
+      "properties": {
+        "adapter": {
+          "type": "string",
+          "description": "expression, comb-over, module (CLI) or another registered adapter"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
+    "factor": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/continuous"
+        },
+        {
+          "$ref": "#/$defs/categorical"
+        }
+      ]
+    },
+    "continuous": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "required": [
+            "levels"
+          ]
+        }
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "units": {
+          "type": "string"
+        },
+        "type": {
+          "const": "continuous"
+        },
+        "low": {
+          "type": "number"
+        },
+        "high": {
+          "type": "number"
+        },
+        "levels": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "number"
+          }
+        },
+        "transform": {
+          "enum": [
+            "none",
+            "log"
+          ]
+        },
+        "htc": {
+          "type": "boolean",
+          "description": "hard to change: split-plot designs"
+        },
+        "tolerance": {
+          "description": "standard deviation of the actual value about its setting (natural units), or a distribution",
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "object",
+              "required": [
+                "sd"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "sd": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "dist": {
+                  "enum": [
+                    "normal",
+                    "uniform",
+                    "truncated"
+                  ]
+                },
+                "at": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            }
+          ]
+        },
+        "noise": {
+          "type": "object",
+          "required": [
+            "sd"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "sd": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "mean": {
+              "type": "number"
+            }
+          }
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "categorical": {
+      "type": "object",
+      "required": [
+        "id",
+        "levels"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "properties": {
+            "levels": {
+              "contains": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "units": {
+          "type": "string"
+        },
+        "type": {
+          "const": "categorical"
+        },
+        "levels": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "htc": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "units": {
+          "type": "string"
+        },
+        "goal": {
+          "enum": [
+            "none",
+            "maximize",
+            "minimize",
+            "target",
+            "range"
+          ]
+        },
+        "target": {
+          "type": "number"
+        },
+        "lower": {
+          "type": "number"
+        },
+        "upper": {
+          "type": "number"
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              ],
+              "minItems": 2,
+              "items": false
+            }
+          ]
+        },
+        "importance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "levels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "lot",
+              "run",
+              "wholePlot",
+              "wafer",
+              "site"
+            ]
+          },
+          "description": "measurement hierarchy, in nesting order"
+        },
+        "derived": {
+          "type": "object",
+          "required": [
+            "from",
+            "stat"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "stat": {
+              "enum": [
+                "mean",
+                "sd",
+                "logsd",
+                "rangemean"
+              ]
+            }
+          }
+        },
+        "measurement": {
+          "type": "object",
+          "required": [
+            "sigma"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "sigma": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "method": {},
+            "design": {},
+            "parts": {},
+            "operators": {},
+            "repeats": {},
+            "tolerance": {},
+            "pctGRR": {},
+            "ndc": {},
+            "date": {},
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "part",
+                  "value"
+                ],
+                "properties": {
+                  "part": {
+                    "$ref": "#/$defs/label"
+                  },
+                  "value": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "note": {}
+          }
+        },
+        "spec": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "lower": {
+              "type": "number"
+            },
+            "upper": {
+              "type": "number"
+            }
+          },
+          "description": "specification limits for yield"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "constraint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": [
+            "expr"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "expr": {
+              "type": "string"
+            },
+            "units": {
+              "enum": [
+                "natural",
+                "coded"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "a linear constraint, e.g. \"T + 2*t <= 1050\""
+    },
+    "design": {
+      "type": "object",
+      "required": [
+        "runs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        },
+        "randomisation": {
+          "enum": [
+            "complete",
+            "restricted",
+            "blocked",
+            "none"
+          ]
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/run"
+          }
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "run",
+        "settings"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "run": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "wholePlot": {
+          "$ref": "#/$defs/label"
+        },
+        "block": {
+          "$ref": "#/$defs/label"
+        },
+        "kind": {
+          "enum": [
+            "factorial",
+            "fraction",
+            "axial",
+            "centre",
+            "confirm",
+            "augment",
+            "optimal",
+            "space-filling",
+            "other"
+          ]
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "required": [
+        "run",
+        "response",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "run": {
+          "type": "integer"
+        },
+        "response": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "null: missing (measured but failed)"
+        },
+        "lot": {
+          "$ref": "#/$defs/label"
+        },
+        "wafer": {
+          "$ref": "#/$defs/label"
+        },
+        "site": {
+          "$ref": "#/$defs/label"
+        },
+        "slot": {
+          "$ref": "#/$defs/label"
+        },
+        "operator": {
+          "$ref": "#/$defs/label"
+        },
+        "repeat": {
+          "type": "integer"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "sites": {
+      "type": "object",
+      "required": [
+        "positions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "scheme": {
+          "type": "string"
+        },
+        "diameter": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "positions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/label"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "required": [
+        "stage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "date": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}
