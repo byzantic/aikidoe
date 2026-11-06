@@ -59,6 +59,11 @@ section('links');
   check(`the app's ${helps.length} "?" links and design-page links point at existing sections`, helps.length >= 20 && !bad.length, bad.map(x => x.join('#')).join(', '));
   const manualLinks = [...ui.matchAll(/docs\/manual\/index\.html\?p=([\w-]+)/g)].map(m => m[1]);
   check('other links from the app into the manual', manualLinks.every(p => pages[p]), manualLinks.join(', '));
+  // the tutorial's lesson texts link to manual sections
+  const { LESSONS } = await import('../js/learn/lessons.js');
+  const lessonLinks = LESSONS.flatMap(l => [l.text, ...l.manual].flatMap(t => [...t.matchAll(/docs\/manual\/index\.html\?p=([\w-]+)(?:#([\w-]+))?/g)].map(m => [l.id, m[1], m[2]])));
+  const badL = lessonLinks.filter(([, p, a]) => !pages[p] || (a && !anchors[p].has(a)));
+  check(`the ${lessonLinks.length} manual links in the lessons resolve to sections`, lessonLinks.length >= LESSONS.length && !badL.length, badL.map(x => x.join(' → ')).join(', '));
 }
 
 section('console blocks: every command run, output as shown');

@@ -249,7 +249,7 @@ export function referenceStrategy(ex, truth = truthOf(ex)) {
     case 'fraction': {
       st = make(fractionalFactorial(k, { runs: 8 }), '8-run resolution III fraction');
       st = createStudy(runExercise({ ...ex, truth }, st));
-      st = createStudy(appendStage(st, foldover(st, {}), { seed: ex.seed }));
+      st = createStudy(appendStage(st, foldover(st, {})));
       steps.push('full fold-over (8 more runs, a second block): main effects clear of two-factor interactions; fit main effects');
       break;
     }

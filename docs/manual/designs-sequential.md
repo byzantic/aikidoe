@@ -5,7 +5,7 @@ model, confirm. aikidoe keeps every stage in the same study, as a new **block** 
 final analysis uses all of them and the block term absorbs any shift between stages. The study's
 history records each stage.
 
-In the app, the **Next stage** panel (Analyse step, once there are results) offers the
+In the app, the **Next stage** panel (on the Design step, once there is a design) offers the
 augmentations that fit the design; on the command line, `doe augment`.
 
 ## Fold-over
