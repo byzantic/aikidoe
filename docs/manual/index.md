@@ -13,6 +13,9 @@ the command line. Everything runs locally; a study is one file.
   to a confirmed model.
 - [Concepts](concepts.md) — coded units, randomisation and blocking, aliasing and resolution,
   replication, power, hierarchy and sequential experimentation.
+- [Cheat sheet](cheat-sheet.md) — the questions to answer before an experiment, the design they
+  lead to, run counts, and checklists for running and analysing. The app's
+  [Guide](../../index.html#guide) asks the same questions one at a time.
 
 ## Designs
 

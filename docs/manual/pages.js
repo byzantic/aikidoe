@@ -4,6 +4,7 @@ export const PAGES = [
   { id: 'index', title: 'aikidoe manual', part: '' },
   { id: 'getting-started', title: 'Getting started', part: 'Start here' },
   { id: 'concepts', title: 'Concepts', part: 'Start here' },
+  { id: 'cheat-sheet', title: 'Cheat sheet', part: 'Start here' },
   { id: 'designs-factorial', title: 'Full and fractional factorials', part: 'Designs' },
   { id: 'designs-screening', title: 'Plackett–Burman and definitive screening', part: 'Designs' },
   { id: 'designs-rsm', title: 'Response surfaces: central composite and Box–Behnken', part: 'Designs' },
