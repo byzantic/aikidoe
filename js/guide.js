@@ -107,7 +107,24 @@ export const QUESTIONS = [
       { value: 'corners', label: 'All extremes at once would be unsafe or impractical' },
       { value: 'combos', label: 'Some combinations are impossible (e.g. high temperature with long time)' },
     ] },
-  { id: 'effect', type: 'choice', when: (a) => FACTORIAL(a), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
+  { id: 'result', type: 'choice', when: FACTORIAL, text: 'What will each run give you?',
+    why: 'A measurement (a yield, a strength, a time) varies by about the same amount wherever it is. A count (colonies, cells, defects) varies more the larger it is, and a percentage (germinated, viable, positive) is squeezed near 0 % and 100 %: these need their own analysis and their own sums for the number of runs. A single pass or fail per run carries little information, so it needs many more runs.',
+    help: ['analysis', 'counts-and-proportions'],
+    options: [
+      { value: 'measurement', label: 'A measurement on a continuous scale' },
+      { value: 'count', label: 'A count (colonies, cells, events, defects …)' },
+      { value: 'percent', label: 'A percentage of things counted (germinated seeds out of those sown …)' },
+      { value: 'passfail', label: 'Pass or fail (it works or it doesn’t)' },
+    ] },
+  { id: 'ratio', type: 'choice', when: (a) => FACTORIAL(a) && ['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change matters, from a factor’s low to its high setting?',
+    why: 'For counts and percentages the effect is a ratio: the mean count going up by half (a rate ratio of 1.5), or the odds of success doubling (an odds ratio of 2). How many runs that takes depends on how big the counts are, or how many trials each run has: more counted per run means fewer runs.',
+    help: ['concepts', 'power'],
+    options: [
+      { value: 'large', label: 'Large — the count doubles, the odds of success triple' },
+      { value: 'medium', label: 'Medium — the count up by half, the odds doubled' },
+      { value: 'small', label: 'Small — the count up by a quarter, the odds up by half' },
+    ] },
+  { id: 'effect', type: 'choice', when: (a) => FACTORIAL(a) && !['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
     why: 'This is what decides the number of runs. The scatter (σ) is the standard deviation of repeated runs at the same settings, measurement included. To have an 80 % chance of detecting an effect Δ in a two-level design takes roughly N ≈ 32 / (Δ/σ)² runs, plus a few for the error estimate: about 8 runs for 2σ, 32 for 1σ, 128 for σ/2.',
     help: ['concepts', 'power'],
     options: [
@@ -326,6 +343,9 @@ export function advise(a) {
   }
   if (corners && out.family !== 'bbd') notes.push('Extremes unsafe: shrink the ranges so that every corner is safe, use a face-centred design, or define constraints and use an optimal design.');
 
+  // counts and proportions (issue #64)
+  if (['count', 'percent', 'passfail'].includes(a.result)) countsAdvice(a, out, { notes, warnings, read });
+
   // effect size → runs
   const need = Math.ceil(32 / out.delta ** 2) + 6;
   if (a.effect === 'small') {
@@ -337,6 +357,29 @@ export function advise(a) {
   notes.push('When running: follow the randomised run order, record anything unusual, write NA for a failed run rather than guessing, and do not adjust settings between runs.');
   read(M('analysis', 'diagnostics', 'checking a fit'));
   return out;
+}
+
+// the ratio that matters, by answer: rate ratios for counts, odds ratios for proportions
+export const GUIDE_RATIOS = { count: { large: 2, medium: 1.5, small: 1.25 }, percent: { large: 3, medium: 2, small: 1.5 }, passfail: { large: 3, medium: 2, small: 1.5 } };
+
+/**
+ * Counts and proportions: the analysis, and roughly how many runs the ratio needs for 80 % power on
+ * one coefficient (a Wald test: N ≈ 7.85 / (b² · information per run), b = ln r / 2, with counts of
+ * about 20 per run, 20 trials per run at 50 %, or one pass/fail at 50 %).
+ */
+function countsAdvice(a, out, { notes, warnings, read }) {
+  const r = GUIDE_RATIOS[a.result][a.ratio ?? 'medium'], b = Math.log(r) / 2;
+  const info = a.result === 'count' ? 20 : a.result === 'percent' ? 20 * 0.25 : 0.25;
+  const n = Math.ceil(7.85 / (b * b * info));
+  out.counts = { result: a.result, ratio: r };
+  if (a.result === 'count') {
+    notes.push(`Counts: the analysis is a Poisson model (negative binomial if the counts vary more than that), with effects as rate ratios. With counts of about 20 per run, a rate ratio of ${r} needs about ${n} runs for 80 % power; larger counts (plate more, count longer) need fewer. Record the volume plated or area counted if it varies from run to run: it is the exposure. Set the response's kind to “count” on the Define step, and check the power for the ratio on the Design step.`);
+  } else if (a.result === 'percent') {
+    notes.push(`Percentages: record the successes and the number of trials (not just the percentage): the analysis is a binomial model, with effects as odds ratios. With 20 trials per run near 50 %, an odds ratio of ${r} needs about ${n} runs for 80 % power; more trials per run need fewer runs, and percentages near 0 % or 100 % carry less information. Set the response's kind to “successes out of n trials” on the Define step.`);
+  } else {
+    warnings.push(`Pass/fail: one yes-or-no per run carries little information — an odds ratio of ${r} needs about ${n} runs for 80 % power. If you can, record a proportion (how many of n items pass) or the measurement behind the pass/fail; otherwise plan for many runs. A setting where every run passes (or fails) is common with few runs: the analysis then uses Firth’s method.`);
+  }
+  read(M('analysis', 'counts-and-proportions', 'counts and proportions'), M('concepts', 'power', 'power for counts and proportions'));
 }
 
 /** Mixtures (issue #62): the design family, the plan and the notes. */
@@ -388,7 +431,7 @@ export function guideStudy(a, { name = 'Study from the guide' } = {}) {
       return j < q ? { id, name: names[j] ?? `Ingredient ${String.fromCharCode(65 + j)}`, low: 0, high: 100, units: '%' } : { id, name: names[j] ?? `Process ${j - q + 1}`, low: -1, high: 1 };
     });
     const description = [`Planned with the guide: ${adv.headline}.`, ...adv.plan.map((x, i) => `${i + 1}. ${x.title}: ${x.text}`)].join('\n');
-    return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors, mixture: { components: factors.slice(0, q).map(f => f.id), total: 100 }, responses: [{ id: 'y', name: 'Response' }] });
+    return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors, mixture: { components: factors.slice(0, q).map(f => f.id), total: 100 }, responses: [guideResponse(a)] });
   }
   const k = a.factors ?? 2, cats = a.types && a.types !== 'continuous' ? Math.min(a.categorical ?? 1, k) : 0, htc = Math.min(a.htc ?? 0, k);
   const names = String(a.names ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -408,5 +451,8 @@ export function guideStudy(a, { name = 'Study from the guide' } = {}) {
   });
   const adv = advise(a);
   const description = [`Planned with the guide: ${adv.headline}.`, ...adv.plan.map((p, i) => `${i + 1}. ${p.title}: ${p.text}`)].join('\n');
-  return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors, responses: [{ id: 'y', name: 'Response' }] });
+  return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors, responses: [guideResponse(a)] });
 }
+
+/** The response, with the kind of result the guide was told (issue #64). */
+const guideResponse = (a) => ({ id: 'y', name: 'Response', ...({ count: { distribution: 'poisson' }, percent: { distribution: 'binomial' }, passfail: { distribution: 'bernoulli' } }[a.result] ?? {}) });

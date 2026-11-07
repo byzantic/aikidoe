@@ -88,7 +88,7 @@ export function render(ctx) {
   // counts and proportions: a generalised linear model (no mixed models yet)
   if (resp.distribution) {
     if (fitErr) return h('div', {}, controls, h('div', { class: 'msg error' }, fitErr.message));
-    return h('div', {}, controls, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }));
+    return h('div', {}, controls, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), confirmPanel(ctx, fit));
   }
 
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)

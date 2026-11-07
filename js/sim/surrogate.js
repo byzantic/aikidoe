@@ -31,6 +31,8 @@ export function fitSurrogates(study, { formulas = {}, only = null } = {}) {
   const out = [], missing = [];
   for (const r of study.responses) {
     if (only && !only.includes(r.id)) continue;
+    // surrogates are smooth least-squares models of a simulator's outputs: not for counts and proportions
+    if (r.distribution) { missing.push({ id: r.id, reason: `${r.id} is a ${r.distribution} response: surrogates and yield are for continuous outputs` }); continue; }
     const formula = formulas[r.id] ?? defaultFormula(study, r.id);
     let fit;
     try { fit = fitModel(study, formula); } catch (e) { missing.push({ id: r.id, reason: e.message }); continue; }

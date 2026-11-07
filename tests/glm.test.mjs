@@ -3,7 +3,11 @@
 import { readFileSync } from 'node:fs';
 import { section, check, near, done } from './lib/check.mjs';
 import { parseFormula, modelMatrix } from '../js/model/formula.js';
-import { fitGLM, glmTests, glmConfint, glmPredict, glmCompare, thetaML } from '../js/model/glm.js';
+import { fitGLM, glmTests, glmConfint, glmPredict, glmCompare, thetaML, glmEnvelope, glmVariance, predictiveInterval, _draw } from '../js/model/glm.js';
+import { rng } from '../js/design/rng.js';
+import { confirmationRuns, checkConfirmation } from '../js/design/augment.js';
+import { fittedModels } from '../js/model/desirability.js';
+import { propagationOfError } from '../js/model/robust.js';
 import { createStudy, validateStudy } from '../js/study.js';
 import { toStudyDesign, fullFactorial } from '../js/design/factorial.js';
 import { fitModel, predict, anova, responseTable } from '../js/model/fit.js';
@@ -111,6 +115,68 @@ section('a study with counts and proportions');
   check('model reduction by likelihood-ratio tests', red.steps.length > 0 && red.steps.every(st => Number.isFinite(st.chi2) && st.p > 0.1), JSON.stringify(red.steps.map(x => [x.drop, x.p])));
   check('… and by AICc', Number.isFinite(aicc(fit)) && reduceModel(s, 'count ~ (A + B + C)^2', { method: 'aicc' }).formula.length > 0);
   check('responseTable: one row per observation with exposure and trials', responseTable(s, 'count').every((r, k) => r.exposure === i.exposure[k]) && responseTable(s, 'germ').every(r => r.trials >= 20));
+}
+
+section('prediction intervals for a new count or proportion');
+{
+  // coverage by simulation: a replicated 2³, the model fitted, a new run predicted
+  const rows = []; for (let r = 0; r < 2; r++) for (const c of [-1, 1]) for (const b of [-1, 1]) for (const a of [-1, 1]) rows.push({ A: a, B: b, C: c });
+  const mm = modelMatrix(parseFormula('y ~ A + B + C', factors), factors, rows), at = modelMatrix(mm.model, factors, [{ A: 0.5, B: -0.5, C: 1 }]).X;
+  const R = rng(5), N = 300;
+  const cases = [
+    ['poisson', (mu) => _draw.poisson(R, mu), {}, (x) => Math.exp(2 + 0.4 * x.A - 0.3 * x.B + 0.1 * x.C), [0.93, 0.99]],
+    ['binomial', (p) => { let k = 0; for (let i = 0; i < 20; i++) if (R.random() < p) k++; return k / 20; }, { weights: rows.map(() => 20) }, (x) => 1 / (1 + Math.exp(-(0.2 + 0.8 * x.A - 0.5 * x.B))), [0.93, 0.995]],
+    // θ estimated from 16 runs is biased upwards: the interval allows for its standard error but
+    // still falls a little short
+    ['negbin', (mu) => _draw.poisson(R, mu * _draw.gamma(R, 3) / 3), {}, (x) => Math.exp(2 + 0.4 * x.A - 0.3 * x.B + 0.1 * x.C), [0.86, 0.97]],
+  ];
+  for (const [dist, gen, opts, truth, [lo, hi]] of cases) {
+    let hit = 0;
+    const mu0 = truth({ A: 0.5, B: -0.5, C: 1 });
+    for (let k = 0; k < N; k++) {
+      const fit = fitGLM(mm, rows.map(r => gen(truth(r))), { distribution: dist, ...opts });
+      const p = glmPredict(fit, at, { trials: 20 })[0], y = gen(mu0);
+      if (y >= p.predLower - 1e-12 && y <= p.predUpper + 1e-12) hit++;
+    }
+    check(`${dist}: 95 % prediction interval covers a new run ${(100 * hit / N).toFixed(1)} % of the time`, hit / N >= lo && hit / N <= hi);
+  }
+  const f = fitGLM(mm, rows.map(r => Math.round(10 * Math.exp(0.3 * r.A))), { distribution: 'poisson' });
+  const one = predictiveInterval(f, Math.log(10), 0, { level: 0.95 });
+  check('with no uncertainty in the fit: the Poisson quantiles (10 → 4 … 17)', one.lower === 4 && one.upper === 17, JSON.stringify(one));
+  const ten = predictiveInterval(f, Math.log(10), 0, { level: 0.95, n: 10 });
+  check('the mean of 10 runs: a narrower interval (Poisson(100) / 10)', ten.lower === 8.1 && ten.upper === 12, JSON.stringify(ten));
+  check('variance of a new result: μ (Poisson), μ(1 − μ)/m (binomial)', glmVariance(f, 7) === 7 && Math.abs(glmVariance({ ...f, distribution: 'binomial', weights: [20] }, 0.3) - 0.0105) < 1e-15);
+}
+
+section('simulated envelope');
+{
+  const c = fx.cases.find(x => /overdispersion check/.test(x.name)), { mm, y, opts } = setup(c);
+  const fit = fitGLM(mm, y, opts), env = glmEnvelope(fit, { nsim: 99, seed: 3 });
+  check('one point per residual, ascending, with bands', env.length === y.length && env.every((e, k) => e.lower <= e.median && e.median <= e.upper && (k === 0 || e.observed >= env[k - 1].observed)));
+  check('overdispersed counts under a Poisson model: the largest residuals leave the envelope', env.slice(-4).some(e => e.observed > e.upper));
+  const nb = fitGLM(mm, y, { ...opts, distribution: 'negbin' }), env2 = glmEnvelope(nb, { nsim: 99, seed: 3 });
+  check('… and the negative binomial keeps them inside', env2.filter(e => e.observed > e.upper || e.observed < e.lower).length <= 1);
+}
+
+section('confirmation, optimisation and robustness for counts');
+{
+  const c = fx.cases.find(x => /exposure/.test(x.name)), i = c.input;
+  const runs = i.A.map((a, k) => ({ run: k + 1, order: k + 1, settings: { A: a, B: i.B[k], C: i.C[k] } }));
+  let s = createStudy({ aikidoe: 1, name: 'c', seed: 1, factors, responses: [{ id: 'count', distribution: 'poisson', goal: 'maximize', lower: 5, upper: 30 }], design: { kind: 'full', runs },
+    observations: runs.map((r, k) => ({ run: r.run, response: 'count', value: i.y[k], exposure: i.exposure[k] })) });
+  const fit = fitModel(s, 'count ~ A + B + A:B');
+  const conf = confirmationRuns(s, fit, [{ A: 1, B: -1, C: 0 }], { replicates: 2 });
+  check('confirmation runs store what the predictive distribution needs', conf.params.glm.distribution === 'poisson' && Number.isFinite(conf.params.predictions[0].seLink) && conf.params.predictions[0].predLower < conf.params.predictions[0].fit);
+  const n0 = runs.length;
+  s = createStudy({ ...s, design: { ...s.design, runs: [...runs, { run: n0 + 1, order: n0 + 1, kind: 'confirm', settings: { A: 1, B: -1, C: 0 } }, { run: n0 + 2, order: n0 + 2, kind: 'confirm', settings: { A: 1, B: -1, C: 0 } }] },
+    history: [{ stage: 'confirm', runs: [n0 + 1, n0 + 2], params: conf.params }],
+    observations: [...s.observations, { run: n0 + 1, response: 'count', value: 30, exposure: 2 }, { run: n0 + 2, response: 'count', value: 14, exposure: 1 }] });
+  const ck = checkConfirmation(s, 'count')[0];
+  check('checked on the rate scale (30 per 2, 14 per 1 → 14.5), with the interval for the mean of 2 runs', ck.observed === 14.5 && ck.n === 2 && ck.lower < ck.predicted && ck.upper > ck.predicted && ck.inside === (14.5 >= ck.lower && 14.5 <= ck.upper), JSON.stringify(ck));
+  const m = fittedModels(s, { formulas: { count: 'count ~ A + B + A:B' } }).models[0];
+  near('the optimiser’s prediction is the rate (response scale), not the log', m.predict({ A: 1, B: -1, C: 0 }), predict(fit, [{ A: 1, B: -1, C: 0 }])[0].fit, { rel: 1e-12 });
+  const poe = propagationOfError(s, m.predict, { A: 0.2, B: 0, C: 0 }, { residualVar: m.residualVar });
+  near('robustness: the Poisson variance at the mean is the residual part', poe.residual, poe.mean, { rel: 1e-12 });
 }
 
 section('validation of counts and proportions');

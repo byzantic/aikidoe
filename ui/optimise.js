@@ -32,8 +32,8 @@ function robustPanel({ state, update, setUI }, at, set, ui) {
     onchange: (e) => update(d => { const o = d.factors.find(x => x.id === f.id), v = e.target.value; if (key === 'noise') { if (v === '' || !(Number(v) > 0)) delete o.noise; else o.noise = { ...(o.noise ?? {}), sd: Number(v) }; } else { if (v === '') delete o.tolerance; else if (typeof o.tolerance === 'object') o.tolerance = { ...o.tolerance, sd: Number(v) }; else o.tolerance = Number(v); } }) });
   const factorTable = dataTable([{ key: 'f', label: 'factor' }, { key: 'noise', label: 'noise: sd in production' }, { key: 'tol', label: 'tolerance: sd about the setting' }],
     cont.map(f => ({ f: f.units ? `${f.id} (${f.units})` : f.id, noise: sdIn(f, 'noise'), tol: sdIn(f, 'tol') })));
-  const sigma = m.sigma ?? 0;
-  const poe = (st) => propagationOfError(study, m.predict, st, { sigma });
+  const sigma = m.sigma ?? 0, noiseOpt = m.residualVar ? { residualVar: m.residualVar } : { sigma };   // counts and proportions: the variance at the mean
+  const poe = (st) => propagationOfError(study, m.predict, st, noiseOpt);
   const p = poe(at);
   const goal = ui.rGoal ?? 'target';
   const controls = h('div', { class: 'row' },
@@ -50,7 +50,7 @@ function robustPanel({ state, update, setUI }, at, set, ui) {
       } catch (e) { set({ rNote: e.message }); }
     } }, 'Find robust settings'));
   const tiny = (v) => (Math.abs(v) < 1e-6 * Math.max(1, p.sd) ? 0 : v);
-  const parts = [...p.parts.map(q => ({ src: q.id, sd: num(q.sd), slope: num(tiny(q.slope)), pct: 100 * q.contribution / p.var })), ...(p.curvature > 1e-12 ? [{ src: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { src: 'residual', sd: num(sigma), slope: '', pct: 100 * p.residual / p.var }];
+  const parts = [...p.parts.map(q => ({ src: q.id, sd: num(q.sd), slope: num(tiny(q.slope)), pct: 100 * q.contribution / p.var })), ...(p.curvature > 1e-12 ? [{ src: '(curvature)', sd: '', slope: '', pct: 100 * p.curvature / p.var }] : []), { src: m.residualVar ? `${m.fit.distribution} variation at the mean` : 'residual', sd: num(Math.sqrt(p.residual)), slope: '', pct: 100 * p.residual / p.var }];
   const summary = h('div', { id: 'poe' }, h('div', { class: 'row small' }, h('span', { class: 'stat' }, `${m.id} mean `, h('b', {}, num(p.mean))), h('span', { class: 'stat' }, 'sd ', h('b', { 'data-sd': p.sd }, num(p.sd))),
       h('span', { class: 'stat' }, 'transmitted ', h('b', {}, num(tiny(Math.sqrt(p.transmitted))))), h('span', { class: 'muted' }, 'at the settings above (noise factors at their mean)')),
     dataTable([{ key: 'src', label: 'source' }, { key: 'sd', label: 'sd', cls: 'n' }, { key: 'slope', label: 'slope ∂y/∂x', cls: 'n' }, { key: 'pct', label: '% of variance', cls: 'n', fmt: (v) => num(v, 3) }, { key: 'bar', label: '' }],
@@ -62,7 +62,7 @@ function robustPanel({ state, update, setUI }, at, set, ui) {
   let surf = null;
   if (ctl.length >= 2 && p.parts.length) {
     const fx = ctl.some(f => f.id === ui.px) ? ui.px : ctl[0].id, fy = ctl.some(f => f.id === ui.py) && ui.py !== fx ? ui.py : ctl.find(f => f.id !== fx).id;
-    const g = poeGrid(study, m.predict, at, fx, fy, { n: 31, sigma });
+    const g = poeGrid(study, m.predict, at, fx, fy, { n: 31, ...noiseOpt });
     const vals = g.cells.flat().map(c => c.sd), lo = Math.min(...vals), hi = Math.max(...vals), n = g.xs.length, W = 300, cw = W / n;
     surf = h('figure', {}, h('figcaption', {}, `sd of ${m.id} over ${fx} and ${fy} (darker = more robust); range ${num(lo)} … ${num(hi)} `,
       select(ctl.map(f => f.id), fx, (v) => set({ px: v }), { 'aria-label': 'poe x' }), ' ', select(ctl.map(f => f.id), fy, (v) => set({ py: v }), { 'aria-label': 'poe y' })),
@@ -194,5 +194,5 @@ export function render(ctx) {
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
       svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region.`));
   }
-  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, ...(study.mixture || study.responses.some(r => r.distribution) ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));   // (robustness and yield assume normal noise: not yet for counts and proportions)
+  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, ...(study.mixture ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));
 }

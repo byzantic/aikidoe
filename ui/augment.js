@@ -102,13 +102,13 @@ export function confirmPanel({ state, setDoc, setUI }, fit) {
     if (mixed) {
       pred = predictMixed(fit, [at], { weights: runMeanWeights(fit) })[0];
       predN = reps > 1 ? predictMixed(fit, [at], { weights: runMeanWeights(fit, { runs: reps, inOneWholePlot: !ui.separate }) })[0] : null;
-    } else { if (fit.dfRes < 1) throw new Error('A prediction interval needs residual degrees of freedom.'); pred = predict(fit, [at])[0]; }
+    } else { if (fit.dfRes < 1) throw new Error('A prediction interval needs residual degrees of freedom.'); pred = predict(fit, [at])[0]; if (fit.distribution && reps > 1) predN = predict(fit, [at], { n: reps })[0]; }
   } catch (e) { err = e.message; }
   const out = err ? h('div', { class: 'msg warning' }, err) : h('div', {},
     h('div', { class: 'row small', id: 'prediction' },
       h('span', { class: 'stat' }, `predicted ${fit.response} `, h('b', {}, num(pred.fit))),
       h('span', { class: 'stat' }, `95% CI (mean${mixed ? ', KR' : ''}) `, h('b', {}, `${num(pred.lower)} … ${num(pred.upper)}`)),
-      h('span', { class: 'stat' }, '95% PI (one run) ', h('b', {}, `${num(pred.predLower)} … ${num(pred.predUpper)}`)),
+      h('span', { class: 'stat' }, `95% PI (one run${fit.distribution ? (['poisson', 'quasipoisson', 'negbin'].includes(fit.distribution) ? ', per unit exposure' : ', as a proportion') : ''}) `, h('b', {}, `${num(pred.predLower)} … ${num(pred.predUpper)}`)),
       predN ? h('span', { class: 'stat' }, `95% PI (mean of ${reps} runs) `, h('b', {}, `${num(predN.predLower)} … ${num(predN.predUpper)}`)) : null,
       fit.model.terms.some(t => t.block) ? h('span', { class: 'muted' }, fit.model.terms.some(t => t.position) ? '(average block, average well)' : '(average block)') : null),
     h('div', { class: 'row' }, h('button', { class: 'btn', id: 'add-confirm', onclick: () => {

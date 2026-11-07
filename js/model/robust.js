@@ -25,10 +25,11 @@ const H_REL = 1e-4;     // finite-difference step, relative to the factor's half
 
 /**
  * POE at settings (natural units). predict(settings) → ŷ; study factors give tolerance / noise;
- * opts: sigma (residual sd, default 0), extra ({ id: sd } overriding), order (1 or 2).
+ * opts: sigma (residual sd, default 0), residualVar (a function of the mean giving the residual
+ * variance, for counts and proportions, instead of sigma), extra ({ id: sd } overriding), order (1 or 2).
  * Returns { mean, sd, var, parts: [{ id, sd, contribution }], residual, gradient, hessianTerm }.
  */
-export function propagationOfError(study, predict, settings, { sigma = 0, extra = {}, order = 2 } = {}) {
+export function propagationOfError(study, predict, settings, { sigma = 0, residualVar, extra = {}, order = 2 } = {}) {
   const fs = study.factors.filter(f => f.type !== 'categorical');
   const sds = fs.map(f => extra[f.id] ?? f.noise?.sd ?? (f.tolerance !== undefined ? toleranceSd(f.tolerance) : 0));
   const at = { ...settings };
@@ -50,8 +51,9 @@ export function propagationOfError(study, predict, settings, { sigma = 0, extra 
   let v1 = 0, v2 = 0, bias = 0;
   const parts = idx.map(i => { const c = g[i] ** 2 * sds[i] ** 2; v1 += c; return { id: fs[i].id, sd: sds[i], slope: g[i], contribution: c }; });
   if (order > 1) for (const i of idx) { bias += 0.5 * H[i][i] * sds[i] ** 2; for (const j of idx) v2 += 0.5 * H[i][j] ** 2 * sds[i] ** 2 * sds[j] ** 2; }
-  const v = v1 + v2 + sigma * sigma;
-  return { mean: f0 + bias, nominal: f0, sd: Math.sqrt(v), var: v, transmitted: v1 + v2, residual: sigma * sigma, parts, curvature: v2, at };
+  const res = residualVar ? residualVar(f0 + bias) : sigma * sigma;
+  const v = v1 + v2 + res;
+  return { mean: f0 + bias, nominal: f0, sd: Math.sqrt(v), var: v, transmitted: v1 + v2, residual: res, parts, curvature: v2, at };
 }
 
 /**
@@ -123,10 +125,10 @@ function nm(fn, x0, step, iter = 800) {
 }
 
 /** POE surface: σ_y over two continuous control factors, others at `at`. */
-export function poeGrid(study, predict, at, fx, fy, { n = 31, sigma = 0 } = {}) {
+export function poeGrid(study, predict, at, fx, fy, { n = 31, sigma = 0, residualVar } = {}) {
   const X = study.factors.find(f => f.id === fx), Y = study.factors.find(f => f.id === fy);
   const xs = [...Array(n).keys()].map(i => decode(X, -1 + 2 * i / (n - 1))), ys = [...Array(n).keys()].map(i => decode(Y, -1 + 2 * i / (n - 1)));
-  return { fx, fy, xs, ys, cells: ys.map(yv => xs.map(xv => propagationOfError(study, predict, { ...at, [fx]: xv, [fy]: yv }, { sigma }))) };
+  return { fx, fy, xs, ys, cells: ys.map(yv => xs.map(xv => propagationOfError(study, predict, { ...at, [fx]: xv, [fy]: yv }, { sigma, residualVar }))) };
 }
 
 export { code as _code };

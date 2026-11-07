@@ -205,6 +205,16 @@ Residuals  10     19.53
 (`--distribution` tries another kind than the response's; set it on the Define step, or in the
 study file, to keep it.)
 
+A prediction, with the interval for one new run that plates twice the volume:
+
+```console
+$ doe predict counts.aikidoe.json "colonies ~ A + B + C + A:B + A:C" --at "A=1,B=-1,C=0" --exposure 2
+settings        rate (per unit exposure)  95% CI (mean)  95% PI (one run, exposure 2)
+--------------  ------------------------  -------------  ----------------------------
+A=1, B=-1, C=0                     14.24  10.98 … 18.46  8.5 … 21.5
+Poisson counts: the mean's interval is computed on the log scale and transformed back; the prediction interval is for what a new run would give (count / exposure), allowing for the uncertainty in the fit
+```
+
 What the fit gives:
 
 - **Coefficients** on the link scale, with z tests (t tests when the dispersion is estimated).
@@ -217,10 +227,22 @@ What the fit gives:
 - The **analysis of deviance**: the deviance each term explains, a likelihood-ratio χ² on its df
   (sequential, type I, as R's `anova`; or type II and III, as `car::Anova`). Model reduction
   uses the same tests, or AICc.
-- **Residuals**: standardised deviance residuals for the diagnostic plots.
-- Predictions (the Optimise step, `doe predict`) on the response scale — a rate, a proportion —
-  with confidence intervals transformed from the link scale, so they never leave the possible
-  range.
+- **Residuals**: standardised deviance residuals, in a **half-normal plot with a simulated
+  envelope**: 99 data sets are simulated from the fitted model and refitted, and the band holds
+  95 % of their residuals at each rank. Points above it are larger than the model expects —
+  overdispersion, an outlier or a missing term. Simulation makes the check fair for small counts
+  and few trials, where deviance residuals are far from normal.
+- **Predictions** (the Optimise step, `doe predict`) on the response scale — a rate, a
+  proportion — with a confidence interval for the mean transformed from the link scale, so it
+  never leaves the possible range, and a **prediction interval** for what one new run would give:
+  the quantiles of the count (Poisson, negative binomial) or of the successes out of the run's
+  trials (binomial), averaged over the uncertainty in the fit (and in θ). `--exposure` and
+  `--trials` set the new run's; confirmation runs are checked against the interval for the mean
+  of the runs actually done. Counts are whole numbers, so the interval covers at least 95 %; with
+  the negative binomial and few runs, θ is estimated too large and the interval is a little short.
+- The Optimise step's **robustness** panel adds the count's own variation at the predicted mean
+  (μ for the Poisson, μ + μ²/θ for the negative binomial, μ(1 − μ)/n for a proportion) to what the
+  factors' tolerances transmit. Yield and surrogates are for continuous outputs only.
 
 Two checks come with every fit:
 
@@ -234,9 +256,9 @@ Two checks come with every fit:
   flags it; **Firth's penalised likelihood** (`doe fit … --firth`; the Analyse step's button)
   gives finite estimates with Wald tests and intervals (as `brglm2` and `logistf`).
 
-Not yet: random effects for counts (split-plot designs and nested readings are fitted as if every
-run were independent, with a warning), prediction intervals for a single new count, and power for
-counts and proportions ([issue #64](https://github.com/byzantic/aikidoe/issues/64)).
+Power for counts and proportions is in [power](concepts.md#power). Not yet: random effects for
+counts (split-plot designs and nested readings are fitted as if every run were independent, with a
+warning) ([issue #64](https://github.com/byzantic/aikidoe/issues/64)).
 
 ## Mixed models
 

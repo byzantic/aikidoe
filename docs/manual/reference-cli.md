@@ -71,6 +71,7 @@ Commands
                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
        adds a stage of runs to the design as a new block
   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
+       (counts and proportions: [--exposure e] [--trials n] for the new run)
        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses

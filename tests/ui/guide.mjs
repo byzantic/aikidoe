@@ -45,6 +45,7 @@ try {
   await choose('no');                       // plates
   await choose('no');                       // curvature
   await choose('none');                     // constraints
+  await choose('measurement');              // the kind of result
   await choose('medium');
   await type('budget', 24);
   await choose('yes');                      // stages
@@ -61,7 +62,7 @@ try {
   check('answers are kept in this browser', await current() === 'aim');
   await choose('optimise'); await choose('good'); await type('factors', 3);
   await page.click('#guide-skip'); await settle();
-  await choose('no'); await choose('continuous'); await type('htc', 0); await choose('no'); await choose('no'); await choose('corners'); await choose('medium');
+  await choose('no'); await choose('continuous'); await type('htc', 0); await choose('no'); await choose('no'); await choose('corners'); await choose('measurement'); await choose('medium');
   await page.click('#guide-skip'); await settle();
   await choose('no');
   check('optimise 3 factors, extremes unsafe: Box–Behnken', /Box–Behnken design \(15 runs\)/.test(await page.textContent('.guide-headline')));
@@ -97,7 +98,7 @@ try {
   check('asked whether the factors add up to a total', await current() === 'mixture');
   await choose('all'); await choose('limits');
   check('no factorial questions for a mixture: groups next', await current() === 'groups');
-  await choose('no'); await choose('no'); await choose('medium'); await page.click('#guide-skip'); await settle(); await choose('yes');
+  await choose('no'); await choose('no'); await choose('measurement'); await choose('medium'); await page.click('#guide-skip'); await settle(); await choose('yes');
   check('the plan: an extreme-vertices mixture design, the mixture lesson, no recommender', /Mixture design for 3 ingredients: extreme vertices/.test(await page.textContent('.guide-headline'))
     && await page.locator('[data-guide-lesson="mixture"]').count() === 1 && await page.locator('#guide-designs').count() === 0);
   await page.click('#guide-create'); await settle();

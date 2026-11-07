@@ -6,7 +6,7 @@ import { plot } from './plot.js';
 import { num, pval } from '../js/format.js';
 import { normal } from '../js/dist.js';
 import { anova } from '../js/model/fit.js';
-import { glmConfint } from '../js/model/glm.js';
+import { glmConfint, glmEnvelope } from '../js/model/glm.js';
 import { noiseOf } from '../js/model/noise.js';
 import { hierarchyViolations } from '../js/model/formula.js';
 
@@ -78,10 +78,27 @@ export function glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis', 'diagnostics')),
       h('div', { class: 'plots' },
         h('figure', {}, h('figcaption', {}, `Standardised deviance residuals against the linear predictor (${fit.link} scale)`), plot({ xLabel: `fitted (${fit.link})`, yLabel: 'std. deviance residual', height: 220, hlines: [{ y: 0 }], series: [{ points: pts.map(p => ({ x: p.fitted, y: p.res, title: `run ${p.run}` })) }] })),
-        h('figure', {}, h('figcaption', {}, 'Normal plot of standardised deviance residuals'), plot({ xLabel: 'normal quantile', yLabel: 'std. deviance residual', height: 220, series: [{ points: qq }, { kind: 'line', cls: 'dash s2', points: [{ x: qq[0]?.x ?? -2, y: qq[0]?.x ?? -2 }, { x: qq.at(-1)?.x ?? 2, y: qq.at(-1)?.x ?? 2 }] }] })),
+        envelopeFigure(fit, study),
         h('figure', {}, h('figcaption', {}, 'In run order (drift?)'), plot({ xLabel: 'run order', yLabel: 'std. deviance residual', height: 220, hlines: [{ y: 0 }], series: [{ points: pts.map(p => ({ x: p.order, y: p.res, title: `run ${p.run}` })) }] }))),
       big.length ? h('div', { class: 'msg warning' }, `Standardised deviance residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.res, 3)})`).join(', ')}. Check those results.`) : null,
-      h('p', { class: 'muted small' }, 'Deviance residuals are roughly normal when counts are not too small (above about 5) or trials not too few; with smaller counts, the plots are rough guides.'));
+      h('p', { class: 'muted small' }, 'The half-normal plot compares the residuals with 99 data sets simulated from the fitted model (the band holds 95 % of them at each rank): points above the band are larger than the model expects — overdispersion, an outlier or a missing term. Simulating makes the check fair for small counts and few trials, where residuals are far from normal.'));
   }
   return [summary, testsPanel, diag];
+}
+
+// half-normal plot of |standardised deviance residuals| with a simulated envelope (Atkinson)
+const envCache = new WeakMap();
+function envelopeFigure(fit, study) {
+  let env = envCache.get(fit.y);
+  const key = JSON.stringify([fit.columns, fit.distribution, fit.link, fit.firth]);
+  if (!env || env.key !== key) { try { env = { key, rows: glmEnvelope(fit, { nsim: 99, seed: study.seed >>> 0 }) }; } catch { env = { key, rows: [] }; } envCache.set(fit.y, env); }
+  const rows = env.rows;
+  if (!rows.length) return null;
+  const out = rows.filter(e => e.observed > e.upper);
+  return h('figure', { id: 'glm-envelope' }, h('figcaption', {}, `Half-normal plot with a simulated envelope${out.length ? ` — ${out.length} point${out.length > 1 ? 's' : ''} above it` : ''}`),
+    plot({ xLabel: 'half-normal quantile', yLabel: '|std. deviance residual|', height: 220, series: [
+      { kind: 'line', cls: 'dash s2', points: rows.map(e => ({ x: e.q, y: e.upper })) },
+      { kind: 'line', cls: 'dash s2', points: rows.map(e => ({ x: e.q, y: e.lower })) },
+      { kind: 'line', cls: 's2', points: rows.map(e => ({ x: e.q, y: e.median })) },
+      { points: rows.map(e => ({ x: e.q, y: e.observed, hi: e.observed > e.upper, title: `run ${fit.rows[e.row]?.run}: ${num(e.observed, 3)}` })) }] }));
 }

@@ -20,6 +20,7 @@ import { predict } from '../model/fit.js';
 import { predictMixed, runMeanWeights } from '../model/mixed.js';
 import { observationsOf } from '../model/sites.js';
 import { studentT } from '../dist.js';
+import { predictiveInterval, DISTRIBUTIONS } from '../model/glm.js';
 
 const runs = (study) => study.design?.runs ?? (() => { throw new Error('the study has no design yet'); })();
 // coded row of a run: continuous coded value, two-level categorical ±1, other categorical index
@@ -97,10 +98,14 @@ export function confirmationRuns(study, fit, settings, { replicates = 1, level =
         predictions: full.map((s, i) => ({ settings: s, fit: one[i].fit, se: one[i].se, predLower: one[i].predLower, predUpper: one[i].predUpper, meanLower: all[i].predLower, meanUpper: all[i].predUpper, n: replicates })) } };
   }
   const pred = predict(fit, full, { level });
+  // counts and proportions: what the predictive distribution needs, to recompute it for the number of
+  // runs actually done (and their exposure or trials)
+  const glm = fit.distribution ? { distribution: fit.distribution, link: fit.link, dispersion: fit.dispersion, dispersionEstimated: fit.dispersionEstimated,
+    ...(fit.theta !== undefined ? { theta: fit.theta, thetaSE: fit.thetaSE } : {}), trials: [...fit.weights].sort((a, b) => a - b)[Math.floor(fit.weights.length / 2)] } : null;
   return { kind: 'confirm', X, runKind, ...(split ? { wholePlot } : {}), note: `${X.length} confirmation run(s) for ${fit.response}`,
     params: { response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.filter(t => !t.block).map(t => t.label).join(' + ') || '1'}`, level,
-      sigma: fit.sigma, df: fit.dfRes,
-      predictions: full.map((s, i) => ({ settings: s, fit: pred[i].fit, se: pred[i].se, predLower: pred[i].predLower, predUpper: pred[i].predUpper })) } };
+      sigma: fit.sigma, df: fit.dfRes, ...(glm ? { glm } : {}),
+      predictions: full.map((s, i) => ({ settings: s, fit: pred[i].fit, se: pred[i].se, predLower: pred[i].predLower, predUpper: pred[i].predUpper, ...(glm ? { link: pred[i].link, seLink: pred[i].seLink } : {}) })) } };
 }
 
 /**
@@ -191,13 +196,22 @@ export function checkConfirmation(study, response) {
       const same = (r) => study.factors.every(f => eq(r.settings[f.id], p.settings[f.id]));
       const ids = h.runs.filter(id => same(runs(study).find(r => r.run === id)));
       // observed: the mean of the run means (each run may have several readings: wafers, sites)
-      const runMeans = ids.map(id => observationsOf(study, response).filter(o => o.run === id && o.value !== null).map(o => o.value)).filter(v => v.length).map(v => v.reduce((a, b) => a + b, 0) / v.length);
+      const g = h.params.glm, resp = study.responses.find(r => r.id === response);
+      // counts and proportions: each run's count per unit exposure, or proportion of its trials
+      const per = (o) => (!g ? o.value : DISTRIBUTIONS[g.distribution === 'bernoulli' ? 'binomial' : g.distribution].counts ? o.value / (o.exposure ?? 1) : o.value / (o.trials ?? resp?.trials ?? 1));
+      const obsOf = ids.map(id => observationsOf(study, response).filter(o => o.run === id && o.value !== null)).filter(v => v.length);
+      const runMeans = obsOf.map(v => v.map(per).reduce((a, b) => a + b, 0) / v.length);
       const n = runMeans.length, mean = n ? runMeans.reduce((a, b) => a + b, 0) / n : null;
       let lo = p.predLower, hi = p.predUpper;
-      if (h.params.mixed) {
+      if (g && n >= 1) {
+        // the predictive distribution of the mean of the n runs done, with their exposure or trials
+        const all = obsOf.flat(), ex = all.reduce((a, o) => a + (o.exposure ?? 1), 0) / all.length, tr = all.reduce((a, o) => a + (o.trials ?? resp?.trials ?? g.trials ?? 1), 0) / all.length;
+        const iv = predictiveInterval({ ...g, distribution: g.distribution === 'bernoulli' ? 'binomial' : g.distribution, weights: [g.trials ?? 1] }, p.link, p.seLink, { level: h.params.level, n, exposure: ex, trials: tr });
+        lo = iv.lower; hi = iv.upper;
+      } else if (h.params.mixed) {
         // stored at planning time: one run, or the mean of the planned replicates
         if (n === p.n && n > 1) { lo = p.meanLower; hi = p.meanUpper; }
-      } else if (n > 1) {
+      } else if (n > 1 && !g) {
         // interval for the mean of n new observations: ŷ ± t · √(se² + σ²/n)
         const t = studentT.ppf(1 - (1 - h.params.level) / 2, h.params.df), w = t * Math.sqrt(p.se ** 2 + h.params.sigma ** 2 / n); lo = p.fit - w; hi = p.fit + w; }
       out.push({ settings: p.settings, predicted: p.fit, lower: lo, upper: hi, n, observed: mean,
