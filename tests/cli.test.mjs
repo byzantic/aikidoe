@@ -305,6 +305,12 @@ try {
   check('… --reduce is refused for the GLMM', r.code === 1 && /drop terms by hand/.test(r.err));
   r = run('fit', 'jg.aikidoe.json', 'n ~ T + D');
   check('fit (GLMM): the table, σ and its test, the small-sample note', r.code === 0 && /random intercept per whole plot/.test(r.out) && /whole plot σ = .* on the log scale/.test(r.out) && /t on 10 − 2 = 8 df/.test(r.out), r.out + r.err);
+  o = js('power', 'jg.aikidoe.json', '--model', 'T + D', '--response', 'n', '--baseline', '20', '--ratio', '1.5', '--sigma-wp', '0.3');
+  check('power --json --sigma-wp: T judged on the 10 whole plots (F, 8 df), D by χ²', o.wholePlots === 10 && o.dfGroups === 8 && o.sigmaWholePlot === 0.3 && o.terms[0].test === 'F' && o.terms[0].ddf === 8 && o.terms[1].test === 'chi2' && o.terms[0].power < o.terms[1].power);
+  r = run('power', 'jg.aikidoe.json', '--model', 'T + D', '--response', 'n', '--baseline', '20', '--ratio', '1.5');
+  check('… without --sigma-wp: the warning says to give it', r.code === 0 && /give --sigma-wp/.test(r.out));
+  r = run('power', 'jc.aikidoe.json', '--response', 'colonies', '--baseline', '20', '--sigma-wp', '0.3');
+  check('… --sigma-wp without whole plots is refused', r.code === 1 && /split-plot design/.test(r.err));
   r = run('report', 'jg.aikidoe.json', '--out', 'jg.html', '--date', '2026-01-01');
   const rep = readFileSync(join(dir, 'jg.html'), 'utf8');
   check('report: the split-plot counts with the random whole-plot intercept and its tests', r.code === 0 && /random intercept per whole plot \(10 of them/.test(rep) && /Likelihood-ratio tests \(type I\)/.test(rep) && /whole plot σ = /.test(rep), r.out + r.err);
