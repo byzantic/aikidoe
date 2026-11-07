@@ -20,6 +20,10 @@ Commands
        SPEC for a factor: id:low:high[:units][:log]  or  id=level1,level2,…  (categorical)
                           append ! to mark it hard to change, e.g. T:900:1000:°C!
        SPEC for a response: id[:units]
+       [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
+  design STUDY --mixture lattice|centroid|vertices|optimal [--degree m] [--axial] [--centre n]
+       [--runs N --model mixquadratic|… --criterion D|I] [--replicates r] [--seed S]   a mixture design
+       (lattice and centroid in pseudo-components need a simplex region; process factors are crossed)
   design STUDY  (--full | --runs N | --generators "E=ABCD,…" | --pb [--runs N]
                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])

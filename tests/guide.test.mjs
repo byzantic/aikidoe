@@ -15,10 +15,10 @@ section('the questionnaire');
     && asked({ aim: 'screen', types: 'multi', groups: 'yes' }).filter(q => q.id === 'categorical' || q.id === 'groupSize').length === 2);
   check('no curvature question when optimising (it is assumed)', !asked({ aim: 'optimise' }).some(q => q.id === 'curvature'));
   const a = {};
-  const pick = { aim: 'understand', measurement: 'good', factors: 3, names: null, types: 'continuous', htc: 0, groups: 'no', plates: 'no', curvature: 'unsure', constraints: 'none', effect: 'medium', budget: null, stages: 'yes' };
+  const pick = { aim: 'understand', measurement: 'good', factors: 3, names: null, mixture: 'no', types: 'continuous', htc: 0, groups: 'no', plates: 'no', curvature: 'unsure', constraints: 'none', effect: 'medium', budget: null, stages: 'yes' };
   let q, n = 0;
   while ((q = nextQuestion(a)) && n++ < 30) a[q.id] = pick[q.id];
-  check('a full path ends (optional questions skipped with null)', q === null && n === 13, `${n} questions`);
+  check('a full path ends (optional questions skipped with null)', q === null && n === 14, `${n} questions`);
   check('number answers: whole, in range, hard-to-change at most the factors', checkAnswer(QUESTIONS.find(x => x.id === 'factors'), 2.5) && checkAnswer(QUESTIONS.find(x => x.id === 'factors'), 0)
     && checkAnswer(QUESTIONS.find(x => x.id === 'htc'), 4, { factors: 3 }) && checkAnswer(QUESTIONS.find(x => x.id === 'htc'), 0, { factors: 3 }) === null && checkAnswer(QUESTIONS.find(x => x.id === 'budget'), null) === null);
   check('every question says why it matters', QUESTIONS.every(x => x.why.length > 40 && x.help.length === 2));
@@ -66,6 +66,24 @@ section('advice for typical cases');
   const ds = guideStudy({ aim: 'dose', curves: 2 });
   check('… its study: a dose factor and a sample factor (reference, test)', ds.factors.map(f => f.id).join() === 'dose,sample' && ds.factors[1].levels.join() === 'reference,test');
   check('dose: no questions about factors, types, curvature or effect size', !asked({ aim: 'dose' }).some(q => ['factors', 'types', 'htc', 'curvature', 'constraints', 'effect'].includes(q.id)));
+  r = A({ aim: 'optimise', factors: 3, mixture: 'all', bounds: 'none' });
+  check('a mixture of 3, lower limits only: a {3, 2} lattice with axial blends and the centroid (10 runs), the mixture lesson, no recommender goal',
+    r.family === 'mixture-lattice' && r.runs === 10 && r.goal === null && r.lessons.includes('mixture') && r.manual.some(m => m.page === 'designs-mixture') && r.notes.some(n => /slack-variable/.test(n)));
+  r = A({ aim: 'understand', factors: 5, mixture: 'some', components: 3, bounds: 'limits' });
+  check('3 ingredients with limits and 2 process factors: extreme vertices crossed with the process factors', r.family === 'mixture-vertices' && r.runs === 44 && r.plan.some(p => p.title === 'Process factors'));
+  check('a mixture skips the factorial questions (types, hard to change, curvature, constraints)', !asked({ aim: 'optimise', factors: 3, mixture: 'all' }).some(q => ['types', 'categorical', 'htc', 'curvature', 'constraints'].includes(q.id))
+    && asked({ aim: 'optimise', factors: 4, mixture: 'some' }).some(q => q.id === 'components') && checkAnswer(QUESTIONS.find(x => x.id === 'components'), 4, { factors: 4 }));
+  {
+    const L = { lattice: 'lattice', vertices: 'vertices', optimal: 'optimal' };
+    let bad = [];
+    for (const aim of ['screen', 'understand', 'optimise']) for (const k of [2, 3, 4, 5, 8]) for (const mixture of ['all', 'some']) for (const bounds of ['none', 'limits']) {
+      if (mixture === 'some' && k < 3) continue;
+      const a = { aim, measurement: 'good', factors: k, mixture, components: mixture === 'some' ? k - 1 : undefined, bounds, groups: 'no', plates: 'no', effect: 'medium', stages: 'yes' };
+      const s = guideStudy(a), v = validateStudy(s), r = advise(a);
+      if (v.errors.length || s.mixture.components.length !== (mixture === 'all' ? k : k - 1) || !L[r.family.replace('mixture-', '')] || !r.plan.length) bad.push(`${aim} ${k} ${mixture} ${bounds}: ${v.errors[0] ?? r.family}`);
+    }
+    check('every mixture combination: a valid mixture study and a mixture design family', !bad.length, bad.slice(0, 4).join('\n'));
+  }
   r = advise({ aim: 'measure', operators: 'several' });
   check('measure: gauge R&R 10 × 3 × 2', r.family === 'gauge' && r.runs === 60);
   r = advise({ aim: 'simulate', factors: 4 });

@@ -30,7 +30,7 @@ export function render(ctx) {
     const set = (fn) => update(x => fn(x.factors[i]));
     const cat = f.type === 'categorical' || (f.type === undefined && Array.isArray(f.levels) && f.levels.some(v => typeof v === 'string'));
     return h('tr', { 'data-factor': f.id },
-      h('td', {}, h('input', { class: 'id', value: f.id ?? '', disabled: locked, 'aria-label': 'factor id', onchange: (e) => set(o => { o.id = e.target.value.trim(); }) })),
+      h('td', {}, h('input', { class: 'id', value: f.id ?? '', disabled: locked, 'aria-label': 'factor id', onchange: (e) => update(x => { const old = x.factors[i].id, nu = e.target.value.trim(); x.factors[i].id = nu; if (x.mixture) x.mixture.components = x.mixture.components.map(c => (c === old ? nu : c)); }) })),
       h('td', {}, h('input', { type: 'text', value: f.name ?? '', 'aria-label': 'name', onchange: (e) => set(o => { o.name = e.target.value; }) })),
       h('td', {}, h('input', { class: 'short', value: f.units ?? '', 'aria-label': 'units', onchange: (e) => set(o => { if (e.target.value) o.units = e.target.value; else delete o.units; }) })),
       h('td', {}, select([{ value: 'continuous', label: 'continuous' }, { value: 'categorical', label: 'categorical' }], cat ? 'categorical' : 'continuous', (v) => set(o => {
@@ -43,14 +43,20 @@ export function render(ctx) {
         : [h('td', {}, h('input', { class: 'num', value: f.low ?? '', 'aria-label': 'low', onchange: (e) => set(o => numOrDelete(o, 'low', e.target.value)) })),
            h('td', {}, h('input', { class: 'num', value: f.high ?? '', 'aria-label': 'high', onchange: (e) => set(o => numOrDelete(o, 'high', e.target.value)) })),
            h('td', {}, select(['linear', 'log'], f.transform === 'log' ? 'log' : 'linear', (v) => set(o => { if (v === 'log') o.transform = 'log'; else delete o.transform; }), { 'aria-label': 'scale' }))],
+      h('td', { class: 'n' }, cat ? null : h('input', { type: 'checkbox', checked: !!d.mixture?.components.includes(f.id), disabled: locked, 'aria-label': 'mixture component', title: 'a component of a mixture: the components add up to a fixed total (low and high are its bounds)',
+        onchange: (e) => update(x => { const c = new Set(x.mixture?.components ?? []); if (e.target.checked) c.add(f.id); else c.delete(f.id); if (c.size) x.mixture = { ...(x.mixture ?? {}), components: x.factors.map(g => g.id).filter(id => c.has(id)) }; else delete x.mixture; }) })),
       h('td', { class: 'n' }, h('input', { type: 'checkbox', checked: !!f.htc, 'aria-label': 'hard to change', title: 'hard to change: set once per batch / furnace run (whole plot)', onchange: (e) => set(o => { o.htc = e.target.checked; }) })),
-      h('td', {}, h('button', { class: 'btn', disabled: locked || d.factors.length < 2, title: 'remove factor', onclick: () => update(x => { x.factors.splice(i, 1); x.constraints = []; }) }, '✕')));
+      h('td', {}, h('button', { class: 'btn', disabled: locked || d.factors.length < 2, title: 'remove factor', onclick: () => update(x => { const id = x.factors[i].id; x.factors.splice(i, 1); x.constraints = []; if (x.mixture) { x.mixture.components = x.mixture.components.filter(c => c !== id); if (!x.mixture.components.length) delete x.mixture; } }) }, '✕')));
   });
   const factors = h('section', { class: 'panel' }, h('h2', {}, 'Factors', help('concepts','factors-and-coded-units')),
     lockNote,
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'type', 'low', 'high', 'scale', 'hard to change', ''].map(t => h('th', {}, t)))),
+      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'type', 'low', 'high', 'scale', 'mixture', 'hard to change', ''].map(t => h('th', {}, t)))),
       h('tbody', {}, fRows))),
+    d.mixture ? h('div', { class: 'row small', id: 'mixture-total', style: 'margin-top:6px' },
+      h('b', {}, `Mixture: ${d.mixture.components.join(' + ')}`), ' add up to',
+      h('input', { class: 'num', type: 'number', step: 'any', value: d.mixture.total ?? 1, disabled: locked, 'aria-label': 'mixture total', onchange: (e) => update(x => { x.mixture.total = Number(e.target.value); }) }),
+      h('span', { class: 'muted' }, '(1 for fractions, 100 for per cent, or a batch mass). Low and high are each component’s bounds; the design and the models work in pseudo-components.'), help('designs-mixture', '')) : null,
     h('div', { class: 'row', style: 'margin-top:8px' },
       h('button', { class: 'btn', disabled: locked, onclick: () => update(x => { const id = nextId(x.factors.map(f => f.id), String.fromCharCode(65 + Math.min(x.factors.length, 25))); x.factors.push({ id, name: `Factor ${id}`, low: -1, high: 1 }); }) }, '+ continuous factor'),
       h('button', { class: 'btn', disabled: locked, onclick: () => update(x => { const id = nextId(x.factors.map(f => f.id), 'g'); x.factors.push({ id, name: 'Categorical factor', type: 'categorical', levels: ['L1', 'L2'] }); }) }, '+ categorical factor'),

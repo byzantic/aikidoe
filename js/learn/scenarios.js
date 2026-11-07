@@ -138,4 +138,27 @@ export const SCENARIOS = {
     factors: [{ id: 'conc', name: 'Inhibitor', units: 'µM', low: 0, high: 10 }, { id: 'batch', name: 'Batch', levels: ['qualified', 'new'] }],
     dose: { factor: 'conc', curve: 'batch', c: 2, d: 100, slope: [0.8, 1.8], ec50: [0.005, 0.3] },
   },
+  // mixtures (issue #62): used by the mixture topic only. The factors are the components, their
+  // bounds the formulation's limits; mixture.total is what they add up to
+  'culture-medium': {
+    title: 'Culture-medium supplement',
+    text: 'A cell line is grown in a basal medium with a supplement mix of glucose, glutamine and a growth supplement. The three are blended to a fixed total, and the process group wants the blend that gives the highest viable-cell density.',
+    response: { id: 'density', name: 'Viable-cell density', units: '10⁶ cells/mL', base: 5, sigma: 0.15, goal: 'maximize', decimals: 2 },
+    factors: [{ id: 'glucose', name: 'Glucose', units: '%', low: 40, high: 80 }, { id: 'glutamine', name: 'Glutamine', units: '%', low: 10, high: 40 }, { id: 'supplement', name: 'Growth supplement', units: '%', low: 5, high: 30 }],
+    mixture: { total: 100 },
+  },
+  'ceramic-glaze': {
+    title: 'Ceramic glaze',
+    text: 'A stoneware glaze is a blend of feldspar, silica and whiting (calcium carbonate). The studio wants the recipe with the highest gloss after the standard firing, within the proportions that melt and fit the body.',
+    response: { id: 'gloss', name: 'Gloss', units: 'GU', base: 70, sigma: 2, goal: 'maximize', decimals: 1 },
+    factors: [{ id: 'feldspar', name: 'Feldspar', units: '%', low: 30, high: 65 }, { id: 'silica', name: 'Silica', units: '%', low: 20, high: 45 }, { id: 'whiting', name: 'Whiting', units: '%', low: 10, high: 30 }],
+    mixture: { total: 100 },
+  },
+  alloy: {
+    title: 'Brass alloy',
+    text: 'A cast copper alloy is mostly copper with small additions of zinc and tin. The foundry wants the composition with the highest tensile strength within the specification limits of each element.',
+    response: { id: 'strength', name: 'Tensile strength', units: 'MPa', base: 300, sigma: 6, goal: 'maximize', decimals: 0 },
+    factors: [{ id: 'Cu', name: 'Copper', units: 'wt %', low: 80, high: 95 }, { id: 'Zn', name: 'Zinc', units: 'wt %', low: 3, high: 15 }, { id: 'Sn', name: 'Tin', units: 'wt %', low: 1, high: 6 }],
+    mixture: { total: 100 },
+  },
 };

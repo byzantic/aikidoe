@@ -47,12 +47,14 @@ The app's simulated examples are virtual processes too.
 | `rsm` | response surfaces | find an optimum inside the region; predict at given settings |
 | `split-plot` | hard-to-change factors | a factor that is costly to reset, and varies each time it is |
 | `dose` | dose–response | a reference and a test compound, 48 runs: the EC50 of the test and its relative potency ([dose–response](dose-response.md)) |
+| `mixture` | mixtures | three components adding up to 100, with limits, 14 runs: the best blend and a prediction ([mixture designs](designs-mixture.md)) |
 | `plate` | microplates | 48 runs in a 96-well plate whose edge, rows and columns differ: lay the runs out, then analyse ([microplates](plates.md)) |
 
 Each comes in three difficulties — *easy*, *medium*, *hard* — which set the smallest active effect
 (4, 3 and 2.4 σ) and, for some topics, the number of factors. Scenarios (gate-oxide growth, plasma
 etch, CVD deposition, reactor yield, coupler tuning; for the plate topic, an enzyme assay and a
-cell-viability assay; for the dose topic, compound potency and an inhibitor batch) give the factors
+cell-viability assay; for the dose topic, compound potency and an inhibitor batch; for the mixture topic, a
+cell-culture supplement, a ceramic glaze and a bronze) give the factors
 names, units and ranges.
 
 ## Solvable by construction

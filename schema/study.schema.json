@@ -3,7 +3,7 @@
   "$id": "https://byzantic.github.io/aikidoe/schema/study.schema.json",
   "title": "aikidoe study",
   "description": "An aikidoe study file (*.aikidoe.json), format version 1: factors, responses, constraints, the design and its run order, observations, drop-in sites, the stage history and an optional simulator. Comments and trailing commas are allowed in the file (JSON with comments); this schema describes the JSON value.",
-  "$comment": "Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.",
+  "$comment": "Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; mixture components are continuous factors (not log, not hard to change) with low ≥ 0, their lows add up to less than the total and their highs to at least it, and every run's components add up to the total; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.",
   "type": "object",
   "required": [
     "aikidoe",
@@ -70,6 +70,10 @@
     "plates": {
       "$ref": "#/$defs/plates",
       "description": "microplate layout: each run in a well, controls on every plate"
+    },
+    "mixture": {
+      "$ref": "#/$defs/mixture",
+      "description": "mixture components: factors that are shares of a whole, adding up to the total (issue #62)"
     },
     "history": {
       "type": "array",
@@ -906,6 +910,30 @@
             }
           },
           "description": "results of the control wells"
+        }
+      }
+    },
+    "mixture": {
+      "type": "object",
+      "required": [
+        "components"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "description": "ids of continuous factors (not log, not hard to change, low ≥ 0) that are components of the mixture"
+        },
+        "total": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1,
+          "description": "what the components add up to in every run (1, 100 %, or the batch size)"
         }
       }
     }

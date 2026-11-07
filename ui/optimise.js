@@ -7,6 +7,8 @@ import { fittedModels, optimiseDesirability, profile, desirabilityGrid, dValue, 
 import { decode, code } from '../js/study.js';
 import { propagationOfError, dualResponse, poeGrid } from '../js/model/robust.js';
 import { yieldPanel } from './yield.js';
+import { ternaryPlot, shares } from './mixture.js';
+import { referenceBlend, coxBlend, coxRange, ternaryGrid, mixtureOf } from '../js/design/mixture.js';
 
 const GOALS = [{ value: 'none', label: '—' }, { value: 'maximize', label: 'maximise' }, { value: 'minimize', label: 'minimise' }, { value: 'target', label: 'target' }, { value: 'range', label: 'in range' }];
 
@@ -105,14 +107,17 @@ export function render(ctx) {
   }
 
   // current settings: chosen by the user, else the optimum, else the centre
-  const centre = Object.fromEntries(study.factors.map(f => [f.id, f.type === 'categorical' ? f.levels[0] : decode(f, 0)]));
+  // (a mixture: the centroid of the region; a component moved alone moves the others along its Cox direction)
+  const centre = study.mixture ? referenceBlend(study) : Object.fromEntries(study.factors.map(f => [f.id, f.type === 'categorical' ? f.levels[0] : decode(f, 0)]));
   const at = { ...centre, ...(ui.result?.settings ?? {}), ...(ui.at ?? {}) };
+  const isComp = (id) => !!study.mixture?.components.includes(id);
+  const moveTo = (id, v) => { if (!isComp(id)) return { ...at, [id]: v }; const [lo, hi] = coxRange(study, at, id); return coxBlend(study, at, id, Math.min(hi, Math.max(lo, v))); };   // within the region
   const isCCD = ['ccd'].includes(study.design?.kind) || study.design?.params?.stages?.some(s => s.kind === 'axial');
   const region = ui.region ?? 'cube';
   const controls = h('div', { class: 'row' },
-    h('label', { class: 'inline' }, 'region', select([{ value: 'cube', label: 'factor ranges (cube)' }, { value: 'sphere', label: `sphere${isCCD ? ' (to the axial points)' : ''}` }], region, (v) => set({ region: v }), { 'aria-label': 'region' })),
+    study.mixture ? h('span', { class: 'small muted' }, `the mixture region: ${study.mixture.components.join(' + ')} = ${study.mixture.total} within the components’ bounds`) : [h('label', { class: 'inline' }, 'region', select([{ value: 'cube', label: 'factor ranges (cube)' }, { value: 'sphere', label: `sphere${isCCD ? ' (to the axial points)' : ''}` }], region, (v) => set({ region: v }), { 'aria-label': 'region' })),
     h('label', { class: 'inline', title: 'half-width of the cube or radius of the sphere, in coded units' }, region === 'sphere' ? 'radius' : 'half-width',
-      h('input', { class: 'num', type: 'number', min: 0.1, step: 0.05, value: ui.radius ?? (region === 'sphere' ? (study.design?.params?.alpha ?? +Math.sqrt(study.factors.filter(f => f.type !== 'categorical').length).toFixed(3)) : 1), 'aria-label': 'radius', onchange: (e) => set({ radius: Number(e.target.value) }) })),
+      h('input', { class: 'num', type: 'number', min: 0.1, step: 0.05, value: ui.radius ?? (region === 'sphere' ? (study.design?.params?.alpha ?? +Math.sqrt(study.factors.filter(f => f.type !== 'categorical').length).toFixed(3)) : 1), 'aria-label': 'radius', onchange: (e) => set({ radius: Number(e.target.value) }) }))],
     h('label', { class: 'inline' }, 'hold', ...study.factors.map(f => h('label', { class: 'inline small' }, h('input', { type: 'checkbox', checked: !!ui.hold?.[f.id], 'aria-label': `hold ${f.id}`, onchange: (e) => set({ hold: { ...(ui.hold ?? {}), [f.id]: e.target.checked } }) }), f.id))),
     h('button', { class: 'btn primary', id: 'optimise', onclick: () => {
       try {
@@ -130,7 +135,8 @@ export function render(ctx) {
       ...ds.map(x => h('span', { class: 'stat' }, `${x.id} `, h('b', {}, num(x.y)), ` d = ${num(x.d, 3)} `, h('span', { class: 'dbar' }, h('span', { style: `width:${(100 * x.d).toFixed(0)}%` }))))),
     dataTable([{ key: 'f', label: 'factor' }, { key: 'v', label: 'setting' }], study.factors.map(f => ({ f: f.units ? `${f.id} (${f.units})` : f.id,
       v: f.type === 'categorical' ? select(f.levels, at[f.id], (v) => set({ at: { ...at, [f.id]: v } }), { 'aria-label': `at ${f.id}` })
-        : h('input', { class: 'num', type: 'number', step: 'any', value: +Number(at[f.id]).toPrecision(5), 'aria-label': `at ${f.id}`, onchange: (e) => set({ at: { ...at, [f.id]: Number(e.target.value) } }) }) }))),
+        : h('input', { class: 'num', type: 'number', step: 'any', value: +Number(at[f.id]).toPrecision(5), 'aria-label': `at ${f.id}`, onchange: (e) => set({ at: moveTo(f.id, Number(e.target.value)) }) }) }))),
+    study.mixture ? h('p', { class: 'muted small' }, `Changing a component moves the other components in proportion (its Cox direction), so the blend still adds up to ${study.mixture.total}; it stops at the edge of the region.`) : null,
     D === 0 ? h('p', { class: 'muted small' }, 'D = 0: at least one response is outside its acceptable range here.') : null);
 
   // profiler
@@ -146,19 +152,31 @@ export function render(ctx) {
         return h('div', { class: 'cell', 'data-profile': `${m.id}:${f.id}`, title: 'click to set this factor', onclick: (e) => {
           const svg = e.currentTarget.querySelector('svg'), b = svg.getBoundingClientRect(), u = (e.clientX - b.left) / b.width * 240;
           const t = Math.max(0, Math.min(1, (u - 52) / (240 - 52 - 14)));
-          set({ at: { ...at, [f.id]: f.type === 'categorical' ? f.levels[Math.round(t * (f.levels.length - 1))] : decode(f, -1 + 2 * t) } });
+          const v = f.type === 'categorical' ? f.levels[Math.round(t * (f.levels.length - 1))] : decode(f, -1 + 2 * t);
+          if (isComp(f.id)) { const xs = p.xs; if (v < xs[0] || v > xs[xs.length - 1]) return; }   // outside the region along this direction
+          set({ at: moveTo(f.id, v) });
         } }, plot({ width: 240, height: 130, xDomain: f.type === 'categorical' ? [-0.5, f.levels.length - 0.5] : [-1.05, 1.05],
           series: [{ kind: 'ribbon', points: xv.map((x, j) => ({ x, lo: c.lower[j], hi: c.upper[j] })) }, { kind: f.type === 'categorical' ? 'points' : 'line', points: xv.map((x, j) => ({ x, y: c.fit[j] })) }],
           vlines: [{ x: f.type === 'categorical' ? f.levels.indexOf(at[f.id]) : code(f, at[f.id]), cls: 'cur' }], hlines: lim.map(y => ({ y, cls: 'lim' })),
           xLabel: '', yLabel: '' }));
       })]));
   const profPanel = h('section', { class: 'panel', id: 'profiler' }, h('h2', {}, 'Prediction profiler', help('optimisation','profiler')),
-    h('p', { class: 'small' }, 'Each response against each factor (coded −1 … +1) with the others held at the settings above, with 95% confidence bands; dashed lines mark the response’s limits. Click a plot to move that factor.'), grid);
+    h('p', { class: 'small' }, 'Each response against each factor (coded −1 … +1) with the others held at the settings above, with 95% confidence bands; dashed lines mark the response’s limits. Click a plot to move that factor.',
+      study.mixture ? ' For a mixture component the trace follows its Cox direction (the other components keep their proportions) and stops at the edge of the region; the axis runs over the component’s own range.' : ''), grid);
 
   // overlay of D over two continuous factors
   const contF = study.factors.filter(f => f.type !== 'categorical');
   let overlay = null;
-  if (contF.length >= 2) {
+  if (study.mixture && study.mixture.components.length >= 3) {
+    const comps = study.mixture.components, sel = (ui.tern ?? comps.slice(0, 3)).filter(id => comps.includes(id));
+    const three = sel.length === 3 && new Set(sel).size === 3 ? sel : comps.slice(0, 3);
+    const Dat = (st) => { const dd = ms.map(m => dValue(m.spec, m.predict(st))); return dOverall(dd, ms.map(m => m.spec.importance ?? 1)); };
+    const gr = ternaryGrid(study, Dat, { components: three, at, n: 30, pseudo: true });
+    overlay = h('section', { class: 'panel', id: 'overlay' }, h('h2', {}, 'Overlay', help('optimisation','overlay')),
+      comps.length > 3 ? h('div', { class: 'row small' }, 'triangle of', ...[0, 1, 2].map(k => select(comps, three[k], (v) => { const c = three.slice(); c[k] = v; set({ tern: c }); }, { 'aria-label': `overlay component ${k + 1}` })), h('span', { class: 'muted' }, 'the others at the settings above')) : null,
+      ternaryPlot({ grid: gr, label: 'D', best: shares(at, three, gr) }),
+      h('p', { class: 'muted small' }, `Overall desirability over blends of ${three.join(', ')}${comps.length > 3 || mixtureOf(study).process.length ? ' (the other factors at the settings above)' : ''}; + marks the settings above. Grey: outside the components’ bounds or a constraint.`));
+  } else if (contF.length >= 2 && !study.mixture) {
     const used = new Set(ms.flatMap(m => m.fit.model.terms.flatMap(t => t.comps.flatMap(c => (c.f ? [c.f] : Object.keys(c.I))))));
     const pref = contF.filter(f => !f.noise).sort((a, b) => used.has(b.id) - used.has(a.id)).concat(contF.filter(f => f.noise));
     const fx = ui.ox ?? pref[0].id, fy = ui.oy ?? pref.find(f => f.id !== fx).id;
@@ -176,5 +194,5 @@ export function render(ctx) {
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
       svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region.`));
   }
-  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui));
+  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, study.mixture ? null : robustPanel(ctx, at, set, ui), study.mixture ? null : yieldPanel(ctx, at, set, ui));
 }

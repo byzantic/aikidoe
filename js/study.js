@@ -36,7 +36,7 @@ const LEVELS = ['lot', 'run', 'wholePlot', 'wafer', 'site'];
 const TRANSFORMS = ['none', 'log'];
 
 const KEYS = {
-  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
+  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
   response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
@@ -492,6 +492,39 @@ function normHistory(h, design, errors) {
   }).filter(Boolean);
 }
 
+/**
+ * A mixture (issue #62): components (continuous factors) whose settings add up to a total (1, 100 %,
+ * a batch mass). Each component's low and high are its bounds. The components get a non-enumerable
+ * mix = { low, scale, total } used by model matrices: the L-pseudo-component (x − low) / scale with
+ * scale = total − Σ lows, which runs from 0 to 1 and adds up to 1.
+ */
+function normMixture(m, factors, errors) {
+  if (m === undefined) return undefined;
+  if (!isObj(m) || !Array.isArray(m.components)) { errors.push('mixture: must be { components: [factor ids], total }'); return undefined; }
+  for (const k of Object.keys(m)) if (!['components', 'total'].includes(k)) errors.push(`mixture.${k}: unknown key (allowed: components, total)`);
+  const total = m.total ?? 1;
+  if (!isNum(total) || !(total > 0)) errors.push('mixture.total: must be a positive number (1, 100, a batch mass)');
+  const comps = m.components;
+  if (comps.length < 2 || new Set(comps).size !== comps.length) errors.push('mixture.components: at least two different factors');
+  const fs = comps.map(id => factors.find(f => f.id === id));
+  comps.forEach((id, i) => {
+    const f = fs[i];
+    if (!f) errors.push(`mixture.components: unknown factor "${id}"`);
+    else if (f.type !== 'continuous') errors.push(`mixture.components: ${id} must be continuous (a proportion)`);
+    else {
+      if (f.transform !== 'none') errors.push(`mixture.components: ${id} must not be log-transformed`);
+      if (f.low < 0) errors.push(`mixture.components: ${id} has a negative lower bound`);
+      if (f.htc) errors.push(`mixture.components: ${id} cannot be hard to change (yet)`);
+    }
+  });
+  if (errors.some(e => e.startsWith('mixture'))) return { components: comps.slice(), total };
+  const L = fs.reduce((a, f) => a + f.low, 0), U = fs.reduce((a, f) => a + f.high, 0);
+  if (L >= total * (1 - 1e-12)) errors.push(`mixture: the lower bounds add up to ${+L.toPrecision(10)}, ${L > total ? 'more than' : 'all of'} the total ${total}: no room for the mixture to vary`);
+  else if (U < total - 1e-12 * total) errors.push(`mixture: the upper bounds add up to ${+U.toPrecision(10)}, less than the total ${total}`);
+  else for (const f of fs) Object.defineProperty(f, 'mix', { value: { low: f.low, scale: total - L, total }, enumerable: false, configurable: true });
+  return { components: comps.slice(), total };
+}
+
 /** Validate and normalise; never throws. → { study, errors, warnings } */
 export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   const errors = [], warnings = [];
@@ -518,6 +551,9 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   const ids = [...study.factors, ...study.responses].map(x => x.id).filter(Boolean);
   for (const id of new Set(ids)) if (ids.filter(x => x === id).length > 1) errors.push(`id "${id}" is used more than once (factor and response ids must all differ)`);
 
+  const mixture = normMixture(d.mixture, study.factors, errors);
+  if (mixture) study.mixture = mixture;
+
   if (d.constraints !== undefined && !Array.isArray(d.constraints)) errors.push('constraints: must be a list');
   study.constraints = (Array.isArray(d.constraints) ? d.constraints : []).map((c, i) => normConstraint(c, i, study.factors, errors)).filter(c => c !== null);
 
@@ -541,6 +577,13 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
     else study.simulator = JSON.parse(JSON.stringify(d.simulator));
   }
 
+  if (design && mixture && !errors.length) {
+    const tol = 1e-6 * mixture.total;
+    for (const r of design.runs) {
+      const s = mixture.components.reduce((a, id) => a + r.settings[id], 0);
+      if (Math.abs(s - mixture.total) > tol) { errors.push(`design.runs: run ${r.run}: the mixture components add up to ${+s.toPrecision(10)}, not ${mixture.total}`); break; }
+    }
+  }
   if (design && !errors.length && study.constraints.length) {
     for (const r of design.runs) if (!feasible(study, r.settings)) warnings.push(`design.runs: run ${r.run} violates a constraint`);
   }

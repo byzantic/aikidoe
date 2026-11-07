@@ -39,6 +39,12 @@ const DESIGN = {
     await page.fill('input[aria-label="zero doses"]', '1'); await page.keyboard.press('Tab'); await settle();
     await page.fill('input[aria-label="dose replicates"]', '1'); await page.keyboard.press('Tab'); await settle();
   },
+  mixture: async () => {
+    await page.selectOption('select[aria-label="mixture design"]', 'optimal'); await settle();
+    await page.selectOption('select[aria-label="mixture model"]', 'mixquadratic'); await settle();
+    await page.fill('input[aria-label="mixture runs"]', String((await st()).exercise.budget)); await page.keyboard.press('Tab'); await settle();
+    await page.selectOption('select[aria-label="mixture criterion"]', 'I'); await settle();
+  },
   plate: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
   'split-plot': async () => { await page.click('tr[data-design="sp-full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
 };
@@ -63,7 +69,7 @@ try {
     await page.goto(`${url}#lesson=${lesson.id}&difficulty=${lesson.difficulty}&seed=${seed}`); await page.waitForSelector('#exercise'); await settle();
     check('opened from the shared link', (await st()).exercise.id === `${lesson.topic}-${lesson.difficulty}-${seed}`);
     await DESIGN[lesson.topic](); await settle();
-    await page.click(lesson.topic === 'dose' ? '#dose-create' : '#create-design'); await settle();
+    await page.click(lesson.topic === 'dose' ? '#dose-create' : lesson.topic === 'mixture' ? '#mixture-create' : '#create-design'); await settle();
     if (lesson.topic === 'dose') {
       // the second stage: the reference's doses around the EC50 found, typed in as a list
       await page.click('#get-results'); await settle();

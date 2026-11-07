@@ -76,7 +76,8 @@ export function trueMean(process, responseId, settings, ctx = {}) {
     return DOSE[c.model ?? 'LL.4'].value(settings[c.dose], P);
   }
   const fById = Object.fromEntries(process.factors.map(f => [f.id, f]));
-  const coded = Object.fromEntries(process.factors.map(f => [f.id, f.type === 'categorical' ? (f.levels.length === 2 ? (String(settings[f.id]) === String(f.levels[0]) ? -1 : 1) : 0) : code(f, settings[f.id])]));
+  // mixture components (issue #62) enter as pseudo-components, as in the models
+  const coded = Object.fromEntries(process.factors.map(f => [f.id, f.type === 'categorical' ? (f.levels.length === 2 ? (String(settings[f.id]) === String(f.levels[0]) ? -1 : 1) : 0) : f.mix ? (settings[f.id] - f.mix.low) / f.mix.scale : code(f, settings[f.id])]));
   const c = { coded, raw: settings, factorsById: fById, ...ctx };
   let y = r.truth.intercept ?? 0;
   for (const [label, coef] of Object.entries(r.truth.terms ?? {})) y += coef * label.split(':').reduce((a, comp) => a * compValue(comp, c), 1);

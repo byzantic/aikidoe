@@ -11,7 +11,7 @@ import { createStudy } from '../js/study.js';
 import { toStudyDesign, fullFactorial } from '../js/design/factorial.js';
 import { siteScheme } from '../js/model/sites.js';
 import { hashUniform, hashNormal, trueMean, observeRuns, runVirtual } from '../js/learn/process.js';
-import { generateExercise, referenceStrategy, ofatStrategy, gradeStudy, gradeAnswers, truthOf, keyOf, studentOf, seal, TOPICS, DIFFICULTIES, runExercise } from '../js/learn/exercise.js';
+import { generateExercise, referenceStrategy, ofatStrategy, comparisonStrategy, gradeStudy, gradeAnswers, truthOf, keyOf, studentOf, seal, TOPICS, DIFFICULTIES, runExercise } from '../js/learn/exercise.js';
 import { fitModel } from '../js/model/ols.js';
 
 section('hashed randomness');
@@ -95,7 +95,7 @@ for (const topic of Object.keys(TOPICS)) for (const difficulty of Object.keys(DI
   let refFull = 0, ofat = 0, ofatFull = 0, n = 0;
   for (let seed = 1; seed <= 50; seed++) {
     const ex = generateExercise({ topic, difficulty, seed });
-    const r = referenceStrategy(ex), o = ofatStrategy(ex);
+    const r = referenceStrategy(ex), o = TOPICS[topic].mixture ? comparisonStrategy(ex) : ofatStrategy(ex);   // a mixture: one component at a time along its Cox direction
     if (gradeStudy(ex, r.study).score === 100 && r.study.design.runs.length <= ex.budget) refFull++;
     const so = gradeStudy(ex, createStudy({ ...o.study, exercise: { id: ex.id, answers: o.answers } })).score;
     ofat += so; if (so === 100) ofatFull++; n++;
