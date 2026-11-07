@@ -25,6 +25,9 @@ import { decode } from '../study.js';
 import { splitPlotInfo } from '../design/splitplot.js';
 import { _containment as containment, _indexGroups as indexGroups } from './mixed.js';
 import { noiseModel } from './noise.js';
+import { family, LINKS, canonicalLink, irls, fitGLM, glmCompare, DISTRIBUTIONS as GLM_DISTRIBUTIONS } from './glm.js';
+import { chi2 as CHI2, ncChi2 } from '../dist.js';
+import { rng } from '../design/rng.js';
 
 /**
  * Power from a model matrix mm = { X, columns, assign, model } (formula.js).
@@ -133,12 +136,21 @@ function withBlocks(model, factors, settings, block) {
 export function designPower(study, X, { model = 'main', block, ...opts } = {}) {
   const parsed = parseFormula(model, study.factors);
   const m = withBlocks(parsed, study.factors, codedToSettings(study.factors, X), block);
-  return { model: parsed, ...powerFromMatrix(modelMatrix(m.model, m.factors, m.settings), opts) };
+  const mm = modelMatrix(m.model, m.factors, m.settings);
+  return { model: parsed, ...(isGlm(opts) ? glmPowerFromMatrix(mm, opts) : powerFromMatrix(mm, opts)) };
 }
 // opts.wholePlot (label per run) and opts.eta (σ²_wp/σ², default 1) give split-plot power.
 
-/** Power of the study's design (confirmation runs excluded; blocks fitted as fixed effects). */
+// counts and proportions: opts.distribution other than normal (see glmPowerFromMatrix below)
+const isGlm = (opts) => opts.distribution && opts.distribution !== 'normal';
+
+/**
+ * Power of the study's design (confirmation runs excluded; blocks fitted as fixed effects). With
+ * opts.distribution (a count or proportion response) the power of the Wald tests for a ratio
+ * (glmPowerFromMatrix); otherwise for an effect Δ given σ.
+ */
 export function studyPower(study, { model = 'main', ...opts } = {}) {
+  if (isGlm(opts)) return studyGlmPower(study, { model, ...opts });
   if (!study.design) throw new Error('the study has no design yet');
   const runs = study.design.runs.filter(r => r.kind !== 'confirm');
   const parsed = parseFormula(model, study.factors);
@@ -165,4 +177,178 @@ export function detectableEffect(result, { power = 0.8 } = {}) {
     const delta = t.delta * Math.sqrt(((lo + hi) / 2) / t.lambda);
     return { term: t.term, delta, ratio: delta / result.sigma };
   });
+}
+
+// ---------------------------------------------------------------- counts and proportions (issue #64)
+//
+// For a count or proportion response the information about the coefficients depends on the mean:
+// XᵀWX with w = m μ′(η)² / V(μ) at the anticipated means (m: trials). Each term is assessed with
+// the intercept at the baseline and that term alone at its anticipated effect (others zero), and
+// its Wald test has non-centrality λ = bₛᵀ (V_SS)⁻¹ bₛ / φ, V = (XᵀWX)⁻¹:
+//
+//   power = P(χ²′(|S|, λ) > χ²_{1−α}(|S|))        (dispersion fixed: Poisson, binomial, negbin)
+//   power = P(F′(|S|, N − rank, λ) > F_{1−α})      (dispersion φ estimated: quasi families)
+//
+// The effect is a ratio from a factor's low to its high setting: a rate ratio for counts (the mean
+// count, high / low), an odds ratio for proportions; on the link scale the coefficient is
+// b = (g(μ_high) − g(μ_low)) / 2 with μ_low and μ_high on either side of the baseline (b = ln r / 2
+// for the canonical links). The baseline is the mean count per unit exposure (counts) or the
+// proportion (binomial) at the centre of the design. simulatePower checks the approximation by
+// simulating the experiment and the likelihood-ratio test the analysis will use.
+
+const glmDistribution = (d) => (d === 'bernoulli' ? 'binomial' : d);
+
+/** The link-scale coefficient for a ratio r (high / low) around a baseline mean. */
+export function ratioCoefficient(distribution, link, baseline, r) {
+  const d = glmDistribution(distribution), L = LINKS[link ?? canonicalLink(d)];
+  if (GLM_DISTRIBUTIONS[d].counts) return (L.fun(baseline * Math.sqrt(r)) - L.fun(baseline / Math.sqrt(r))) / 2;
+  const odds = baseline / (1 - baseline), p = (o) => o / (1 + o);
+  return (L.fun(p(odds * Math.sqrt(r))) - L.fun(p(odds / Math.sqrt(r)))) / 2;
+}
+
+/**
+ * Power for a count or proportion response, from a model matrix mm (formula.js).
+ * opts: distribution ('poisson' …), link, baseline (mean count per unit exposure, or proportion),
+ * ratio (number, or { termLabel: r, default }), trials (number or per run), exposure (number or per
+ * run), theta (negbin), dispersion (quasi families, default 1), alpha (0.05).
+ * Returns { n, rank, dfRes, alpha, distribution, link, baseline, terms: [{ term, df, ratio, lambda,
+ * power }], parameters, lambdaAt(term, r) }.
+ */
+export function glmPowerFromMatrix(mm, { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, theta, dispersion = 1, alpha = 0.05 } = {}) {
+  const d = glmDistribution(distribution);
+  if (!GLM_DISTRIBUTIONS[d]) throw new Error(`unknown distribution "${distribution}"`);
+  const lk = link ?? canonicalLink(d), counts = GLM_DISTRIBUTIONS[d].counts;
+  if (!(baseline > 0) || (!counts && !(baseline < 1))) throw new Error(counts ? 'the baseline mean count must be positive' : 'the baseline proportion must lie between 0 and 1');
+  if (d === 'negbin' && !(theta > 0)) throw new Error('the negative binomial needs θ (the variance is μ + μ²/θ): give the θ you expect');
+  if (!(alpha > 0 && alpha < 1)) throw new Error('α must be between 0 and 1');
+  const fam = family(d, lk, d === 'negbin' ? theta : undefined), L = fam.link;
+  const { X, columns, assign, model } = mm, n = X.length;
+  const per = (v) => X.map((_, i) => (Array.isArray(v) ? v[i % v.length] : v));   // a value, or values cycled over the runs
+  const m = d.includes('binomial') ? per(trials) : X.map(() => 1), expo = counts ? per(exposure) : X.map(() => 1);
+  const estimated = GLM_DISTRIBUTIONS[d].dispersion === 'estimated', phi = estimated ? dispersion : 1;
+  const icpt = columns.findIndex((_, j) => assign[j] === -1);
+  const b0 = L.fun(baseline);
+  const ratioOf = (label) => (typeof ratio === 'number' ? ratio : ratio[label] ?? ratio.default ?? 2);
+  const rank0 = qr(X).rank, dfRes = n - rank0;
+  const crit = (df) => (estimated ? fDist.isf(alpha, df, dfRes) : CHI2.ppf(1 - alpha, df));
+  const powerOf = (df, lambda) => (!Number.isFinite(lambda) ? NaN : estimated ? (dfRes >= 1 ? ncf.sf(crit(df), df, dfRes, lambda) : NaN) : ncChi2.sf(crit(df), df, lambda));
+  // λ for the columns S with coefficients bS (the other non-intercept columns at 0)
+  const lambdaFor = (S, bS) => {
+    const beta = columns.map((_, j) => (j === icpt ? b0 : 0));
+    S.forEach((j, k) => { beta[j] = bS[k]; });
+    const eta = X.map((r, i) => r.reduce((s, v, j) => s + v * beta[j], 0) + (counts && L.name === 'log' ? Math.log(expo[i]) : 0));
+    const mu = eta.map(L.inv);
+    if (counts && L.name !== 'log') mu.forEach((v, i) => { mu[i] = v * expo[i]; });
+    if (mu.some(v => !fam.validMu(v))) return NaN;          // the anticipated means leave the possible range
+    const w = mu.map((v, i) => Math.sqrt(m[i] * L.deriv(eta[i]) ** 2 / fam.variance(v)));
+    const f = qr(X.map((r, i) => r.map(v => v * w[i])), { tol: 1e-11 });
+    if (S.some(j => f.aliased.includes(j))) return NaN;
+    const V = f.unscaledCov(), A = S.map(i => S.map(j => V[i][j]));
+    const x = solveSym(A, bS);
+    return bS.reduce((s, v, i) => s + v * x[i], 0) / phi;
+  };
+  const colsOf = (ti) => columns.map((_, j) => j).filter(j => assign[j] === ti);
+  const lambdaAt = (label, r) => {
+    const ti = model.terms.findIndex(t => t.label === label), S = colsOf(ti);
+    return lambdaFor(S, S.map(() => ratioCoefficient(d, lk, baseline, r)));
+  };
+  const terms = model.terms.map((t, ti) => {
+    const S = colsOf(ti), r = ratioOf(t.label);
+    if (t.block) return { term: t.label, df: S.length, ratio: r, lambda: NaN, power: NaN, block: true };
+    const lambda = lambdaFor(S, S.map(() => ratioCoefficient(d, lk, baseline, r)));
+    return { term: t.label, df: S.length, ratio: r, lambda, power: powerOf(S.length, lambda) };
+  });
+  const parameters = columns.map((name, j) => ({ j, name })).filter(c => assign[c.j] >= 0).map(({ j, name }) => {
+    const t = model.terms[assign[j]], r = ratioOf(t.label), lambda = t.block ? NaN : lambdaFor([j], [ratioCoefficient(d, lk, baseline, r)]);
+    return { name, term: t.label, lambda, power: powerOf(1, lambda) };
+  });
+  return { n, rank: rank0, dfRes, alpha, distribution, link: lk, baseline, ratio, ...(d === 'negbin' ? { theta } : {}), ...(estimated ? { dispersion: phi } : {}),
+    terms, parameters, lambdaAt, powerOf };
+}
+
+/**
+ * Smallest ratio detectable with the given power for each term of a glmPowerFromMatrix result
+ * (λ is not proportional to the squared effect when the information depends on the mean, so the
+ * ratio is found by bisection on its log). Returns [{ term, ratio }] (NaN when the design cannot
+ * reach the power below a ratio of 1000).
+ */
+export function detectableRatio(result, { power = 0.8 } = {}) {
+  return result.terms.filter(t => !t.block).map(t => {
+    const pw = (r) => result.powerOf(t.df, result.lambdaAt(t.term, r));
+    if (!(pw(1000) >= power)) return { term: t.term, ratio: NaN };
+    let lo = 0, hi = Math.log(1000);
+    for (let k = 0; k < 60; k++) { const mid = (lo + hi) / 2, p = pw(Math.exp(mid)); if (p >= power) hi = mid; else lo = mid; }
+    return { term: t.term, ratio: Math.exp(hi) };
+  });
+}
+
+// random draws for the simulation
+function poissonDraw(R, mu) {
+  if (mu > 500) { let s = 0; const k = Math.ceil(mu / 500); for (let i = 0; i < k; i++) s += poissonDraw(R, mu / k); return s; }
+  const L = Math.exp(-mu); let k = 0, p = R.random();
+  while (p > L) { k++; p *= R.random(); }
+  return k;
+}
+function gammaDraw(R, a) {
+  if (a < 1) return gammaDraw(R, a + 1) * R.random() ** (1 / a);
+  const d = a - 1 / 3, c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    let x, v;
+    do { const u1 = R.random() || 1e-300, u2 = R.random(); x = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); v = 1 + c * x; } while (v <= 0);
+    v = v * v * v; const u = R.random();
+    if (u < 1 - 0.0331 * x ** 4 || Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+const binomialDraw = (R, n, p) => { let k = 0; for (let i = 0; i < n; i++) if (R.random() < p) k++; return k; };
+
+/**
+ * Power by simulation: for each term, nsim experiments are simulated from the anticipated model
+ * (that term at its effect, the baseline elsewhere), the full model is fitted, and the term's
+ * likelihood-ratio test (F for quasi families) is counted at α. opts as glmPowerFromMatrix, plus
+ * nsim (400) and seed. Returns [{ term, power, se, nsim }]. A quasi-Poisson response is simulated as
+ * negative binomial (θ, default 5) and analysed as quasi-Poisson; a quasi-binomial as binomial.
+ */
+export function simulatePower(mm, opts = {}) {
+  const { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, theta, alpha = 0.05, nsim = 400, seed = 1 } = opts;
+  const d = glmDistribution(distribution), lk = link ?? canonicalLink(d), counts = GLM_DISTRIBUTIONS[d].counts;
+  const R = rng(seed), L = LINKS[lk];
+  const { X, columns, assign, model } = mm, n = X.length;
+  const per = (v) => X.map((_, i) => (Array.isArray(v) ? v[i % v.length] : v));   // a value, or values cycled over the runs
+  const m = d.includes('binomial') ? per(trials) : X.map(() => 1), expo = counts ? per(exposure) : X.map(() => 1);
+  const icpt = columns.findIndex((_, j) => assign[j] === -1), b0 = L.fun(baseline);
+  const ratioOf = (label) => (typeof ratio === 'number' ? ratio : ratio[label] ?? ratio.default ?? 2);
+  const offset = counts && L.name === 'log' ? expo.map(Math.log) : undefined;
+  const fitD = d === 'quasipoisson' ? 'quasipoisson' : d === 'quasibinomial' ? 'quasibinomial' : d;
+  return model.terms.filter(t => !t.block).map(t => {
+    const ti = model.terms.indexOf(t), S = columns.map((_, j) => j).filter(j => assign[j] === ti);
+    const beta = columns.map((_, j) => (j === icpt ? b0 : S.includes(j) ? ratioCoefficient(d, lk, baseline, ratioOf(t.label)) : 0));
+    const mu = X.map((r, i) => { const e = r.reduce((s, v, j) => s + v * beta[j], 0) + (offset ? offset[i] : 0); return L.inv(e) * (counts && L.name !== 'log' ? expo[i] : 1); });
+    const keep = columns.map((_, j) => j).filter(j => !S.includes(j));
+    const small = { ...mm, X: X.map(r => keep.map(j => r[j])), columns: keep.map(j => columns[j]), assign: keep.map(j => assign[j]) };
+    let hits = 0, done = 0;
+    for (let s = 0; s < nsim; s++) {
+      const y = mu.map((v, i) => {
+        if (!counts) return binomialDraw(R, m[i], v) / m[i];
+        if (d === 'negbin' || d === 'quasipoisson') { const th = theta ?? 5; return poissonDraw(R, v * gammaDraw(R, th) / th); }
+        return poissonDraw(R, v);
+      });
+      try {
+        const o = { distribution: fitD, link: lk, weights: counts ? undefined : m, offset, ...(d === 'negbin' ? { theta } : {}) };
+        const big = fitGLM(mm, y, o), sm = fitGLM(small, y, o);
+        const c = glmCompare(big, sm);
+        done++; if (c.p < alpha) hits++;
+      } catch { /* a degenerate simulated data set: not counted */ }
+    }
+    const p = done ? hits / done : NaN;
+    return { term: t.label, power: p, se: Math.sqrt(p * (1 - p) / Math.max(1, done)), nsim: done };
+  });
+}
+
+/** Power of the study's design for a count or proportion response (glmPowerFromMatrix options). */
+export function studyGlmPower(study, { model = 'main', ...opts } = {}) {
+  if (!study.design) throw new Error('the study has no design yet');
+  const runs = study.design.runs.filter(r => r.kind !== 'confirm');
+  const parsed = parseFormula(model, study.factors);
+  const m = withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
+  return { model: parsed, ...glmPowerFromMatrix(modelMatrix(m.model, m.factors, m.settings), opts) };
 }

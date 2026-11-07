@@ -141,7 +141,7 @@ export function goalModel(study, goal) {
  * Returns { goal, model, budget, options: [{ rank, id, kind, label, runs, wholePlots?, resolution,
  *   dEfficiency, minPower, estimable, withinBudget, reasons: [..], warnings: [..], note }] }.
  */
-export function recommend(study, { goal, budget, delta = 2, alpha = 0.05, eta = 1, optimal = true, restarts = 8 } = {}) {
+export function recommend(study, { goal, budget, delta = 2, alpha = 0.05, eta = 1, optimal = true, restarts = 8, counts } = {}) {
   const k = study.factors.length;
   goal ??= k >= 5 ? 'screen' : 'model';
   if (!GOALS[goal]) throw new Error(`goal must be screen, model or optimise, not "${goal}"`);
@@ -166,7 +166,7 @@ export function recommend(study, { goal, budget, delta = 2, alpha = 0.05, eta = 
         d = buildCandidate(study, c, { replicates: reps });
       } else d = buildCandidate(study, c, {});
     } catch (e) { options.push(entry(c, null, { runs: c.runs, estimable: false, reasons: [], warnings: [e.message] })); continue; }
-    options.push(assess(study, c, d, { model, goal, budget, delta, alpha, eta, p }));
+    options.push(assess(study, c, d, { model, goal, budget, delta, alpha, eta, p, counts }));
   }
   // rank: estimable and within budget first (designs that ignore hard-to-change factors after those
   // that respect them); then adequate power (fewest runs first; below 0.8, most
@@ -174,7 +174,7 @@ export function recommend(study, { goal, budget, delta = 2, alpha = 0.05, eta = 
   const score = (o) => { const ok = o.minPower >= 0.8; return [o.estimable && o.withinBudget ? (o.ignoresHtc ? 1 : 0) : o.estimable ? 2 : 3, ok ? 0 : o.minPower === null ? 2 : 1, !o.estimable ? 0 : ok ? o.runs : -(o.minPower ?? 0), -(o.dEfficiency ?? 0)]; };
   options.sort((a, b) => { const x = score(a), y = score(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0; });
   options.forEach((o, i) => { o.rank = o.estimable ? i + 1 : null; });
-  return { goal, goalText: GOALS[goal].what, model, terms: p, budget: budget ?? null, delta, alpha, options };
+  return { goal, goalText: GOALS[goal].what, model, terms: p, budget: budget ?? null, delta, alpha, ...(counts ? { counts } : {}), options };
 }
 
 function entry(c, d, extra) {
@@ -182,14 +182,14 @@ function entry(c, d, extra) {
     dEfficiency: null, minPower: null, estimable: false, withinBudget: false, ...extra };
 }
 
-function assess(study, c, d, { model, goal, budget, delta, alpha, eta, p }) {
+function assess(study, c, d, { model, goal, budget, delta, alpha, eta, p, counts }) {
   const n = d.X.length;
   const tmp = { ...study, design: toStudyDesign(study, d, { seed: 1, randomise: 'none' }), observations: [] };
   const wholePlots = d.wholePlot ? new Set(d.wholePlot).size : null;
   const reasons = [], warnings = [];
   let pw = null, estimable = n >= p, minPower = null;
   try {
-    pw = studyPower(tmp, { model, delta, alpha, eta });
+    pw = studyPower(tmp, counts ? { model, alpha, ...counts } : { model, delta, alpha, eta });
     const terms = pw.terms.filter(t => !t.block), cols = pw.parameters.length + 1;
     estimable = pw.rank === cols;
     const tested = terms.filter(t => Number.isFinite(t.power));
@@ -217,10 +217,11 @@ function assess(study, c, d, { model, goal, budget, delta, alpha, eta, p }) {
     if (c.kind === 'pb') reasons.push('2fis partially aliased with main effects (spread out, not confounded)');
     if (c.kind === 'dsd') reasons.push('main effects clear of 2fis and quadratic terms; with few active factors, their quadratic model can be fitted');
     if (c.kind === 'ccd' || c.kind === 'bbd') reasons.push(c.kind === 'ccd' ? 'rotatable: equal precision at equal distance from the centre' : 'three levels and no corner runs (avoids extreme combinations)');
-    if (minPower !== null) (minPower >= 0.8 ? reasons : warnings).push(`power ${minPower >= 0.8 ? '≥' : '<'} 0.8 for ${minPower >= 0.8 ? 'every term' : 'some terms'} at Δ = ${delta}σ (smallest ${num(minPower, 2)})`);
+    const at = counts ? `a ${String(counts.distribution).includes('binomial') || counts.distribution === 'bernoulli' ? 'odds' : 'rate'} ratio of ${counts.ratio} (baseline ${counts.baseline})` : `Δ = ${delta}σ`;
+    if (minPower !== null) (minPower >= 0.8 ? reasons : warnings).push(`power ${minPower >= 0.8 ? '≥' : '<'} 0.8 for ${minPower >= 0.8 ? 'every term' : 'some terms'} at ${at} (smallest ${num(minPower, 2)})`);
     if (wholePlots) reasons.push(`${wholePlots} whole plots: hard-to-change factors reset ${wholePlots} times (power assumes η = σ²_wp/σ² = ${eta})`);
     if (c.ignoresHtc) warnings.push('ignores the hard-to-change factors: they must be reset for every run');
-    if (pw && pw.dfRes > 0 && pw.dfRes < 3 && !wholePlots) warnings.push(`only ${pw.dfRes} residual df: replicate or add centre points for a better σ estimate`);
+    if (pw && pw.dfRes > 0 && pw.dfRes < 3 && !wholePlots && !(counts && !String(counts.distribution).startsWith('quasi'))) warnings.push(`only ${pw.dfRes} residual df: replicate or add centre points for a better σ estimate`);
   }
   if (budget !== undefined && estimable) (within ? reasons : warnings).push(within ? `fits the budget (${n} of ${budget} runs)` : `over budget: ${n} runs, budget ${budget}`);
   if (goal === 'screen' && (c.kind === 'ccd' || c.kind === 'bbd')) warnings.push('a response-surface design: more than screening needs');

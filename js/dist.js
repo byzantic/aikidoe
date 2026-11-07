@@ -374,6 +374,12 @@ function poissonMix(mu, f, logw = (j) => -mu + j * Math.log(mu) - lgamma(j + 1))
   return sum;
 }
 
+/** Non-central χ²: cdf and sf, as a Poisson(λ/2) mixture of central χ² with df + 2j. */
+export const ncChi2 = {
+  cdf: (x, df, nc) => x <= 0 ? 0 : nc === 0 ? chi2.cdf(x, df) : poissonMix(nc / 2, (j, w) => w * gammaInc(df / 2 + j, x / 2).P),
+  sf: (x, df, nc) => x <= 0 ? 1 : nc === 0 ? chi2.sf(x, df) : poissonMix(nc / 2, (j, w) => w * gammaInc(df / 2 + j, x / 2).Q),
+};
+
 /** Non-central t: cdf and sf (Guenther 1978 series). */
 export const nct = {
   cdf: (x, df, nc) => (x < 0 ? nctUpper(-x, df, -nc) : nctLower(x, df, nc)),

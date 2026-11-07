@@ -2010,7 +2010,6 @@
         "rank",
         "dfRes",
         "alpha",
-        "sigma",
         "terms"
       ],
       "properties": {
@@ -2033,7 +2032,8 @@
           "type": "number"
         },
         "sigma": {
-          "type": "number"
+          "type": "number",
+          "description": "Δ/σ power (a measurement); absent for counts and proportions"
         },
         "terms": {
           "type": "array",
@@ -2067,10 +2067,51 @@
                 "type": [
                   "number",
                   "null"
+                ],
+                "description": "Δ/σ detectable (measurements), or the ratio assessed (counts and proportions)"
+              },
+              "detectableRatio": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "counts and proportions: the smallest ratio detected with the target power"
+              },
+              "simulated": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "simulatedSE": {
+                "type": [
+                  "number",
+                  "null"
                 ]
               }
             }
           }
+        },
+        "distribution": {
+          "type": "string",
+          "description": "counts and proportions (issue #64): the response's distribution; power for a ratio"
+        },
+        "link": {
+          "type": "string"
+        },
+        "baseline": {
+          "type": "number",
+          "description": "the mean count (per unit exposure) or proportion at the centre of the design"
+        },
+        "ratio": {
+          "type": [
+            "number",
+            "object"
+          ],
+          "description": "the rate or odds ratio (low → high) the power is for, or one per term"
+        },
+        "target": {
+          "type": "number"
         }
       }
     },

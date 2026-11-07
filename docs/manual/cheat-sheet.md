@@ -57,6 +57,9 @@ before acting.
 - With hard-to-change factors, the power for their effects depends on the number of whole
   plots, not the number of runs.
 - Replicates are new runs (set up again from scratch), not repeat measurements of one run.
+- Counts and proportions: power depends on the size of the counts (or the number of trials) and
+  the ratio that matters; give a baseline and a rate or odds ratio (`doe power --response …
+  --baseline … --ratio …`). Small counts carry little information: plate more, count more.
 
 ## Running
 

@@ -50,6 +50,10 @@
 //        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
 //        runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
 //   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
+//   power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
+//        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
+//        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
+//   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
 //                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
@@ -130,8 +134,8 @@ import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
-import { hierarchyViolations } from '../js/model/formula.js';
-import { studyPower, detectableEffect } from '../js/model/power.js';
+import { hierarchyViolations, parseFormula, modelMatrix } from '../js/model/formula.js';
+import { studyPower, detectableEffect, detectableRatio, simulatePower } from '../js/model/power.js';
 import { reduceModel, reduceMixed } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects, predictMixed, runMeanWeights } from '../js/model/mixed.js';
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
@@ -752,6 +756,8 @@ function cmdPower({ pos, opt }) {
     delta = d.includes('=') ? Object.fromEntries(d.split(',').map(x => { const [k, v] = x.split('='); return [k.trim(), Number(v)]; })) : Number(d);
   }
   const model = opt.model ? String(opt.model).replace(/^.*~/, '').trim() : 'main';
+  const counts = countsPower(study, opt);
+  if (counts) return printCountsPower(study, model, counts, { alpha: opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target: opt.target !== undefined ? Number(opt.target) : 0.8, opt });
   let sigma = opt.sigma !== undefined ? Number(opt.sigma) : 1;
   if (opt.response && opt.sigma === undefined) {
     const r = study.responses.find(x => x.id === String(opt.response)) ?? fail(`no response "${opt.response}"`);
@@ -773,6 +779,53 @@ function cmdPower({ pos, opt }) {
     p.terms.filter(t => !t.block).map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: det[t.term].delta, ratio: det[t.term].ratio }))));
   if (p.terms.some(t => t.block)) out('(blocks fitted as fixed effects)');
   out('Δ: change in the response from the low to the high setting of a factor (for a quadratic term, 2 × its coefficient)');
+}
+
+/**
+ * Power settings for a count or proportion response, from --response (its distribution, link and
+ * trials) or --distribution, with --baseline, --ratio, --trials, --exposure, --theta, --dispersion.
+ * null for a measurement (Δ/σ power).
+ */
+function countsPower(study, opt) {
+  const r = opt.response ? study.responses.find(x => x.id === String(opt.response)) : null;
+  const distribution = opt.distribution ? String(opt.distribution) : r?.distribution;
+  if (!distribution || distribution === 'normal') {
+    if (opt.baseline !== undefined || opt.ratio !== undefined) fail('--baseline and --ratio are for a count or proportion response: give --response (with a distribution) or --distribution');
+    return null;
+  }
+  if (opt.baseline === undefined) fail(`power for ${distribution} data needs --baseline: the mean count per unit exposure, or the proportion, you expect at the centre of the design`);
+  const nums = (v) => String(v).split(',').map(Number);
+  const ratio = opt.ratio === undefined ? 2 : String(opt.ratio).includes('=') ? Object.fromEntries(String(opt.ratio).split(',').map(x => { const [k, v] = x.split('='); return [k.trim(), Number(v)]; })) : Number(opt.ratio);
+  const trials = opt.trials !== undefined ? nums(opt.trials) : r?.trials !== undefined ? [r.trials] : distribution === 'bernoulli' ? [1] : null;
+  if (distribution.includes('binomial') && !trials) fail('power for a binomial response needs --trials (per run)');
+  const exp = opt.exposure !== undefined ? nums(opt.exposure) : [1];
+  return { distribution, link: opt.link ? String(opt.link) : r?.link, baseline: Number(opt.baseline), ratio,
+    ...(trials ? { trials: trials.length === 1 ? trials[0] : trials } : {}), exposure: exp.length === 1 ? exp[0] : exp,
+    ...(opt.theta !== undefined ? { theta: Number(opt.theta) } : {}), ...(opt.dispersion !== undefined ? { dispersion: Number(opt.dispersion) } : {}),
+    ...(r ? { response: r.id } : {}) };
+}
+
+function printCountsPower(study, model, c, { alpha, target, opt }) {
+  const { response, ...spec } = c;
+  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this power treats every run as independent (random effects for counts and proportions are not supported yet), so it overstates the power for hard-to-change factors');
+  const p = studyPower(study, { model, alpha, ...spec });
+  const per = (v) => (Array.isArray(v) ? `${v.join(', ')} (cycled over the runs)` : v);
+  const odds = String(c.distribution).includes('binomial') || c.distribution === 'bernoulli', rname = odds ? 'odds ratio' : 'rate ratio';
+  out(`power for ${model}, ${c.distribution} (${p.link} link): ${p.n} runs, ${p.rank} coefficients; α = ${alpha}; baseline ${odds ? 'proportion' : 'mean count'} ${c.baseline}${odds ? `, ${per(c.trials)} trials per run` : c.exposure !== 1 ? ` per unit exposure, exposure ${per(c.exposure)}` : ''}${c.theta ? `, θ = ${c.theta}` : ''}${p.dispersion ? `, dispersion ${p.dispersion}` : ''}`);
+  const det = Object.fromEntries(detectableRatio(p, { power: target }).map(d => [d.term, d.ratio]));
+  let sim = null;
+  if (opt.simulate) sim = Object.fromEntries(simulatePower(studyPowerMatrix(study, model), { ...spec, alpha, nsim: int(opt.simulate, 'simulate'), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed }).map(s => [s.term, s]));
+  const rows = p.terms.filter(t => !t.block);
+  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, alpha, target, distribution: c.distribution, link: p.link, baseline: c.baseline, ratio: c.ratio, terms: rows.map(t => ({ term: t.term, df: t.df, ratio: t.ratio, power: t.power, detectableRatio: det[t.term], ...(sim ? { simulated: sim[t.term].power, simulatedSE: sim[t.term].se } : {}) })) });
+  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ratio', label: rname }, { key: 'power', label: 'power' }, ...(sim ? [{ key: 'sim', label: `simulated (${opt.simulate})`, align: 'left' }] : []), { key: 'det', label: `${rname} for ${target * 100}%` }],
+    rows.map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: Number.isFinite(det[t.term]) ? num(det[t.term], 4) : '> 1000', ...(sim ? { sim: `${num(sim[t.term].power, 3)} ± ${num(sim[t.term].se, 2)}` } : {}) }))));
+  out(`${rname}: the ${odds ? 'odds of success' : 'mean count'} at a factor's high setting over its low setting; each term assessed alone, with the others at the baseline (Wald test${p.dispersion ? ', F with the dispersion' : ''})${sim ? '; simulated: the likelihood-ratio test on simulated experiments' : ''}`);
+}
+
+/** The model matrix of the study's design for a model (for simulation). */
+function studyPowerMatrix(study, model) {
+  const runs = study.design.runs.filter(r => r.kind !== 'confirm');
+  return modelMatrix(parseFormula(model, study.factors), study.factors, runs.map(r => r.settings));
 }
 
 function printMixed(study, formula, random, opt) {
@@ -1184,9 +1237,11 @@ function parseSettingsLoose(study, text) { return Object.fromEntries(text.split(
 function cmdRecommend({ pos, opt }) {
   const study = load(pos[0]);
   const r = recommend(study, { ...(opt.goal ? { goal: String(opt.goal) } : {}), ...(opt.budget !== undefined ? { budget: int(opt.budget, 'budget') } : {}),
-    ...(opt.delta !== undefined ? { delta: Number(opt.delta) } : {}), ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}), optimal: !opt['no-optimal'] });
+    ...(opt.delta !== undefined ? { delta: Number(opt.delta) } : {}), ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}), optimal: !opt['no-optimal'],
+    ...(() => { const c = countsPower(study, opt); if (!c) return {}; const { response, ...counts } = c; return { counts }; })() });
   put(r);
-  out(`goal: ${r.goal} — ${r.goalText}; model ${r.model} (${r.terms} terms); power at Δ = ${r.delta}σ, α = ${r.alpha}${r.budget ? `; budget ${r.budget} runs` : ''}`);
+  const at = r.counts ? `a ${String(r.counts.distribution).includes('binomial') || r.counts.distribution === 'bernoulli' ? 'odds' : 'rate'} ratio of ${typeof r.counts.ratio === 'number' ? r.counts.ratio : JSON.stringify(r.counts.ratio)} (${r.counts.distribution}, baseline ${r.counts.baseline})` : `Δ = ${r.delta}σ`;
+  out(`goal: ${r.goal} — ${r.goalText}; model ${r.model} (${r.terms} terms); power at ${at}, α = ${r.alpha}${r.budget ? `; budget ${r.budget} runs` : ''}`);
   out(table([{ key: 'rank', label: '#' }, { key: 'label', label: 'design', align: 'left' }, { key: 'runs', label: 'runs' }, { key: 'res', label: 'res.', align: 'left' }, { key: 'dEff', label: 'D-eff %' }, { key: 'pw', label: 'min power' }],
     r.options.map(o => ({ ...o, rank: o.rank ?? '–', res: o.resolution ? roman(o.resolution) : '', dEff: o.dEfficiency ?? '', pw: o.minPower ?? '' }))));
   for (const o of r.options.filter(x => x.rank && x.rank <= 3)) {

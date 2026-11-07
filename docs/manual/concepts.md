@@ -83,6 +83,40 @@ gauge study — matters; for a split-plot the whole-plot variance matters too (�
 The Design step shows the power of each term; `doe power` prints it, with the effect detectable
 with 80 % power.
 
+**Counts and proportions** ([analysis](analysis.md#counts-and-proportions)) have no single σ: a
+count's variance is its mean, a proportion's p(1 − p)/n, so the power depends on how large the
+counts or how many the trials are, as well as on the effect. Give the **baseline** — the mean
+count (per unit exposure) or the proportion you expect at the centre of the design — and the
+effect as a **ratio** from a factor's low to its high setting: a rate ratio for counts, an odds
+ratio for proportions. Each term is assessed with the information at the counts or proportions
+the model then expects (a Wald test; with an overdispersed count, give θ or the dispersion). Small
+counts and few trials carry little information, so replicating runs, plating more volume or
+counting more cells helps more than it would for a measurement. `--simulate` checks the
+approximation by simulating the experiment and the likelihood-ratio test the analysis will use
+(the approximation is usually slightly conservative).
+
+```console
+$ doe init cfu.aikidoe.json --factor heat:30:90:s --factor dna:1:10:ng --factor density:0.3:0.9 --response colonies@poisson --seed 4
+created cfu.aikidoe.json: 3 factors, 1 responses, seed 4
+$ doe design cfu.aikidoe.json --full --replicates 2
+cfu.aikidoe.json: full-factorial, 16 runs, randomisation complete, seed 4
+$ doe power cfu.aikidoe.json --model 2fi --response colonies --baseline 20 --ratio 1.4 --simulate 300
+power for 2fi, poisson (log link): 16 runs, 7 coefficients; α = 0.05; baseline mean count 20
+term          df  rate ratio  power   simulated (300)  rate ratio for 80%
+------------  --  ----------  ------  ---------------  ------------------
+heat           1         1.4  0.8481  0.903 ± 0.017    1.37
+dna            1         1.4  0.8481  0.873 ± 0.019    1.37
+density        1         1.4  0.8481  0.88 ± 0.019     1.37
+heat:dna       1         1.4  0.8481  0.86 ± 0.02      1.37
+heat:density   1         1.4  0.8481  0.883 ± 0.019    1.37
+dna:density    1         1.4  0.8481  0.88 ± 0.019     1.37
+rate ratio: the mean count at a factor's high setting over its low setting; each term assessed alone, with the others at the baseline (Wald test); simulated: the likelihood-ratio test on simulated experiments
+```
+
+On the Design step, choose the response in the power section ("for"); the recommender then ranks
+the designs by that power. `doe recommend … --response colonies --baseline 20 --ratio 1.4` does
+the same.
+
 ## Hierarchy
 
 A model is **hierarchical** if, whenever it contains an interaction (A:B) or a power (A²), it
