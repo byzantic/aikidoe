@@ -14,6 +14,8 @@
 //   parseConstraint         'T + 2*t <= 1050' → { coef, op, rhs }
 //   runStatus               'planned' | 'partial' | 'complete'
 
+import { normPlates } from './plate.js';
+
 export const FORMAT_VERSION = 1;
 
 export class StudyError extends Error {
@@ -34,7 +36,7 @@ const LEVELS = ['lot', 'run', 'wholePlot', 'wafer', 'site'];
 const TRANSFORMS = ['none', 'log'];
 
 const KEYS = {
-  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'simulator', 'exercise', 'history'],
+  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'constraints', 'responses', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
   response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
@@ -525,6 +527,8 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   for (const o of study.observations) if (study.responses.find(r => r.id === o.response)?.derived) { errors.push(`observations: ${o.response} is a derived (summary) response; its values are computed, not entered`); break; }
   const sites = normSites(d.sites, errors);
   if (sites) study.sites = sites;
+  const plates = normPlates(d.plates, design, study.responses, errors, warnings);
+  if (plates) study.plates = plates;
   study.history = normHistory(d.history, design, errors);
   // an exercise (§16.2): { format, id, topic, …, sealed?, answers? }, kept as given
   if (d.exercise !== undefined) {

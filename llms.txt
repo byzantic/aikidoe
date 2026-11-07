@@ -30,4 +30,5 @@ An agent helping a user plan or analyse an experiment should load the skill firs
 
 - [MCP server](https://github.com/byzantic/aikidoe/blob/main/tools/mcp.mjs): the same commands as MCP tools over stdio, for agents without a shell
 - [Exercises and virtual processes](docs/manual/exercises.md): practice and evaluation with a hidden truth
+- [Microplates](docs/manual/plates.md): runs in the wells of 96/384/1536-well plates — layouts, controls, Z′, position terms
 - [Source](https://github.com/byzantic/aikidoe)

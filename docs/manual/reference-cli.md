@@ -29,10 +29,18 @@ Commands
        [--sheet FILE.csv] [--html FILE.html]
   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
+       [--grid --plate N --response R]   a plate reader's grid export (rows A…, columns 1…) for one plate
+  plate STUDY  [--format 96|384|1536|ROWSxCOLS] [--exclude edge,A01,…] [--control id:role:n …]
+       [--layout balanced|random|ordered] [--seed S] [--relayout] [--map] [--html FILE] [--pipetting FILE.csv]
+       lay the runs out on microplates: controls spread over each plate, runs placed so that the
+       effects are least entangled with plate, edge and row/column gradients (role: positive,
+       negative, blank, standard, other); runs already in wells keep them. Without layout options:
+       the layout, its efficiency and the controls' Z′ per plate
   fit STUDY "y ~ formula"  [--anova 1|2|3] [--lenth] [--boxcox] [--aggregate mean|none]
        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
+       runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
                 | --optimal --runs n [--model …] [--criterion D|I|A]
@@ -105,7 +113,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

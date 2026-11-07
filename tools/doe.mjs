@@ -17,10 +17,18 @@
 //        [--sheet FILE.csv] [--html FILE.html]
 //   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
 //   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
+//        [--grid --plate N --response R]   a plate reader's grid export (rows A…, columns 1…) for one plate
+//   plate STUDY  [--format 96|384|1536|ROWSxCOLS] [--exclude edge,A01,…] [--control id:role:n …]
+//        [--layout balanced|random|ordered] [--seed S] [--relayout] [--map] [--html FILE] [--pipetting FILE.csv]
+//        lay the runs out on microplates: controls spread over each plate, runs placed so that the
+//        effects are least entangled with plate, edge and row/column gradients (role: positive,
+//        negative, blank, standard, other); runs already in wells keep them. Without layout options:
+//        the layout, its efficiency and the controls' Z′ per plate
 //   fit STUDY "y ~ formula"  [--anova 1|2|3] [--lenth] [--boxcox] [--aggregate mean|none]
 //        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
 //        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
 //        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
+//        runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
 //   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
@@ -88,7 +96,10 @@ import { optimalDesign } from '../js/design/optimal.js';
 import { splitPlotFraction, splitPlotFull, optimalSplitPlot } from '../js/design/splitplot.js';
 import * as T from '../js/design/twolevel.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
-import { runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
+import { runSheetCSV, runSheetHTML, importResults, applyResults, plateGridToLong } from '../js/io/runsheet.js';
+import { layoutPlates, layoutReport } from '../js/design/plate-layout.js';
+import { pipettingCSV, plateMapHTML, plateMapText } from '../js/io/platemap.js';
+import { controlSummary, plateNumbers, runCapacity, ROLES, platesWithoutWells } from '../js/plate.js';
 import { fitModel, anova, lackOfFit, boxCox, lenth, twoLevelEffects, predict } from '../js/model/ols.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { hierarchyViolations } from '../js/model/formula.js';
@@ -219,7 +230,7 @@ function cmdDesign({ pos, opt }) {
   else if (opt.lhs) d = lhsDesign(study, { ...(opt.runs ? { runs: int(opt.runs, 'runs') } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
   else fail('design: choose --full, --runs N, --generators …, --pb, --ccd or --bbd');
   const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
-  const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed, ...(opt['no-split-plot'] && htc.some(Boolean) ? { randomise: 'complete' } : {}) }), observations: [] });
+  const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed, ...(opt['no-split-plot'] && htc.some(Boolean) ? { randomise: 'complete' } : {}) }), observations: [], ...platesWithoutWells(study) });
   save(file, next);
   put({ file, design: { kind: d.kind, params: d.params, randomisation: next.design.randomisation, seed, runs: next.design.runs } });
   out(`${file}: ${d.kind}, ${next.design.runs.length} runs, randomisation ${next.design.randomisation}, seed ${seed}`);
@@ -268,15 +279,65 @@ function cmdSheet({ pos, opt }) {
   if (!opt.html && !opt.csv) { if (RESULT) put({ csv: runSheetCSV(study, { delimiter }) }); else process.stdout.write(runSheetCSV(study, { delimiter })); }
 }
 
+function cmdPlate({ pos, opt }) {
+  const file = pos[0];
+  let study = load(file);
+  if (!study.design) fail('plate: the study has no design yet (doe design …)');
+  const controls = opt.control === undefined ? undefined : list(opt.control).map(t => {
+    const [id, role, n] = String(t).split(':');
+    if (!id || !ROLES.includes(role) || !Number.isInteger(Number(n))) fail(`--control id:role:n, role one of ${ROLES.join(', ')} (got ${t})`);
+    return { id, role, perPlate: Number(n) };
+  });
+  const inWell = new Set((study.plates?.wells ?? []).filter(w => w.run !== undefined).map(w => w.run));
+  const change = ['format', 'exclude', 'control', 'layout', 'seed', 'relayout'].some(k => opt[k] !== undefined) || !study.plates || study.design.runs.some(r => !inWell.has(r.run));
+  if (change) {
+    if (study.plates?.readings.length && !opt.relayout && opt.format !== undefined) fail('the plates already have control readings: --relayout to start again');
+    const { study: next, summary } = layoutPlates(study, {
+      ...(opt.format !== undefined ? { format: String(opt.format) } : {}),
+      ...(opt.exclude !== undefined ? { exclude: list(opt.exclude).flatMap(x => String(x).split(',')).map(x => x.trim()).filter(Boolean) } : {}),
+      ...(controls ? { controls } : {}), ...(opt.layout ? { layout: String(opt.layout) } : {}),
+      ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), relayout: !!opt.relayout,
+    });
+    study = createStudy(next);
+    save(file, study);
+    out(`${file}: ${summary.placed} run(s) laid out (${study.plates.layout}) on ${summary.plates} plate(s) of ${study.plates.rows} × ${study.plates.cols}, ${summary.capacity} wells for runs per plate`);
+    if (summary.plates > 1) out('each run\'s block is now its plate, so the analysis takes out plate-to-plate shifts');
+  }
+  const P = study.plates, rep = layoutReport(study);
+  put({ rows: P.rows, cols: P.cols, plates: plateNumbers(study).length, layout: P.layout, exclude: P.exclude, controls: P.controls, capacity: runCapacity(P),
+    efficiency: rep?.efficiency ?? null, worst: rep?.worst ?? null, wells: P.wells,
+    zPrime: study.responses.map(r => ({ response: r.id, plates: controlSummary(study, r.id) })).filter(z => z.plates.some(p => p.controls.length)) });
+  if (rep) out(`layout efficiency ${num(rep.efficiency, 4)} for the design's model (1 = position costs nothing); least efficient term ${rep.worst.term} ${num(rep.worst.efficiency, 3)}`);
+  if (rep && rep.worst.efficiency < 0.8) out('warning: some effects are entangled with position (plate, edge or a gradient): consider --layout balanced');
+  for (const r of study.responses) {
+    const z = controlSummary(study, r.id).filter(p => p.controls.length);
+    if (!z.length) continue;
+    out(`\ncontrols, ${r.id}:`);
+    out(table([{ key: 'plate', label: 'plate' }, ...z[0].controls.map(c => ({ key: c.id, label: `${c.id} mean (sd)`, align: 'left' })), { key: 'z', label: 'Z′' }],
+      z.map(p => ({ plate: p.plate, ...Object.fromEntries(p.controls.map(c => [c.id, `${num(c.mean, 4)} (${num(c.sd, 3)})`])), z: Number.isFinite(p.zPrime) ? num(p.zPrime, 3) : '—' }))));
+  }
+  if (opt.map) out('\n' + plateMapText(study));
+  if (opt.html) { writeFileSync(String(opt.html), plateMapHTML(study)); out(`printable plate map: ${opt.html}`); }
+  if (opt.pipetting) { writeFileSync(String(opt.pipetting), pipettingCSV(study)); out(`pipetting list: ${opt.pipetting}`); }
+}
+
 function cmdImport({ pos, opt }) {
   const [file, results] = pos;
   const study = load(file);
   if (!results || !existsSync(results)) fail('import: give the results CSV file');
-  const imp = importResults(study, readFileSync(results, 'utf8'));
+  let text = readFileSync(results, 'utf8');
+  if (opt.grid) {
+    if (!study.plates) fail('import --grid: the study has no plate layout (doe plate)');
+    if (opt.plate === undefined) fail('import --grid: say which plate the grid is (--plate N)');
+    const response = opt.response ?? (study.responses.length === 1 ? study.responses[0].id : undefined);
+    if (!response) fail(`import --grid: say which response the grid holds (--response ${study.responses.map(r => r.id).join('|')})`);
+    text = plateGridToLong(text, { plate: int(opt.plate, 'plate'), response });
+  }
+  const imp = importResults(study, text);
   for (const p of imp.problems) out(`${p.severity.padEnd(7)} ${p.line ? `line ${p.line}${p.column ? `, ${p.column}` : ''}: ` : ''}${p.message}`);
   const nerr = imp.problems.filter(p => p.severity === 'error').length;
-  put({ file, format: imp.format, values: imp.observations.length, problems: imp.problems, imported: false });
-  out(`${imp.observations.length} value(s) read (${imp.format} format)${nerr ? `, ${nerr} error(s)` : ''}`);
+  put({ file, format: imp.format, values: imp.observations.length, ...(imp.readings?.length ? { controlReadings: imp.readings.length } : {}), problems: imp.problems, imported: false });
+  out(`${imp.observations.length} value(s) read (${imp.format} format)${imp.readings?.length ? ` and ${imp.readings.length} control-well reading(s)` : ''}${nerr ? `, ${nerr} error(s)` : ''}`);
   if (opt['dry-run']) { out('dry run: study not changed'); return; }
   if (nerr && !opt.force) fail('not imported because of the errors above (fix the file, or --force to import the valid values)');
   const next = applyResults(study, imp, { mode: opt.mode ?? 'replace', force: !!opt.force });
@@ -310,7 +371,7 @@ function cmdFit({ pos, opt }) {
       return printMixed(study, f, requested, opt);
     }
   }
-  let fit = fitModel(study, formula, { aggregate: opt.aggregate ?? 'mean' });
+  let fit = fitModel(study, formula, { aggregate: opt.aggregate ?? 'mean', ...(opt['no-position'] ? { position: false } : {}) });
   if (opt.reduce) {
     const r = reduceModel(study, formula, { method: opt.reduce === true ? 'p' : String(opt.reduce), aggregate: opt.aggregate ?? 'mean',
       ...(opt['alpha-out'] !== undefined ? { alphaOut: Number(opt['alpha-out']) } : {}), keep: list(opt.keep).flatMap(k => String(k).split(',')).filter(Boolean) });
@@ -459,7 +520,7 @@ function cmdPredict({ pos, opt }) {
   put({ kind: 'ols', response: fit.response, predictions: at.map((s, i) => ({ settings: s, fit: p[i].fit, lower: p[i].lower, upper: p[i].upper, predLower: p[i].predLower, predUpper: p[i].predUpper })), level: 0.95 });
   out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: '95% PI (one run)', align: 'left' }],
     at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)}` }))));
-  if (fit.model.terms[0]?.block) out('(for the average block)');
+  if (fit.model.terms.some(t => t.block)) out(fit.model.terms.some(t => t.position) ? '(for the average block and an average well)' : '(for the average block)');
 }
 
 function cmdPower({ pos, opt }) {
@@ -930,7 +991,7 @@ function cmdReport({ pos, opt }) {
 // ---------------------------------------------------------------- exercises (§16.2)
 
 // an exercise as stored in a study (self-study) or a key file (class mode), with its study
-const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [] }) });
+const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [], ...platesWithoutWells(study) }) });
 const loadKey = (file) => {
   const k = JSON.parse(readFileSync(file, 'utf8'));
   if (k.format !== 'aikidoe-exercise/1' || !k.truth) fail(`${file} is not an exercise key`);
@@ -988,8 +1049,10 @@ async function cmdExercise({ pos, opt }) {
       const { header: head, rows: body } = parseCSV(readFileSync(pos[2], 'utf8'));
       const col = (n) => head.indexOf(n);
       if (col('run') < 0) fail(`${pos[2]}: no "run" column (send the run sheet from doe sheet)`);
-      const runs = body.filter(r => r.some(c => c !== '')).map((r, i) => ({
-        run: Number(r[col('run')]), order: col('order') >= 0 ? Number(r[col('order')]) : i + 1,
+      // rows of runs (a pipetting list also has rows for control wells, with no run)
+      const runRows = body.filter(r => r.some(c => c !== '') && r[col('run')] !== '');
+      const runs = runRows.map((r, i) => ({
+        run: Number(r[col('run')]), order: col('order') >= 0 ? Number(r[col('order')]) : col('content') >= 0 ? Number(r[col('run')]) : i + 1,
         ...(col('wholePlot') >= 0 && r[col('wholePlot')] !== '' ? { wholePlot: r[col('wholePlot')] } : {}), ...(col('block') >= 0 && r[col('block')] !== '' ? { block: r[col('block')] } : {}),
         settings: Object.fromEntries(key.study.factors.map(f => { const j = col(f.id); if (j < 0) fail(`${pos[2]}: no column for factor ${f.id}`); return [f.id, f.type === 'categorical' ? r[j] : Number(r[j])]; })),
       }));
@@ -997,8 +1060,20 @@ async function cmdExercise({ pos, opt }) {
       // sheet, so a sheet with only the latest stage would repeat earlier runs' noise
       const nums = [...new Set(runs.map(r => r.run))].sort((a, b) => a - b);
       if (nums.some((r, i) => r !== i + 1)) fail(`${pos[2]}: runs ${nums[0]}–${nums.at(-1)} only; send the whole run sheet (doe sheet), from run 1 — results for runs already done come back unchanged`);
-      const st = runExercise(key, createStudy({ ...key.study, design: { kind: 'custom', runs } }));
-      const csv = ['run,response,value', ...st.observations.map(o => `${o.run},${o.response},${o.value}`)].join('\n') + '\n';
+      // plates (plate topic): the wells from the sheet's plate and well columns, the controls'
+      // wells from a pipetting list (doe plate --pipetting), which has a control column
+      let plates;
+      if (key.study.plates) {
+        if (col('plate') < 0 || col('well') < 0) fail(`${pos[2]}: no plate and well columns: lay the runs out (doe plate) and send the pipetting list (doe plate --pipetting FILE.csv) or the run sheet`);
+        const wells = body.filter(r => r.some(c => c !== '')).map(r => (r[col('run')] !== '' ? { plate: Number(r[col('plate')]), well: r[col('well')], run: Number(r[col('run')]) }
+          : col('control') >= 0 && r[col('control')] !== '' ? { plate: Number(r[col('plate')]), well: r[col('well')], control: r[col('control')] } : null)).filter(Boolean);
+        plates = { ...key.study.plates, wells, readings: [] };
+      }
+      const st = runExercise(key, createStudy({ ...key.study, design: { kind: 'custom', runs }, ...(plates ? { plates } : {}) }));
+      const csv = plates
+        ? ['run,plate,well,response,value', ...st.observations.map(o => { const w = st.plates.wells.find(x => x.run === o.run); return `${o.run},${w.plate},${w.well},${o.response},${o.value}`; }),
+          ...st.plates.readings.map(x => `,${x.plate},${x.well},${x.response},${x.value}`)].join('\n') + '\n'
+        : ['run,response,value', ...st.observations.map(o => `${o.run},${o.response},${o.value}`)].join('\n') + '\n';
       const over = runs.length > key.budget;
       put({ runs: runs.length, budget: key.budget, overBudget: over, ...(opt.out ? { file: String(opt.out) } : { csv }) });
       if (opt.out) { writeFileSync(String(opt.out), csv); out(`${opt.out}: results for ${runs.length} runs (budget ${key.budget})${over ? ' — over budget' : ''}`); }
@@ -1066,6 +1141,7 @@ function cmdInfo({ pos }) {
     s.factors.map(f => ({ ...f, range: f.type === 'categorical' ? f.levels.join(', ') : `${num(f.low, 6)} … ${num(f.high, 6)}${f.units ? ' ' + f.units : ''}`, note: [f.transform === 'log' ? 'log' : '', f.htc ? 'hard to change' : ''].filter(Boolean).join(', ') }))));
   out(`responses: ${s.responses.map(r => r.id + (r.units ? ` (${r.units})` : '') + (r.derived ? ` [wafer ${r.derived.stat} of ${r.derived.from}]` : '') + (r.measurement ? ` [σ_meas ${num(r.measurement.sigma, 3)}${r.measurement.pctGRR !== undefined ? `, GRR ${num(r.measurement.pctGRR, 3)} %` : ''}]` : '')).join(', ') || 'none'}`);
   if (s.sites) out(`sites: ${s.sites.scheme}, ${s.sites.positions.length} positions${s.sites.diameter ? `, ${s.sites.diameter} mm wafer` : ''}`);
+  if (s.plates) out(`plates: ${s.plates.rows} × ${s.plates.cols}, ${plateNumbers(s).length} in use, layout ${s.plates.layout}${s.plates.controls.length ? `, controls ${s.plates.controls.map(c => `${c.id} ×${c.perPlate}`).join(', ')}` : ''}`);
   if (!s.design) { out('no design yet'); return; }
   const runs = s.design.runs, done = new Set(s.observations.filter(o => o.value !== null).map(o => o.run));
   out(`design: ${s.design.kind}, ${runs.length} runs, randomisation ${s.design.randomisation}; results for ${done.size} of ${runs.length} runs`);
@@ -1076,7 +1152,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

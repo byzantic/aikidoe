@@ -35,6 +35,7 @@ check('reference-study-format.md', pages['reference-study-format'] === reference
 section('links');
 {
   const exampleIds = new Set(EXAMPLES.map(e => e.id));
+  const lessonIds = new Set((await import('../js/learn/lessons.js')).LESSONS.filter(l => l.topic).map(l => l.id));
   let external = 0;
   for (const [id, md] of Object.entries(pages)) {
     if (!md) continue;
@@ -46,6 +47,7 @@ section('links');
       if ((m = /^([\w-]+)\.md(?:#(.+))?$/.exec(href))) { if (!pages[m[1]] || (m[2] && !anchors[m[1]].has(m[2]))) bad.push(href); continue; }
       if ((m = /^\.\.\/\.\.\/index\.html#example=([\w-]+)$/.exec(href))) { if (!exampleIds.has(m[1])) bad.push(href); continue; }
       if (href === '../../index.html#guide') continue;                     // the app's Guide step
+      if ((m = /^\.\.\/\.\.\/index\.html#lesson=([\w-]+)&difficulty=(easy|medium|hard)&seed=\d+$/.exec(href))) { if (!lessonIds.has(m[1])) bad.push(href); continue; }
       if ((m = /^\.\.\/\.\.\/([^#?]+)$/.exec(href))) { if (!existsSync(join(ROOT, m[1]))) bad.push(href); continue; }
       bad.push(href);
     }

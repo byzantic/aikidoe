@@ -13,6 +13,8 @@ import { definitiveScreening, dsdOrder } from '../js/design/dsd.js';
 import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
 import { parseFormula } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
+import { platePanel } from './plates.js';
+import { platesWithoutWells } from '../js/plate.js';
 import { designPower, detectableEffect } from '../js/model/power.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
 import { candidates, buildCandidate, intendedModel, wholePlotChoices, defaultWholePlots, recommend, GOALS } from '../js/design/recommend.js';
@@ -132,7 +134,7 @@ export function render(ctx) {
     const seed = ui.seed ?? study.seed;
     const make = () => {
       const design = toStudyDesign(study, d, { seed });
-      const next = createStudy({ ...study, seed, design, observations: [], history: [{ stage: 'design', runs: design.runs.map(r => r.run), note: `${cand.label}, ${design.runs.length} runs` }] });
+      const next = createStudy({ ...study, seed, design, observations: [], ...platesWithoutWells(study), history: [{ stage: 'design', runs: design.runs.map(r => r.run), note: `${cand.label}, ${design.runs.length} runs` }] });
       state.ui.design = { ...ui, id: cand.id };
       state.step = 'run';
       setDoc(structuredClone(next));
@@ -145,7 +147,8 @@ export function render(ctx) {
         h('button', { class: `btn ${study.design && nObs ? 'danger' : 'primary'}`, id: 'create-design', onclick: make }, study.design ? (nObs ? `Replace the design and delete ${nObs} results` : 'Replace the design') : `Create this design (${d.X.length} runs)`),
         h('span', { class: 'muted small' }, `Runs are put in a random order from seed ${seed}; the same seed always gives the same run sheet.`)));
   }
-  return h('div', {}, next, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, create);
+  const plates = study.design ? platePanel(ctx) : null;
+  return h('div', {}, plates, next, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, create);
 }
 
 function diagnostics(study, d, modelFor) {

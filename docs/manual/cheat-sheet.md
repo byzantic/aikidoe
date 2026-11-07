@@ -17,6 +17,8 @@ and ranks the designs that fit.
 4. **Which are hard to change?** Then a [split-plot](designs-split-plot.md) — never "all low
    settings first, then all high".
 5. **Will runs be done in groups** (days, batches, chambers)? Then [block](concepts.md#randomisation-and-blocking).
+   Runs in the wells of microplates? Then a [balanced plate layout](plates.md#layouts), controls
+   spread over every plate, and position terms in the analysis.
 6. **Can the response curve** inside the ranges? Then centre points, or a three-level design.
 7. **Is every combination possible?** If not, constraints and an [optimal design](designs-optimal.md#constraints).
 8. **How big an effect matters**, compared with the run-to-run scatter σ? This sets the run count
@@ -57,6 +59,7 @@ before acting.
 ## Running
 
 - Follow the randomised run order; it protects against drift you do not know about.
+- On plates, follow the plate map: never "tidy" the layout into rows of conditions.
 - Keep everything not in the design as constant as you can, and write down what you could not.
 - Record the result for each run straight away, with anything unusual in the note.
 - A failed run is `NA`, not a guess and not a quiet repeat.

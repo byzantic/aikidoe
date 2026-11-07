@@ -256,3 +256,23 @@ model answer:
   - 2^3 full factorial, 2 replicates (16 runs); fit main effects and two-factor interactions
   → active press, SiH4; smallest power of the reference design 1
 ```
+
+## 7. Runs in the wells of a microplate
+
+Every run is a well; the edge, rows and columns of a plate differ. Lay the design out with
+controls spread over the plate, hand over the pipetting list, and read the reader's grid back:
+
+```console
+$ doe init assay.aikidoe.json --factor pH:6.5:8.5 --factor Mg:1:10:mM:log --factor time:10:60:min --response activity:RFU/min --seed 21
+created assay.aikidoe.json: 3 factors, 1 responses, seed 21
+$ doe design assay.aikidoe.json --full --replicates 4
+assay.aikidoe.json: full-factorial, 32 runs, randomisation complete, seed 21
+$ doe plate assay.aikidoe.json --format 96 --control pos:positive:4 --control neg:negative:4 --pipetting pipetting.csv
+assay.aikidoe.json: 32 run(s) laid out (balanced) on 1 plate(s) of 8 × 12, 88 wells for runs per plate
+layout efficiency 0.9994 for the design's model (1 = position costs nothing); least efficient term time 0.998
+pipetting list: pipetting.csv
+```
+
+The results: `doe import assay.aikidoe.json reader.csv --grid --plate 1` (a reader's grid) or a long
+file with plate and well columns; `doe plate assay.aikidoe.json` then gives each plate's Z′, and
+`doe fit` adds the position terms Edge, Row and Col (and the plate as a block).

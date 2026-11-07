@@ -14,8 +14,9 @@
 //
 // In result cells, blank means "not measured" (no observation); NA, -, null etc. record an
 // explicit missing value (an observation whose value is null).
-import { parseCSV, writeCSV, parseNumber, guessDecimal } from './csv.js';
+import { parseCSV, writeCSV, parseNumber, guessDecimal, records, detectDelimiter } from './csv.js';
 import { createStudy } from '../study.js';
+import { parseWell, wellId, excludedSet, plateNumbers, rowLabel } from '../plate.js';
 
 const META = ['lot', 'wafer', 'slot', 'operator', 'repeat'];
 const sortedRuns = (study) => (study.design?.runs ?? []).slice().sort((a, b) => a.order - b.order);
@@ -23,6 +24,7 @@ const has = (study, key) => (study.design?.runs ?? []).some(r => r[key] !== unde
 const nested = (study, level) => study.responses.some(r => !r.derived && r.levels.includes(level));
 const siteIds = (study) => (study.sites?.positions ?? []).map(p => String(p.id));
 const usesSites = (study, r) => r.levels.includes('site') && siteIds(study).length > 0;
+const wellOf = (study) => new Map((study.plates?.wells ?? []).filter(w => w.run !== undefined).map(w => [w.run, w]));
 
 /** Result columns: [{ header, response, site }] */
 function resultColumns(study) {
@@ -45,7 +47,8 @@ function metaColumns(study) {
 export function runSheet(study) {
   if (!study.design) throw new Error('the study has no design yet');
   const meta = metaColumns(study), res = resultColumns(study);
-  const header = ['order', 'run', ...(has(study, 'wholePlot') ? ['wholePlot'] : []), ...(has(study, 'block') ? ['block'] : []), 'kind',
+  const W = wellOf(study), plated = W.size > 0;
+  const header = ['order', 'run', ...(plated ? ['plate', 'well'] : []), ...(has(study, 'wholePlot') ? ['wholePlot'] : []), ...(has(study, 'block') ? ['block'] : []), 'kind',
     ...study.factors.map(f => f.id), ...meta, ...res.map(c => c.header), 'note'];
   const rows = [];
   for (const run of sortedRuns(study)) {
@@ -66,7 +69,7 @@ export function runSheet(study) {
         return hit.length ? (hit[0].value === null ? 'NA' : hit[0].value) : '';
       });
       const notes = [...new Set(list.map(o => o.note).filter(Boolean))].join('; ');
-      rows.push([run.order, run.run, ...(has(study, 'wholePlot') ? [run.wholePlot ?? ''] : []), ...(has(study, 'block') ? [run.block ?? ''] : []), run.kind,
+      rows.push([run.order, run.run, ...(plated ? [W.get(run.run)?.plate ?? '', W.get(run.run)?.well ?? ''] : []), ...(has(study, 'wholePlot') ? [run.wholePlot ?? ''] : []), ...(has(study, 'block') ? [run.block ?? ''] : []), run.kind,
         ...study.factors.map(f => run.settings[f.id]), ...mv.map(v => v ?? ''), ...cells, notes]);
     }
   }
@@ -98,7 +101,7 @@ export function runSheetHTML(study, { title, date } = {}) {
     if (f) return `${esc(f.name)}${f.units ? ` <span class="u">(${esc(f.units)})</span>` : ''}`;
     const r = study.responses.find(x => x.id === h.split('@')[0]);
     if (r) { const site = h.includes('@') ? ` @ ${esc(h.split('@')[1])}` : ''; return `${esc(r.name)}${site}${r.units ? ` <span class="u">(${esc(r.units)})</span>` : ''}`; }
-    return esc({ order: 'Order', run: 'Run', wholePlot: 'Whole plot', block: 'Block', kind: 'Type', note: 'Notes',
+    return esc({ order: 'Order', run: 'Run', plate: 'Plate', well: 'Well', wholePlot: 'Whole plot', block: 'Block', kind: 'Type', note: 'Notes',
       lot: 'Lot', wafer: 'Wafer', slot: 'Slot', operator: 'Operator', repeat: 'Repeat' }[h] ?? h);
   };
   const resStart = s.header.length - 1 - s.resultColumns.length;
@@ -170,6 +173,8 @@ function mapColumns(study, header, given = {}) {
     const k = norm(h);
     if (['run', 'runid', 'runno', 'runnumber'].includes(k)) mapping[h] = 'run';
     else if (['order', 'runorder', 'wholeplot', 'block', 'kind', 'type'].includes(k)) mapping[h] = 'ignore';
+    else if (['plate', 'plateno', 'platenumber', 'plateid'].includes(k)) mapping[h] = 'plate';
+    else if (['well', 'wellid', 'position', 'wellposition'].includes(k)) mapping[h] = 'well';
     else if (['response', 'value', 'site'].includes(k)) mapping[h] = k;
     else if (['note', 'notes', 'comment', 'comments'].includes(k)) mapping[h] = 'note';
     else if (META.includes(k)) mapping[h] = k;
@@ -195,8 +200,10 @@ export function importResults(study, text, opts = {}) {
   const warn = (line, column, message) => problems.push({ severity: 'warning', line, column, message });
   const roles = header.map(h => mapping[h]);
   const col = (role) => roles.findIndex(r => r === role);
-  const iRun = col('run');
-  if (iRun < 0) { err(1, null, 'no "run" column: the file must say which run each row belongs to'); return { format: null, observations: [], problems, mapping, unmatched }; }
+  const iRun = col('run'), iPlate = col('plate'), iWell = col('well');
+  const byWell = new Map((study.plates?.wells ?? []).map(w => [`${w.plate}/${w.well}`, w]));
+  const plated = iPlate >= 0 && iWell >= 0 && byWell.size > 0;
+  if (iRun < 0 && !plated) { err(1, null, study.plates ? 'no "run" column, and no "plate" and "well" columns: the file must say which run (or well) each row belongs to' : 'no "run" column: the file must say which run each row belongs to'); return { format: null, observations: [], readings: [], problems, mapping, unmatched }; }
   const long = col('response') >= 0 && col('value') >= 0;
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
   const sites = siteIds(study);
@@ -204,13 +211,37 @@ export function importResults(study, text, opts = {}) {
   const num = (s, j) => parseNumber(s, { decimal: decimals[j] });
   for (const h of unmatched) warn(1, h, `column "${h}" is not a run, factor, response or measurement field and was ignored`);
 
-  const obs = [];
+  const obs = [], readings = [];
   rows.forEach((r, i) => {
     const line = i + 2;
     if (r.every(v => v.trim() === '')) return;
-    const runN = num(r[iRun], iRun);
+    // the well, when the file has plate and well columns
+    let w = null;
+    if (plated && (r[iPlate].trim() !== '' || r[iWell].trim() !== '')) {
+      const q = parseWell(r[iWell]), pl = num(r[iPlate], iPlate);
+      w = q ? byWell.get(`${pl}/${wellId(q.r, q.c)}`) : null;
+      if (!w) { err(line, header[iWell], `plate ${r[iPlate]} well ${r[iWell]} is not in the layout${q && excludedSet(study.plates).has(wellId(q.r, q.c)) ? ' (an excluded well)' : ''}`); return; }
+    }
+    if (w && w.control !== undefined) {
+      // a control well: its readings go to plates.readings
+      const values = [];
+      if (long) {
+        const rid = r[col('response')].trim(), resp = study.responses.find(x => x.id === rid || norm(x.name) === norm(rid));
+        if (!resp) { err(line, header[col('response')], `unknown response "${rid}"`); return; }
+        values.push([resp.id, col('value')]);
+      } else roles.forEach((role, j) => { if (role?.result && role.result.site === undefined) values.push([role.result.response, j]); });
+      for (const [response, j] of values) {
+        const v = num(r[j], j);
+        if (v === undefined) continue;
+        if (Number.isNaN(v)) { err(line, header[j], `"${r[j]}" is not a number`); continue; }
+        readings.push({ plate: w.plate, well: w.well, response, value: v });
+      }
+      return;
+    }
+    const runN = iRun >= 0 && r[iRun].trim() !== '' ? num(r[iRun], iRun) : w?.run;
     const run = runs.get(runN);
-    if (!run) { err(line, header[iRun], `run ${JSON.stringify(r[iRun])} is not in the design`); return; }
+    if (!run) { err(line, header[iRun >= 0 ? iRun : iWell], `run ${JSON.stringify(iRun >= 0 ? r[iRun] : runN)} is not in the design`); return; }
+    if (w && iRun >= 0 && r[iRun].trim() !== '' && w.run !== run.run) { err(line, header[iWell], `run ${run.run} is in plate ${w.plate} well ${w.well}? The layout has run ${w.run} there (rows mixed up?)`); return; }
     // factor settings in the file must agree with the plan
     roles.forEach((role, j) => {
       if (!role?.factor) return;
@@ -271,7 +302,8 @@ export function importResults(study, text, opts = {}) {
   const got = new Set(obs.map(x => x.o.run));
   const none = [...runs.keys()].filter(k => !got.has(k) && !study.observations.some(o => o.run === k));
   if (none.length && obs.length) problems.push({ severity: 'info', line: null, column: null, message: `no results yet for run(s) ${none.join(', ')}` });
-  return { format: long ? 'long' : 'wide', observations: obs.map(x => x.o), problems, mapping, unmatched };
+  if (readings.length) problems.push({ severity: 'info', line: null, column: null, message: `${readings.length} control-well reading(s)` });
+  return { format: long ? 'long' : 'wide', observations: obs.map(x => x.o), readings, problems, mapping, unmatched };
 }
 
 /**
@@ -287,5 +319,32 @@ export function applyResults(study, imported, { mode = 'replace', force = false 
     const touched = new Set(imported.observations.map(o => `${o.run}|${o.response}`));
     keep = keep.filter(o => !touched.has(`${o.run}|${o.response}`));
   } else if (mode !== 'append') throw new Error(`mode must be "replace" or "append"`);
-  return createStudy({ ...study, observations: [...keep, ...imported.observations] });
+  let plates = study.plates;
+  if (imported.readings?.length) {
+    const k = (x) => `${x.plate}/${x.well}/${x.response}`, got = new Set(imported.readings.map(k));
+    plates = { ...plates, readings: [...plates.readings.filter(x => mode === 'append' || !got.has(k(x))), ...imported.readings] };
+  }
+  return createStudy({ ...study, observations: [...keep, ...imported.observations], ...(plates ? { plates } : {}) });
+}
+
+/**
+ * A plate reader's grid export (rows A, B, … down, columns 1, 2, … across, one plate) as long CSV
+ * text — plate, well, response, value — for importResults. Leading lines before the grid's header
+ * row (1, 2, 3, …) are skipped; cells that are blank stay unmeasured.
+ */
+export function plateGridToLong(text, { plate = 1, response }) {
+  if (!response) throw new Error('name the response the grid holds');
+  let t = String(text);
+  if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
+  const all = records(t, detectDelimiter(t)).map(r => r.map(c => c ?? ''));
+  const h = all.findIndex(r => r.slice(1).filter(c => c.trim() !== '').every((c, j) => Number(c) === j + 1) && r.slice(1).some(c => c.trim() !== ''));
+  if (h < 0) throw new Error('no grid header row (1, 2, 3, … across) found');
+  const out = [['plate', 'well', 'response', 'value']];
+  for (const r of all.slice(h + 1)) {
+    const L = (r[0] ?? '').trim().toUpperCase();
+    if (!/^[A-Z]{1,2}$/.test(L)) { if (r.every(c => c.trim() === '')) continue; break; }
+    r.slice(1).forEach((v, j) => { if (v.trim() !== '') out.push([plate, `${L}${String(j + 1).padStart(2, '0')}`, response, v.trim()]); });
+  }
+  if (out.length === 1) throw new Error('the grid has no values');
+  return writeCSV(out[0], out.slice(1));
 }

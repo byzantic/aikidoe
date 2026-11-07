@@ -23,6 +23,7 @@ screening, central composite and Box–Behnken designs, optimal designs (with co
 split-plot designs for hard-to-change factors, sequential augmentation (fold-over, axial points,
 optimal augmentation, confirmation runs); least squares with ANOVA, Lenth's method, diagnostics,
 Box–Cox, model reduction; mixed models (REML, Kenward–Roger) for whole plots, wafers and sites;
+microplate layouts (runs in wells, controls, Z′, edge and row/column position terms);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.
 
@@ -49,10 +50,13 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    aliased, and power — [references/decisions.md](references/decisions.md). Agree one.
 4. **Design** and hand over the **run sheet**: `doe design …`, `doe alias`, `doe power`,
    `doe sheet STUDY --csv sheet.csv` (or `--html`). Tell the user to run it in the given order.
+   Runs in the wells of microplates: `doe plate STUDY --control id:role:n … --pipetting FILE.csv`
+   (balanced layout, controls spread) — never let the conditions be lined up in rows.
 5. **Import** the results the user sends: `doe import STUDY results.csv` (check the report before
    accepting it).
 6. **Analyse**: `doe fit STUDY "y ~ …" --json` (mixed models are automatic for whole plots,
-   wafers and sites), Lenth's method for saturated designs, diagnostics, `--reduce p|aicc`.
+   wafers and sites; plate position terms are automatic for runs in wells), Lenth's method for
+   saturated designs, diagnostics, `--reduce p|aicc`.
 7. **Decide the next stage** with the user: fold-over, axial points, optimal augmentation, or
    confirmation runs at the chosen settings (`doe augment`); optimise (`doe optimise`, `doe
    robust`); then confirm.

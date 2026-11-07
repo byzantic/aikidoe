@@ -122,6 +122,25 @@
             "const": true
           },
           "command": {
+            "const": "plate"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/plate"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
             "const": "import"
           }
         },
@@ -724,6 +743,137 @@
         }
       }
     },
+    "plate": {
+      "type": "object",
+      "required": [
+        "rows",
+        "cols",
+        "plates",
+        "layout",
+        "controls",
+        "capacity",
+        "wells"
+      ],
+      "properties": {
+        "rows": {
+          "type": "integer"
+        },
+        "cols": {
+          "type": "integer"
+        },
+        "plates": {
+          "type": "integer",
+          "description": "plates in use"
+        },
+        "layout": {
+          "enum": [
+            "balanced",
+            "random",
+            "ordered"
+          ]
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "controls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "role",
+              "perPlate"
+            ]
+          }
+        },
+        "capacity": {
+          "type": "integer",
+          "description": "wells per plate for runs"
+        },
+        "efficiency": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "layout efficiency for the design's model (1 = position costs nothing)"
+        },
+        "worst": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "term": {
+              "type": "string"
+            },
+            "efficiency": {
+              "type": "number"
+            }
+          }
+        },
+        "wells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "plate",
+              "well"
+            ]
+          }
+        },
+        "zPrime": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "response",
+              "plates"
+            ],
+            "properties": {
+              "response": {
+                "type": "string"
+              },
+              "plates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "plate",
+                    "controls"
+                  ],
+                  "properties": {
+                    "plate": {
+                      "type": "integer"
+                    },
+                    "zPrime": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "controls": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "n",
+                          "mean"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "description": "Z′ per plate from the positive and negative controls"
+        }
+      }
+    },
     "import": {
       "type": "object",
       "required": [
@@ -770,6 +920,10 @@
         },
         "observations": {
           "type": "integer"
+        },
+        "controlReadings": {
+          "type": "integer",
+          "description": "control-well readings read (plates)"
         }
       }
     },

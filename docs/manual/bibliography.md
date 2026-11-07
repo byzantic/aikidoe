@@ -32,6 +32,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   variables. *Technometrics* 2, 455–475.
 - Box, G. E. P. & Wilson, K. B. (1951). On the experimental attainment of optimum conditions.
   *Journal of the Royal Statistical Society B* 13, 1–45.
+- Brideau, C., Gunter, B., Pikounis, B. & Liaw, A. (2003). Improved statistical methods for hit
+  selection in high-throughput screening. *Journal of Biomolecular Screening* 8, 634–647. (B-scores:
+  median polish of plate rows and columns; see [microplates](plates.md#analysis).)
 - Derringer, G. & Suich, R. (1980). Simultaneous optimization of several response variables.
   *Journal of Quality Technology* 12, 214–219.
 - Fries, A. & Hunter, W. G. (1980). Minimum aberration 2^(k−p) designs. *Technometrics* 22, 601–608.
@@ -67,6 +70,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Monte Carlo estimates. *Mathematics and Computers in Simulation* 55, 271–280.
 - Vining, G. G. & Myers, R. H. (1990). Combining Taguchi and response surface philosophies: a dual
   response approach. *Journal of Quality Technology* 22, 38–45.
+- Zhang, J.-H., Chung, T. D. Y. & Oldenburg, K. R. (1999). A simple statistical parameter for use in
+  evaluation and validation of high throughput screening assays. *Journal of Biomolecular Screening*
+  4, 67–73. (The Z′ factor of [plate controls](plates.md#controls).)
 
 ## Software used as references in the tests
 
