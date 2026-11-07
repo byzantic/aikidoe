@@ -284,6 +284,19 @@ try {
   check('augment --json: the new stage', o.stage?.runs.length === 8 && o.totalRuns === 16);
   o = js('plate', 'j.aikidoe.json', '--format', '24', '--control', 'pos:positive:2', '--control', 'neg:negative:2');
   check('plate --json: the layout (two blocks → two plates), its efficiency and the wells', o.plates === 2 && o.capacity === 20 && o.efficiency > 0.9 && o.wells.filter(w => w.run).length === 16);
+  js('init', 'jd.aikidoe.json', '--factor', 'conc:0:100', '--factor', 'cpd=ref,test', '--response', 'v', '--seed', '3');
+  o = js('design', 'jd.aikidoe.json', '--dose', 'conc', '--curve', 'cpd', '--top', '100', '--dilution', '3', '--doses', '8', '--zeros', '1', '--replicates', '2');
+  check('design --dose --json: a dose–response design for each curve', o.design?.kind === 'dose-response' && o.runs === 36);
+  o = js('dose', 'jd.aikidoe.json', '--quality', '--guess', 'b=1.2,c=0,d=100,e=2', '--sigma', '5', '--power', '2');
+  check('dose --quality --json: se(log EC50) and power before results', o.seLogEC50 > 0 && o.power?.power > 0.5);
+  {
+    const sd = JSON.parse(readFileSync(join(dir, 'jd.aikidoe.json'), 'utf8'));
+    const ll4 = (x, e) => 2 + 98 / (1 + (x / e) ** 1.2);
+    sd.observations = sd.design.runs.map(r => ({ run: r.run, response: 'v', value: +(ll4(r.settings.conc, r.settings.cpd === 'ref' ? 2 : 0.8) + 2 * Math.sin(7 * r.run)).toFixed(3) }));
+    writeFileSync(join(dir, 'jd.aikidoe.json'), JSON.stringify(sd));
+  }
+  o = js('dose', 'jd.aikidoe.json', '--parallel', '--ed', '50,90', '--predict', '50', '--limits');
+  check('dose --json: parameters, EDs, potency near 2.5, parallelism, inverse prediction, limits', o.parameters?.length === 5 && o.effectiveDoses.length === 4 && Math.abs(o.potency.estimate - 2.5) < 0.3 && o.parallelism.F.p > 0 && o.inverse.length === 1 && o.limits.lod > 0);
   js('sites', 'janneal.aikidoe.json');
   js('summary', 'janneal.aikidoe.json', 'Rs', '--stats', 'mean');
   o = js('gauge', 'gauge.csv', '--tolerance', '8');

@@ -15,6 +15,17 @@
 //        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
 //        [--whole-plots W] [--eta η (optimal; σ²_wp/σ², default 1)] [--no-split-plot]
 //        [--sheet FILE.csv] [--html FILE.html]
+//   design STUDY --dose [FACTOR] [--curve FACTOR] (--top T --dilution D --doses n | --at 0,0.1,1,…
+//                 | --optimal --guess "b=1,c=0,d=100,e=1" --range LO:HI --runs N [--criterion D|EC50] [--robust F])
+//        [--zeros n] [--replicates r] [--seed S] [--stage]     dose–response doses for each curve level;
+//        --stage adds the doses to an existing dose design (e.g. around the EC50 of a range-finding stage)
+//   dose STUDY [RESPONSE] [--model LL.4|LL.3|LL.5|W1.4|W2.4] [--parallel | --separate b,c,d,e]
+//        [--reference L --test L] [--ed 10,50,90] [--interval delta|log] [--var-power θ]
+//        [--predict y1,y2,… [--readings m]] [--limits]
+//        fit dose–response curves: parameters, effective doses, relative potency and parallelism,
+//        doses for sample responses (standard curve), LOD/LOQ
+//   dose STUDY --quality --guess "b=…,c=…,d=…,e=…" [--sigma s] [--power RATIO]   before results: how well
+//        the design's doses estimate log EC50 at the guess, and the power for a potency ratio
 //   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
 //   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
 //        [--grid --plate N --response R]   a plate reader's grid export (rows A…, columns 1…) for one plate
@@ -74,6 +85,7 @@
 //   exercise run STUDY                     self-study: results for the runs of the design
 //   exercise run KEY SHEET.csv [--out RESULTS.csv]   class mode: results for a student's run sheet
 //   exercise answer STUDY [--active A,B] [--effect "A=est:lo:hi" …] [--best "A=…,B=…"] [--prediction v]
+//        [--ec50 est:lo:hi] [--potency est:lo:hi]   (dose topic)
 //   exercise grade STUDY | exercise grade KEY STUDY   score, feedback, the model answer and the truth
 //        (without answers, the study's data are analysed the standard way and that is graded)
 //   exercise topics                        the topics, difficulties and scenarios
@@ -98,6 +110,9 @@ import * as T from '../js/design/twolevel.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import { runSheetCSV, runSheetHTML, importResults, applyResults, plateGridToLong } from '../js/io/runsheet.js';
 import { layoutPlates, layoutReport } from '../js/design/plate-layout.js';
+import { doseDesign, addDoseStage, doseData, doseRoles } from '../js/design/dose-design.js';
+import { fitDose, effectiveDose, relativePotency, parallelism, inversePredict, detectionLimits, dilutionSeries, optimalDoses,
+  doseDesignQuality, guessScenarios, potencyPower, MODELS as DOSE_MODELS } from '../js/model/dose.js';
 import { pipettingCSV, plateMapHTML, plateMapText } from '../js/io/platemap.js';
 import { controlSummary, plateNumbers, runCapacity, ROLES, platesWithoutWells } from '../js/plate.js';
 import { fitModel, anova, lackOfFit, boxCox, lenth, twoLevelEffects, predict } from '../js/model/ols.js';
@@ -186,6 +201,7 @@ function cmdInit({ pos, opt }) {
 function cmdDesign({ pos, opt }) {
   const file = pos[0];
   const study = load(file);
+  if (opt.dose !== undefined) return cmdDoseDesign(file, study, opt);
   if (study.design && !opt.force) fail(`${file} already has a design (use --force to replace it${study.observations.length ? ' — its observations will be removed' : ''})`);
   const k = study.factors.length;
   const rsmDesign = !!(opt.ccd || opt.bbd || opt.dsd || opt.optimal);
@@ -268,6 +284,105 @@ function cmdDesign({ pos, opt }) {
   }
   if (opt.sheet) { writeFileSync(opt.sheet, runSheetCSV(next)); out(`run sheet: ${opt.sheet}`); }
   if (opt.html) { writeFileSync(opt.html, runSheetHTML(next)); out(`printable run sheet: ${opt.html}`); }
+}
+
+const parseGuess = (t) => {
+  if (!t || t === true) fail('--guess "b=…,c=…,d=…,e=…" (slope, the two asymptotes, EC50)');
+  const g = Object.fromEntries(String(t).split(',').map(kv => { const [k, v] = kv.split('='); return [k.trim(), Number(v)]; }));
+  for (const k of ['b', 'd', 'e']) if (!Number.isFinite(g[k])) fail(`--guess needs ${k}=…`);
+  return { c: 0, f: 1, ...g };
+};
+
+function cmdDoseDesign(file, study, opt) {
+  const stage = !!opt.stage;
+  if (stage && study.design?.kind !== 'dose-response') fail('--stage adds doses to a dose–response design: make one first');
+  if (!stage && study.design && !opt.force) fail(`${file} already has a design (use --force to replace it, or --stage to add doses)`);
+  const dose = opt.dose === true ? undefined : String(opt.dose);
+  const curve = opt.curve === undefined ? (stage ? undefined : null) : String(opt.curve);
+  let doses, params;
+  const zeros = opt.zeros !== undefined ? int(opt.zeros, 'zeros') : 0;
+  if (opt.at !== undefined) { doses = String(opt.at).split(',').map(Number); params = { method: 'listed' }; }
+  else if (opt.optimal) {
+    const guess = parseGuess(opt.guess), [lo, hi] = String(opt.range ?? fail('--optimal needs --range LO:HI')).split(':').map(Number);
+    const runs = int(opt.runs ?? fail('--optimal needs --runs N (per curve)'), 'runs'), criterion = opt.criterion ? String(opt.criterion) : 'D';
+    const g = opt.robust ? guessScenarios(guess, { factor: Number(opt.robust) }) : guess;
+    const o = optimalDoses({ guess: g, runs, range: [lo, hi], criterion, zero: zeros > 0 });
+    doses = o.doses; params = { method: `${criterion}-optimal${opt.robust ? `, robust over EC50 ×/÷ ${opt.robust}` : ''}`, guess, range: [lo, hi] };
+    out(`${criterion}-optimal doses for ${runs} runs per curve${opt.robust ? ` (robust: EC50 ×/÷ ${opt.robust}, slope ×/÷ 1.5)` : ''}: ${[...new Set(doses)].map(d => `${num(d, 4)} ×${doses.filter(x => x === d).length}`).join(', ')}`);
+  } else {
+    if (opt.top === undefined || opt.dilution === undefined || opt.doses === undefined) fail('--dose needs the doses: --top T --dilution D --doses n, --at …, or --optimal …');
+    doses = dilutionSeries({ top: Number(opt.top), dilution: Number(opt.dilution), doses: int(opt.doses, 'doses'), zeros });
+    params = { method: 'dilution series', top: Number(opt.top), dilution: Number(opt.dilution) };
+  }
+  if (opt.optimal && zeros) doses = [...Array(zeros).fill(0), ...doses.filter(d => d > 0)];
+  const reps = opt.replicates ? int(opt.replicates, 'replicates') : 1;
+  const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
+  let next;
+  if (stage) next = addDoseStage(study, { doses, replicates: reps, seed, params });
+  else next = createStudy({ ...study, design: doseDesign(study, { dose, curve, doses, replicates: reps, seed, params }), observations: [], ...platesWithoutWells(study) });
+  save(file, next);
+  const roles = doseRoles(next), n = next.design.runs.length;
+  put({ file, design: { ...next.design, seed }, runs: n });
+  out(`${file}: dose–response design, ${n} runs${stage ? ' in all (a new stage)' : ''}: ${roles.dose} at ${[...new Set(doses)].map(d => num(d, 4)).join(', ')}${reps > 1 ? `, ${reps} replicates` : ''}${roles.curve ? `, for each ${roles.curve}` : ''}; randomisation complete, seed ${seed}`);
+}
+
+function cmdDose({ pos, opt }) {
+  const [file, respArg] = pos, study = load(file);
+  if (!study.design) fail('dose: the study has no design');
+  const roles = doseRoles(study, { ...(opt['dose-factor'] ? { dose: String(opt['dose-factor']) } : {}), ...(opt.curve !== undefined ? { curve: String(opt.curve) } : {}) });
+  const model = opt.model ? String(opt.model) : 'LL.4';
+  if (!DOSE_MODELS[model]) fail(`--model: ${Object.keys(DOSE_MODELS).join(', ')}`);
+  if (opt.quality) {
+    const guess = parseGuess(opt.guess), sigma = opt.sigma !== undefined ? Number(opt.sigma) : 1;
+    const levels = roles.curve ? study.factors.find(f => f.id === roles.curve).levels : [null];
+    const per = levels.map(l => study.design.runs.filter(r => l === null || String(r.settings[roles.curve]) === String(l)).map(r => r.settings[roles.dose]));
+    const q = doseDesignQuality(per[0], { model, guess, sigma });
+    put({ seLogEC50: q.seLogE, logdet: q.logdet });
+    out(`${per[0].length} runs per curve at ${[...new Set(per[0])].length} doses: se(log EC50) = ${num(q.seLogE, 4)}${opt.sigma === undefined ? ' σ' : ''} at the guess — EC50 within ×/÷ ${num(Math.exp(1.96 * q.seLogE), 3)} (95 %)`);
+    if (opt.power !== undefined) {
+      const pw = potencyPower(per[0], { model, guess, sigma, ratio: Number(opt.power) });
+      put({ power: pw });
+      out(`power to detect a relative potency of ${opt.power} between two parallel curves: ${num(pw.power, 3)}; potency ratio with 80 % power: ${num(pw.detectable, 3)}`);
+    }
+    return;
+  }
+  const data = doseData(study, { response: respArg, ...roles });
+  if (data.x.length < DOSE_MODELS[model].params.length + 1) fail(`${data.response}: ${data.x.length} results — too few for the ${model} model`);
+  const sep = opt.parallel ? 'parallel' : opt.separate ? String(opt.separate).split(',').map(x => x.trim()) : undefined;
+  const fit = fitDose(data, { model, separate: sep, ...(opt['var-power'] !== undefined ? { varPower: Number(opt['var-power']) } : {}) });
+  const how = opt.interval ? String(opt.interval) : 'delta';
+  out(`${data.response} ~ ${model} (${DOSE_MODELS[model].name}) in ${roles.dose}${fit.curves.length > 1 ? `, ${fit.curves.length} curves (${roles.curve}: ${fit.curves.join(', ')})${sep === 'parallel' ? '; parallel: only e differs' : sep ? `; separate: ${sep.join(', ')}` : '; all parameters separate'}` : ''}`);
+  out(`${fit.n} results, ${fit.estimates.length} parameters, ${fit.df} residual df${fit.varPower ? `; weights 1/μ^${fit.varPower}` : ''}${fit.converged ? '' : ' — warning: the fit did not converge'}`);
+  out(table([{ key: 'name', label: 'parameter', align: 'left' }, { key: 'estimate', label: 'estimate' }, { key: 'se', label: 'std. error' }, { key: 't', label: 't' }, { key: 'p', label: 'p', fmt: pval }], fit.estimates));
+  out(`σ = ${num(fit.sigma)}   (b > 0: decreasing, b < 0: increasing; e = EC50 for LL.4 and LL.3)`);
+  const ps = (opt.ed ? String(opt.ed) : '50').split(',').map(Number);
+  const eds = fit.curves.flatMap(c => ps.map(p => effectiveDose(fit, p, { curve: fit.curves.length > 1 ? c : undefined, interval: how })));
+  out(`\neffective doses (${how === 'log' ? 'intervals symmetric on the log dose' : 'delta-method intervals'}, 95 %)`);
+  out(table([...(fit.curves.length > 1 ? [{ key: 'curve', label: 'curve', align: 'left' }] : []), { key: 'p', label: 'ED', fmt: (v) => `ED${v}` }, { key: 'estimate', label: 'dose' }, { key: 'se', label: 'std. error' }, { key: 'lower', label: 'lower' }, { key: 'upper', label: 'upper' }], eds));
+  const res = { model, response: data.response, dose: roles.dose, curve: roles.curve, curves: fit.curves, n: fit.n, df: fit.df, sigma: fit.sigma, rss: fit.rss, converged: fit.converged,
+    parameters: fit.estimates, effectiveDoses: eds };
+  if (fit.curves.length === 2) {
+    const ref = opt.reference ? String(opt.reference) : fit.curves[0], test = opt.test ? String(opt.test) : fit.curves.find(c => c !== ref);
+    const pa = parallelism(data, { model, test, reference: ref, ...(opt['var-power'] !== undefined ? { varPower: Number(opt['var-power']) } : {}) });
+    const rp = relativePotency(pa.parallel, { test, reference: ref, interval: 'log' });
+    out(`\nrelative potency of ${test} against ${ref} (ED50 ${ref} ÷ ED50 ${test}, parallel curves): ${num(rp.estimate, 4)} (95 % ${num(rp.lower, 4)} … ${num(rp.upper, 4)})`);
+    out(`parallelism: F = ${num(pa.F.F, 4)} on ${pa.F.df1} and ${pa.F.df2} df, p = ${pval(pa.F.p)} (separate curves against parallel); slope ratio ${num(pa.slopeRatio.estimate, 3)} (90 % ${num(pa.slopeRatio.lower, 3)} … ${num(pa.slopeRatio.upper, 3)}) ${pa.slopeRatio.equivalent ? 'within' : 'not within'} 0.8 … 1.25`);
+    res.potency = rp; res.parallelism = { F: pa.F, slopeRatio: pa.slopeRatio };
+  }
+  if (opt.predict !== undefined) {
+    const m = opt.readings ? int(opt.readings, 'readings') : 1;
+    const ys = String(opt.predict).split(',').map(Number);
+    const ip = ys.map(y0 => inversePredict(fit, y0, { m, curve: fit.curves.length > 1 ? (opt.reference ?? fit.curves[0]) : undefined }));
+    out(`\ndoses for responses (standard curve; each response the mean of ${m} reading${m > 1 ? 's' : ''})`);
+    out(table([{ key: 'y0', label: 'response' }, { key: 'estimate', label: 'dose' }, { key: 'lower', label: 'lower' }, { key: 'upper', label: 'upper' }, { key: 'note', label: '', align: 'left' }], ip));
+    res.inverse = ip;
+  }
+  if (opt.limits) {
+    const L = detectionLimits(fit, { curve: fit.curves.length > 1 ? (opt.reference ?? fit.curves[0]) : undefined });
+    out(`\nblank (zero-dose asymptote) ${num(L.blank, 4)}, σ ${num(L.sigma, 4)}: LOD (3σ) ${num(L.lod, 4)}, LOQ (10σ) ${num(L.loq, 4)}`);
+    res.limits = L;
+  }
+  put(res);
 }
 
 function cmdSheet({ pos, opt }) {
@@ -1101,6 +1216,7 @@ async function cmdExercise({ pos, opt }) {
     for (const e of list(opt.effect)) { const [id, v] = String(e).split('='); const [est, lo, hi] = (v ?? '').split(':').map(Number); if (![est, lo, hi].every(Number.isFinite)) fail(`--effect "${e}": give id=estimate:lower:upper`); (a.effects ??= {})[id.trim()] = { estimate: est, lower: lo, upper: hi }; }
     if (opt.best) a.best = parseSettingsLoose(study, String(opt.best));
     if (opt.prediction !== undefined) a.prediction = { value: Number(opt.prediction) };
+    for (const k of ['ec50', 'potency']) if (opt[k] !== undefined) { const [est, lo, hi] = String(opt[k]).split(':').map(Number); if (![est, lo, hi].every(Number.isFinite)) fail(`--${k}: give estimate:lower:upper`); a[k] = { estimate: est, lower: lo, upper: hi }; }
     save(file, createStudy({ ...study, exercise: { ...study.exercise, answers: a } }));
     put({ file, answers: a });
     out(`${file}: answers ${JSON.stringify(a)}`);
@@ -1114,12 +1230,12 @@ async function cmdExercise({ pos, opt }) {
     const g = gradeStudy(ex, study, truthOf(ex));
     put({ score: g.score, parts: g.parts, derived: g.derived, answers: g.answers, truth: g.truth, modelAnswer: g.modelAnswer });
     out(`${ex.title} — ${ex.difficulty} (${ex.id})`);
-    if (g.derived) out(`no answers given: graded on the standard analysis of your data (${g.answers.formula}, terms with p < 0.05)`);
+    if (g.derived) out(`no answers given: graded on the standard analysis of your data (${g.answers.formula}${g.truth.ec50 === undefined ? ', terms with p < 0.05' : ''})`);
     out(table([{ key: 'id', label: 'question', align: 'left' }, { key: 'pts', label: 'points' }, { key: 'note', label: '', align: 'left' }],
       g.parts.map(p => ({ ...p, pts: p.max ? `${num(p.score, 3)} / ${num(p.max, 3)}` : num(p.score, 3) }))));
     out(`score: ${g.score} / 100`);
-    out(`\ntruth: active ${g.truth.active.join(', ')}; effects ${Object.entries(g.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`);
-    if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(`  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
+    out(g.truth.ec50 !== undefined ? `\ntruth: EC50 ${num(g.truth.ec50, 4)}, relative potency ${num(g.truth.potency, 4)}` : `\ntruth: active ${g.truth.active.join(', ')}; effects ${Object.entries(g.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`);
+    if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(g.modelAnswer.answers.ec50 ? `  → EC50 ${num(g.modelAnswer.answers.ec50.estimate, 4)}, potency ${num(g.modelAnswer.answers.potency.estimate, 4)}; power of the reference design for the potency ${num(g.modelAnswer.power, 3)}` : `  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
     return;
   }
   fail('exercise: new, run, answer, grade or topics');
@@ -1152,7 +1268,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

@@ -21,6 +21,9 @@ fraction; it gives every alias.
 **Desirability** — a 0–1 score of how acceptable a response value is; the overall desirability
 combines several responses.
 
+**EC50** — the dose giving half the full effect of a dose–response curve, half way between its
+asymptotes. See [dose–response](dose-response.md).
+
 **Edge effect** — wells on the outer ring of a microplate reading differently from the inner
 wells (evaporation, temperature). See [microplates](plates.md).
 
@@ -48,6 +51,9 @@ effects themselves.
 **Mixed model** — a model with fixed effects (the factors) and random effects (whole plots, runs,
 wafers) for nested sources of variation.
 
+**Parallel curves** — dose–response curves of the same shape shifted along the log-dose axis; the
+condition for a single relative potency. See [relative potency](dose-response.md#relative-potency).
+
 **Plate layout** — which run goes in which well of a microplate; a balanced layout keeps the
 effects clear of plate, edge and row and column differences. See [layouts](plates.md#layouts).
 
@@ -62,6 +68,9 @@ the confidence interval for the mean).
 effects.
 
 **REML** — restricted maximum likelihood: the standard way to estimate variance components.
+
+**Relative potency** — how many times less of a test compound gives the same effect as a reference:
+EC50 of the reference ÷ EC50 of the test. See [relative potency](dose-response.md#relative-potency).
 
 **Replicate** — an independent repeat of a run, set up again from scratch (not a repeated
 measurement of the same run).

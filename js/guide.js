@@ -14,6 +14,7 @@ import { ccd, boxBehnken } from './design/rsm.js';
 import { definitiveScreening } from './design/dsd.js';
 
 const PHYSICAL = (a) => a.aim && a.aim !== 'measure' && a.aim !== 'simulate';
+const FACTORIAL = (a) => PHYSICAL(a) && a.aim !== 'dose';            // the questions about factors and models
 
 export const QUESTIONS = [
   { id: 'aim', type: 'choice', text: 'What do you want to find out?',
@@ -24,6 +25,7 @@ export const QUESTIONS = [
       { value: 'understand', label: 'How a few factors affect the result, and whether they interact', hint: 'two to eight factors you already believe matter' },
       { value: 'optimise', label: 'The best settings', hint: 'a maximum, minimum or target' },
       { value: 'robust', label: 'Settings that make the result insensitive to variation I cannot control', hint: 'e.g. incoming material, ambient conditions' },
+      { value: 'dose', label: 'How the result depends on a dose or concentration', hint: 'an EC50, a relative potency, a standard curve' },
       { value: 'measure', label: 'Whether my measurement is good enough', hint: 'before any experiment' },
       { value: 'simulate', label: 'How a simulation model behaves', hint: 'a simulator, not a physical process' },
     ] },
@@ -39,13 +41,16 @@ export const QUESTIONS = [
       { value: 'unsure', label: 'I am not sure' },
       { value: 'poor', label: 'Repeat measurements vary noticeably' },
     ] },
-  { id: 'factors', type: 'number', min: 1, max: 30, when: (a) => a.aim && a.aim !== 'measure', text: 'How many factors — things you can set — will you vary?',
+  { id: 'curves', type: 'number', min: 1, max: 24, when: (a) => a.aim === 'dose', text: 'How many curves — compounds, samples or batches — will you compare?',
+    why: 'Each compound or sample gets its own curve. With two or more, the usual question is relative potency: how many times less of one gives the same effect as the other — which is one number only if the curves have the same shape. One curve can be a standard curve, for reading unknown samples off it.',
+    help: ['dose-response', 'relative-potency'] },
+  { id: 'factors', type: 'number', min: 1, max: 30, when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'dose', text: 'How many factors — things you can set — will you vary?',
     why: 'Count every setting you might change, including ones you suspect do not matter: a factor left out cannot be found, and one held fixed is part of the conditions the result applies to. In a robust-design study, count the noise factors you can set deliberately in the experiment too.',
     help: ['concepts', 'factors-and-coded-units'] },
-  { id: 'names', type: 'text', optional: true, when: (a) => a.aim && a.aim !== 'measure', text: 'Their names (optional, separated by commas)',
+  { id: 'names', type: 'text', optional: true, when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'dose', text: 'Their names (optional, separated by commas)',
     why: 'Only to label the study the guide creates; you can rename the factors and set their ranges on the Define step.',
     help: ['concepts', 'factors-and-coded-units'] },
-  { id: 'types', type: 'choice', when: PHYSICAL, text: 'What kind of factors are they?',
+  { id: 'types', type: 'choice', when: FACTORIAL, text: 'What kind of factors are they?',
     why: 'A continuous factor has a range (temperature 900–1000 °C) and can be set between its ends, so curvature can be studied. A categorical factor is a choice (supplier A or B). Two-level choices fit the standard factorial designs; three or more choices usually need an optimal design.',
     help: ['concepts', 'factors-and-coded-units'],
     options: [
@@ -53,10 +58,10 @@ export const QUESTIONS = [
       { value: 'two-level', label: 'Some are choices between two options' },
       { value: 'multi', label: 'Some are choices among three or more options' },
     ] },
-  { id: 'categorical', type: 'number', min: 1, max: 30, when: (a) => PHYSICAL(a) && (a.types === 'two-level' || a.types === 'multi'), text: 'How many of them are choices (categorical)?',
+  { id: 'categorical', type: 'number', min: 1, max: 30, when: (a) => FACTORIAL(a) && (a.types === 'two-level' || a.types === 'multi'), text: 'How many of them are choices (categorical)?',
     why: 'Only to set up the study; you can change any factor\'s type on the Define step.',
     help: ['concepts', 'factors-and-coded-units'] },
-  { id: 'htc', type: 'number', min: 0, max: 30, when: PHYSICAL, text: 'How many factors are hard, slow or expensive to change between runs? (0 if none)',
+  { id: 'htc', type: 'number', min: 0, max: 30, when: FACTORIAL, text: 'How many factors are hard, slow or expensive to change between runs? (0 if none)',
     why: 'A furnace temperature that takes hours to settle, or a fixture that has to be rebuilt, tempts you to run all the low settings first and then all the high ones. That confounds the factor with everything that drifts over time. A split-plot design changes the hard factor a limited number of times on purpose, and its analysis tests that factor against the right, larger error.',
     help: ['designs-split-plot', ''] },
   { id: 'groups', type: 'choice', when: PHYSICAL, text: 'Will the runs be done in groups that may differ — several days, batches of material, chambers?',
@@ -70,11 +75,11 @@ export const QUESTIONS = [
     why: 'Wells are not all alike: the outer ring evaporates and warms faster, pipettes and readers leave row and column differences, and plates differ. Filling a plate the tidy way (each condition in a row, controls in one column) puts those differences into the effects; a balanced layout spreads them, and the analysis takes out the plate, edge and gradients.',
     help: ['plates', ''],
     options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
-  { id: 'curvature', type: 'choice', when: (a) => PHYSICAL(a) && a.aim !== 'optimise', text: 'Could the response peak, dip or level off inside the ranges you will use?',
+  { id: 'curvature', type: 'choice', when: (a) => FACTORIAL(a) && a.aim !== 'optimise', text: 'Could the response peak, dip or level off inside the ranges you will use?',
     why: 'Two-level designs fit straight lines between the low and high settings and cannot see curvature. Centre points test for it cheaply; designs with three levels can estimate it.',
     help: ['designs-rsm', ''],
     options: [{ value: 'no', label: 'Unlikely — roughly linear over the ranges' }, { value: 'unsure', label: 'Not sure' }, { value: 'yes', label: 'Likely' }] },
-  { id: 'constraints', type: 'choice', when: PHYSICAL, text: 'Can every combination of settings be run?',
+  { id: 'constraints', type: 'choice', when: FACTORIAL, text: 'Can every combination of settings be run?',
     why: 'Standard designs put runs at the corners of the region — every factor at an extreme at once. If those are unsafe, a design without corner runs helps; if some combinations are impossible, an optimal design can be searched within what is allowed.',
     help: ['designs-optimal', 'constraints'],
     options: [
@@ -82,7 +87,7 @@ export const QUESTIONS = [
       { value: 'corners', label: 'All extremes at once would be unsafe or impractical' },
       { value: 'combos', label: 'Some combinations are impossible (e.g. high temperature with long time)' },
     ] },
-  { id: 'effect', type: 'choice', when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'simulate', text: 'How big a change in the result matters, compared with its run-to-run scatter?',
+  { id: 'effect', type: 'choice', when: (a) => FACTORIAL(a), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
     why: 'This is what decides the number of runs. The scatter (σ) is the standard deviation of repeated runs at the same settings, measurement included. To have an 80 % chance of detecting an effect Δ in a two-level design takes roughly N ≈ 32 / (Δ/σ)² runs, plus a few for the error estimate: about 8 runs for 2σ, 32 for 1σ, 128 for σ/2.',
     help: ['concepts', 'power'],
     options: [
@@ -174,6 +179,19 @@ export function advise(a) {
   }
 
   let aim = a.aim;
+  if (aim === 'dose') {
+    const nc = a.curves ?? 1, perCurve = 1 + 6 + 16;          // range-finding (zero and 6 doses), then 8 doses × 2
+    Object.assign(out, { family: 'dose', runs: nc * 7, headline: `Dose–response: a range-finding series, then doses around the EC50${nc > 1 ? `, for ${nc} curves` : ''}` });
+    plan.push({ title: 'Range-finding', text: `Zero and six doses a decade apart (or a 1:10 dilution series) from the highest dose you can use, once ${nc > 1 ? 'for each compound or sample' : ''}: where does the response start to move, and where does it level off?`.replace('once :', 'once:') });
+    plan.push({ title: 'Around the EC50', text: 'Eight or so doses log-spaced over two to three decades around the EC50 the first stage suggests, two or three replicates each (Design step: dose–response design, "Add these doses as a new stage"). Doses on the slope are what fix the EC50; doses on the flat ends fix the asymptotes.' });
+    plan.push({ title: 'Fit', text: `A four-parameter log-logistic curve${nc > 1 ? ' per compound; for relative potency, parallel curves (same slope and asymptotes), checked for parallelism' : ''} — the EC50 with an interval on the log scale${nc === 1 ? ', and doses for unknown samples read off the curve (a standard curve) with LOD and LOQ' : ''}.` });
+    notes.push('Space doses on a log scale (a dilution series), never evenly on a linear one: evenly spaced doses mostly land on the flat top of the curve. Include untreated (zero-dose) wells, and if the variance grows with the response, weight the fit (variance ∝ mean^θ).');
+    if (out.budget !== null && out.budget < nc * perCurve) warnings.push(`The budget (${out.budget} runs) is below the ${nc * perCurve} this plan uses (${perCurve} per curve): fewer doses in the second stage, or fewer replicates.`);
+    if (a.plates === 'yes') notes.push('On plates: lay the dilution series out with the balanced layout, so no dose sits only on the edge or in one row.');
+    if (a.stages === 'no') notes.push('One experiment only: use a design that is good over the range of EC50s you think possible (Design step: optimal for a guess, robust ×/÷ 10).');
+    lesson('dose'); read(M('dose-response', '', 'dose–response'), M('dose-response', 'choosing-doses', 'choosing doses'), M('dose-response', 'fitting-curves', 'fitting curves'));
+    return out;
+  }
   if (aim === 'robust') {
     notes.push('Robust design: include the noise factors — the ones that vary in production — as factors you set deliberately in the experiment, and mark them as noise on the Define step (with their production spread). The interactions between control and noise factors are what make a process robust, so the design must estimate them.');
     lesson('robust'); read(M('optimisation', 'robust-design', 'robust design'));
@@ -308,6 +326,12 @@ const sup = (k) => String(k).split('').map(d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]
 
 /** A study for the answers: placeholder factors (coded ranges −1…1) to edit on the Define step. */
 export function guideStudy(a, { name = 'Study from the guide' } = {}) {
+  if (a.aim === 'dose') {
+    const nc = Math.max(1, a.curves ?? 1), adv = advise(a);
+    const factors = [{ id: 'dose', name: 'Dose', low: 0, high: 100 }, ...(nc > 1 ? [{ id: 'sample', name: 'Sample', levels: Array.from({ length: nc }, (_, i) => (i === 0 ? 'reference' : nc === 2 ? 'test' : `test${i}`)) }] : [])];
+    const description = [`Planned with the guide: ${adv.headline}.`, ...adv.plan.map((p, i) => `${i + 1}. ${p.title}: ${p.text}`)].join('\n');
+    return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors, responses: [{ id: 'y', name: 'Response' }] });
+  }
   const k = a.factors ?? 2, cats = a.types && a.types !== 'continuous' ? Math.min(a.categorical ?? 1, k) : 0, htc = Math.min(a.htc ?? 0, k);
   const names = String(a.names ?? '').split(',').map(s => s.trim()).filter(Boolean);
   const used = new Set();

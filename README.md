@@ -44,6 +44,11 @@ row/column differences; controls spread over every plate), with plate maps and a
 plate-reader grids import on the Run step; the Analyse step fits edge and gradient terms and shows
 Z′ and the residuals well by well ([manual](docs/manual/plates.md); `doe plate` on the command line).
 
+Dose–response: the Design step plans dilution series, staged doses or optimal doses for a guessed
+curve; the Analyse step fits log-logistic and Weibull curves (as R's drc), with EC50s, relative
+potency and parallelism, doses for standard-curve samples, LOD and LOQ
+([manual](docs/manual/dose-response.md); `doe design --dose`, `doe dose`).
+
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,
 hard-to-change ones, groups of runs, curvature, constraints, the effect that matters, budget — one
 question at a time with why it matters, then suggests a staged plan, ranks the designs that fit,

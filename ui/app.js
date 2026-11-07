@@ -182,5 +182,5 @@ async function start() {
   render();
 }
 
-window.aikidoe = { state };          // for debugging and the UI tests
+window.aikidoe = { state, setDoc };  // for debugging and the UI tests
 start();

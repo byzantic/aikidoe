@@ -13,3 +13,5 @@ pbkrtest
 Matrix
 SixSigma
 desirability
+drc
+numDeriv

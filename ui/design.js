@@ -14,6 +14,7 @@ import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
 import { parseFormula } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
 import { platePanel } from './plates.js';
+import { doseDesignPanel } from './dose.js';
 import { platesWithoutWells } from '../js/plate.js';
 import { designPower, detectableEffect } from '../js/model/power.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
@@ -59,7 +60,7 @@ const designHelp = (kind) => [({ full: 'designs-factorial', fraction: 'designs-f
 export function render(ctx) {
   const { state, setDoc, setUI } = ctx;
   const study = state.study;
-  const next = study.design ? nextStagePanel(ctx) : null;
+  const next = study.design && study.design.kind !== 'dose-response' ? nextStagePanel(ctx) : null;
   const ui = state.ui.design ??= {};
   const cands = candidates(study);
   if (!cands.length) return h('section', { class: 'panel' }, h('h2', {}, 'Design'), h('div', { class: 'msg warning' }, 'No design is available for these factors yet.'));
@@ -148,7 +149,7 @@ export function render(ctx) {
         h('span', { class: 'muted small' }, `Runs are put in a random order from seed ${seed}; the same seed always gives the same run sheet.`)));
   }
   const plates = study.design ? platePanel(ctx) : null;
-  return h('div', {}, plates, next, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, create);
+  return h('div', {}, plates, doseDesignPanel(ctx), next, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, create);
 }
 
 function diagnostics(study, d, modelFor) {

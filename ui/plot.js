@@ -19,7 +19,8 @@ const pad = ([a, b], f = 0.06) => { const d = (b - a) || Math.abs(a) || 1; retur
 /**
  * plot({ series: [{ points: [{ x, y, label?, hi? }], kind: 'points' | 'line', cls }  or  { kind: 'ribbon', points: [{ x, lo, hi }] }],
  *        hlines: [{ y, label, cls }], vlines: [{ x, label, cls }], band: { x0, x1 },
- *        xLabel, yLabel, width, height, xDomain, yDomain, labelPoints })
+ *        xLabel, yLabel, width, height, xDomain, yDomain, labelPoints, xTicks: [{ x, label }] })
+ * xTicks replaces the x axis's ticks (e.g. a log axis: x = log10 dose, labels 0.1, 1, 10).
  */
 export function plot(o) {
   const W = o.width ?? 420, H = o.height ?? 260, m = { l: 52, r: 14, t: 10, b: 38 };
@@ -29,11 +30,12 @@ export function plot(o) {
   const X = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = (v) => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
   const svg = h('svg:svg', { class: 'plot', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': o.title ?? `${o.yLabel ?? ''} against ${o.xLabel ?? ''}` });
   const g = (cls, ...c) => h('svg:g', { class: cls }, ...c);
-  const xt = ticks(x0, x1), yt = ticks(y0, y1);
+  const xt = o.xTicks ? o.xTicks.map(t => t.x) : ticks(x0, x1), yt = ticks(y0, y1);
   // tick labels with as many decimals as the step needs (50.85, 50.9 … not 50.9, 50.9)
   const tickFmt = (t) => { const st = t.length > 1 ? Math.abs(t[1] - t[0]) : 1, dec = Math.max(0, Math.min(8, -Math.floor(Math.log10(st) + 1e-9)));
     return (v) => (Math.abs(v) >= 1e5 || (Math.abs(v) < 1e-4 && v !== 0) ? num(v, 3) : v.toFixed(dec)); };
-  const fx = tickFmt(xt), fy = tickFmt(yt);
+  const fx0 = tickFmt(xt), fy = tickFmt(yt);
+  const fx = o.xTicks ? (v) => o.xTicks.find(t => t.x === v)?.label ?? '' : fx0;
   svg.append(g('grid', ...xt.map(v => h('svg:line', { x1: X(v), x2: X(v), y1: m.t, y2: H - m.b })), ...yt.map(v => h('svg:line', { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v) }))));
   if (o.band) svg.append(h('svg:rect', { class: 'band', x: X(o.band.x0), width: Math.max(0, X(o.band.x1) - X(o.band.x0)), y: m.t, height: H - m.t - m.b }));
   svg.append(g('axis',

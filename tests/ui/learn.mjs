@@ -30,6 +30,15 @@ const DESIGN = {
   screening: async () => { await page.click('tr[data-design="frac-16"]'); },
   fraction: async () => { await page.click('tr[data-design="frac-8"]'); },
   rsm: async () => { await page.click('tr[data-design="ccd"]'); },
+  dose: async () => {
+    await page.click('#dose-open'); await settle();
+    await page.selectOption('select[aria-label="dose method"]', 'series'); await settle();
+    await page.fill('input[aria-label="top dose"]', String((await st()).factors[0].high)); await page.keyboard.press('Tab'); await settle();
+    await page.fill('input[aria-label="dilution"]', '10'); await page.keyboard.press('Tab'); await settle();
+    await page.fill('input[aria-label="number of doses"]', '6'); await page.keyboard.press('Tab'); await settle();
+    await page.fill('input[aria-label="zero doses"]', '1'); await page.keyboard.press('Tab'); await settle();
+    await page.fill('input[aria-label="dose replicates"]', '1'); await page.keyboard.press('Tab'); await settle();
+  },
   plate: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
   'split-plot': async () => { await page.click('tr[data-design="sp-full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
 };
@@ -54,7 +63,19 @@ try {
     await page.goto(`${url}#lesson=${lesson.id}&difficulty=${lesson.difficulty}&seed=${seed}`); await page.waitForSelector('#exercise'); await settle();
     check('opened from the shared link', (await st()).exercise.id === `${lesson.topic}-${lesson.difficulty}-${seed}`);
     await DESIGN[lesson.topic](); await settle();
-    await page.click('#create-design'); await settle();
+    await page.click(lesson.topic === 'dose' ? '#dose-create' : '#create-design'); await settle();
+    if (lesson.topic === 'dose') {
+      // the second stage: the reference's doses around the EC50 found, typed in as a list
+      await page.click('#get-results'); await settle();
+      check('hint: look at the curves, then add doses around the EC50', /add doses around the EC50/.test(await page.textContent('#exercise-hints')));
+      const ex = generateExercise({ topic: 'dose', difficulty: lesson.difficulty, seed }), ref = referenceStrategy(ex);
+      await page.click('[data-step="design"]'); await settle();
+      await page.selectOption('select[aria-label="dose method"]', 'listed'); await settle();
+      await page.fill('input[aria-label="listed doses"]', ref.study.design.params.stages[1].doses.join(', ')); await page.keyboard.press('Tab'); await settle();
+      await page.fill('input[aria-label="zero doses"]', '0'); await page.keyboard.press('Tab'); await settle();
+      await page.fill('input[aria-label="dose replicates"]', '2'); await page.keyboard.press('Tab'); await settle();
+      await page.click('#dose-stage'); await settle();
+    }
     if (lesson.topic === 'plate') {
       check('hint: lay the runs out on the plate first', /Lay the runs out on the plate/.test(await page.textContent('#exercise-hints')));
       await page.click('[data-step="design"]'); await settle();

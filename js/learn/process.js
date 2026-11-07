@@ -14,6 +14,9 @@
 // columns (coded col², centred), rowSd = a random offset per row and plate (a multichannel
 // pipette's channels), sd = plate-to-plate shift. Control wells read controls[id] (mean, sd) plus
 // the same position effects.
+// A response may instead follow a dose–response curve (issue #65): curve: { model: 'LL.4', dose,
+// by?, params: { b, c, d, e }, levels: { L: { e, … } } } — the curve's value at the run's dose, with
+// the parameters of the run's level of the factor by; cv adds multiplicative noise (exp(cv·z)).
 // Truth terms are labels over coded factor values (−1 … +1; log factors on the log scale):
 // 'A', 'A:B', 'I(A^2)', 'I(A*B)', a two-level categorical factor as −1 / +1 (first level −1),
 // 'g.L' for an indicator of level L of a categorical factor, and the position terms 'radius2'
@@ -29,6 +32,7 @@ import { code } from '../study.js';
 import { runPositions, parseWell, ring } from '../plate.js';
 import { sitePositions } from '../model/sites.js';
 import { normal } from '../dist.js';
+import { MODELS as DOSE } from '../model/dose.js';
 
 // ---------------------------------------------------------------- hashed randomness
 
@@ -67,6 +71,10 @@ function compValue(comp, ctx) {
 /** The true mean of a response (on the response's own scale, before nuisance). */
 export function trueMean(process, responseId, settings, ctx = {}) {
   const r = process.responses.find(x => x.id === responseId);
+  if (r.curve) {
+    const c = r.curve, P = { ...c.params, ...(c.by ? c.levels?.[String(settings[c.by])] ?? {} : {}) };
+    return DOSE[c.model ?? 'LL.4'].value(settings[c.dose], P);
+  }
   const fById = Object.fromEntries(process.factors.map(f => [f.id, f]));
   const coded = Object.fromEntries(process.factors.map(f => [f.id, f.type === 'categorical' ? (f.levels.length === 2 ? (String(settings[f.id]) === String(f.levels[0]) ? -1 : 1) : 0) : code(f, settings[f.id])]));
   const c = { coded, raw: settings, factorsById: fById, ...ctx };
@@ -113,7 +121,8 @@ export function observeRuns(process, study, { runs, all = false, offset = null }
       const outlier = n.outliers && hashUniform(seed, resp.id, 'outlier', key, rep) < n.outliers.p ? (hashUniform(seed, resp.id, 'osign', key, rep) < 0.5 ? -1 : 1) * n.outliers.size * sigma : 0;
       const bias = n.gauge?.bias ?? 0;
       const levels = sr.levels ?? ['run'];
-      const finish = (v) => { const y = (resp.transform === 'log' ? v : v) + bias; return resp.decimals !== undefined ? +y.toFixed(resp.decimals) : y; };
+      const cvF = resp.cv ? Math.exp(resp.cv * hashNormal(seed, resp.id, 'cv', key, rep)) : 1;
+      const finish = (v) => { const y = v * cvF + bias; return resp.decimals !== undefined ? +y.toFixed(resp.decimals) : y; };
       const mean = (ctx) => {
         if (resp.transform === 'log') return Math.exp(Math.log(trueMean(process, resp.id, r.settings, ctx)) + shared + outlier);
         return trueMean(process, resp.id, r.settings, ctx) + shared + outlier;

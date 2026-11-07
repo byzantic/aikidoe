@@ -7,7 +7,7 @@ import { render as md } from '../js/markdown.js';
 import { createStudy, decode } from '../js/study.js';
 import { num } from '../js/format.js';
 import { LESSONS, lessonById, hints } from '../js/learn/lessons.js';
-import { generateExercise, runExercise, gradeStudy, deriveAnswers, ofatStrategy, truthOf, DIFFICULTIES } from '../js/learn/exercise.js';
+import { generateExercise, runExercise, gradeStudy, deriveAnswers, comparisonStrategy, truthOf, DIFFICULTIES } from '../js/learn/exercise.js';
 
 const PROGRESS = 'aikidoe:learn';
 export const LESSON = lessonById;
@@ -94,7 +94,7 @@ function gradePanel(ctx, ex, lesson, ui, set) {
   const active = new Set(a.active ?? []);
   const parts = [];
   parts.push(h('div', { class: 'row' },
-    h('button', { class: 'btn', id: 'fill-answers', onclick: () => { try { const der = deriveAnswers(ex, study); update(dd => { dd.exercise.answers = { active: der.active, effects: der.effects, ...(der.best ? { best: der.best } : {}), ...(der.prediction ? { prediction: der.prediction } : {}) }; }); } catch (e) { ctx.toast(e.message); } } }, 'Fill in from the standard analysis'),
+    h('button', { class: 'btn', id: 'fill-answers', onclick: () => { try { const der = deriveAnswers(ex, study); update(dd => { dd.exercise.answers = { active: der.active, effects: der.effects, ...(der.best ? { best: der.best } : {}), ...(der.prediction ? { prediction: der.prediction } : {}), ...(der.ec50 ? { ec50: der.ec50, potency: der.potency } : {}) }; }); } catch (e) { ctx.toast(e.message); } } }, 'Fill in from the standard analysis'),
     h('button', { class: 'btn primary', id: 'grade-analysis', onclick: () => grade(ctx, ex, lesson, set, true) }, 'Grade the standard analysis of my data'),
     h('button', { class: 'btn primary', id: 'grade-answers', onclick: () => grade(ctx, ex, lesson, set, false) }, 'Grade my answers')));
   if (qs.has('active')) parts.push(h('div', { class: 'row small' }, 'Active factors: ', fs.map(f => h('label', { class: 'inline' }, h('input', { type: 'checkbox', checked: active.has(f.id), 'aria-label': `answer active ${f.id}`,
@@ -108,6 +108,10 @@ function gradePanel(ctx, ex, lesson, ui, set) {
       : h('input', { class: 'num', type: 'number', step: 'any', value: a.best?.[f.id] ?? '', placeholder: String(decode(f, 0)), 'aria-label': `answer best ${f.id}`, onchange: (ev) => setA(an => { an.best = { ...(an.best ?? {}), [f.id]: Number(ev.target.value) }; }) })))));
   if (qs.has('prediction')) { const q = ex.questions.find(x => x.kind === 'prediction'); parts.push(h('div', { class: 'row small' }, `Prediction at ${Object.entries(q.settings).map(([k, v]) => `${k}=${v}`).join(', ')}: `,
     h('input', { class: 'num', type: 'number', step: 'any', value: a.prediction?.value ?? '', 'aria-label': 'answer prediction', onchange: (ev) => setA(an => { an.prediction = { value: Number(ev.target.value) }; }) }))); }
+  for (const k of ['ec50', 'potency']) if (qs.has(k)) {
+    const e = a[k] ?? {}, inp = (f) => h('input', { class: 'num', type: 'number', step: 'any', value: e[f] ?? '', 'aria-label': `answer ${k} ${f}`, onchange: (ev) => setA(an => { an[k] = { ...(an[k] ?? {}), [f]: Number(ev.target.value) }; }) });
+    parts.push(h('div', { class: 'row small' }, k === 'ec50' ? 'EC50 of the test:' : 'Relative potency (EC50 ref ÷ EC50 test):', inp('estimate'), '95 %', inp('lower'), '…', inp('upper')));
+  }
   if (ui.result?.key === JSON.stringify(study.exercise.answers ?? null) + study.observations.length) parts.push(feedback(ui.result));
   return h('div', { class: 'grade', id: 'grade-panel' }, ...parts);
 }
@@ -118,7 +122,7 @@ function grade(ctx, ex, lesson, set, derived) {
     const s = derived ? { ...study, exercise: { ...study.exercise, answers: undefined } } : study;
     const g = gradeStudy(ex, s, truthOf(ex));
     let ofat = null;
-    if (lesson?.compare) { const o = ofatStrategy(ex); ofat = gradeStudy(ex, createStudy({ ...o.study, exercise: { id: ex.id, answers: o.answers } })).score; }
+    if (lesson?.compare) { const o = comparisonStrategy(ex); ofat = { strategy: o.strategy, score: gradeStudy(ex, createStudy({ ...o.study, exercise: { id: ex.id, answers: o.answers } })).score }; }
     if (lesson) progress.set(lesson.id, g.score);
     set({ open: true, result: { key: JSON.stringify(study.exercise.answers ?? null) + study.observations.length, ...g, ofat, derivedGrade: derived } });
   } catch (e) { ctx.toast(e.message); }
@@ -128,8 +132,8 @@ function feedback(r) {
   return h('div', { class: 'feedback', id: 'grade-result' },
     h('div', { class: `msg ${r.score >= 80 ? 'ok' : r.score >= 50 ? '' : 'warning'}` }, h('b', { 'data-score': r.score }, `Score ${r.score} / 100`), r.derivedGrade ? ' — the standard analysis of your data' : ' — your answers'),
     dataTable([{ key: 'id', label: 'question' }, { key: 'pts', label: 'points', cls: 'n' }, { key: 'note', label: '' }], r.parts.map(p => ({ ...p, pts: p.max ? `${num(p.score, 3)} / ${num(p.max, 3)}` : num(p.score, 3) }))),
-    r.ofat !== null && r.ofat !== undefined ? h('p', { class: 'small', id: 'ofat-score' }, `One factor at a time, on the same process and budget, would have scored ${r.ofat}.`) : null,
+    r.ofat ? h('p', { class: 'small', id: 'ofat-score' }, `${r.ofat.strategy[0].toUpperCase()}${r.ofat.strategy.slice(1)}, on the same process and budget, would have scored ${r.ofat.score}.`) : null,
     h('details', {}, h('summary', {}, 'The truth and the model answer'),
-      h('p', { class: 'small' }, `Active: ${r.truth.active.join(', ')}. True effects: ${Object.entries(r.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.`),
+      h('p', { class: 'small' }, r.truth.ec50 !== undefined ? `True EC50 of the test ${num(r.truth.ec50, 4)}; true relative potency ${num(r.truth.potency, 4)}.` : `Active: ${r.truth.active.join(', ')}. True effects: ${Object.entries(r.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.`),
       r.modelAnswer ? h('ul', { class: 'small' }, r.modelAnswer.steps.map(s => h('li', {}, s))) : null));
 }
