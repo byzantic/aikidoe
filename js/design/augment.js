@@ -16,7 +16,7 @@ import { code, decode, createStudy } from '../study.js';
 import { cubeBlockAlpha, rotatableAlpha } from './rsm.js';
 import { optimalDesign } from './optimal.js';
 import { rng } from './rng.js';
-import { predict } from '../model/ols.js';
+import { predict } from '../model/fit.js';
 import { predictMixed, runMeanWeights } from '../model/mixed.js';
 import { observationsOf } from '../model/sites.js';
 import { studentT } from '../dist.js';

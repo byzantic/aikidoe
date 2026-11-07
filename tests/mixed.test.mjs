@@ -8,7 +8,7 @@ import { confirmationRuns, appendStage, checkConfirmation } from '../js/design/a
 import { EXAMPLES } from '../ui/examples.js';
 import { parseFormula, modelMatrix } from '../js/model/formula.js';
 import { createStudy } from '../js/study.js';
-import { fitModel } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
 
 const cases = loadFixture('reml-r').cases;
 const fitCase = (c) => {

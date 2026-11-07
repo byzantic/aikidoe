@@ -5,7 +5,7 @@ import { loadFixture } from './lib/fixtures.mjs';
 import { createStudy, parseStudy, serializeStudy, code } from '../js/study.js';
 import { fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
-import { fitModel, anova, predict } from '../js/model/ols.js';
+import { fitModel, anova, predict } from '../js/model/fit.js';
 
 const TOL = { rel: 1e-8, abs: 1e-10 };
 

@@ -6,7 +6,7 @@ import { parseCSV, writeCSV, parseNumber, guessDecimal } from '../js/io/csv.js';
 import { runSheet, runSheetCSV, runSheetHTML, observationsCSV, importResults, applyResults } from '../js/io/runsheet.js';
 import { parseStudy, createStudy } from '../js/study.js';
 import { fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
-import { fitModel } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
 
 const example = parseStudy(readFileSync(new URL('../examples/gate-oxide-anneal.aikidoe.json', import.meta.url), 'utf8'));
 const canon = (obs) => obs.map(o => JSON.stringify(Object.fromEntries(Object.entries(o).sort()))).sort();

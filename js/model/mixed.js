@@ -24,7 +24,9 @@
 import { chol, cholInverse, cholLogdet, cholSolve, qr } from '../linalg.js';
 import { fDist, chi2, studentT } from '../dist.js';
 import { parseFormula, modelMatrix } from './formula.js';
-import { withBlockTerm, fitOLS, anova } from './ols.js';
+import { withBlockTerm, anova } from './fit.js';
+import { fitOLS } from './ols.js';
+import { noiseModelOf } from './noise.js';
 import { observationsOf, withPositionTerms } from './sites.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
@@ -486,6 +488,8 @@ export function randomEffects(rows, requested = 'auto') {
 function buildMixed(study, formula, opts) {
   const response = opts.response ?? (String(formula).includes('~') ? String(formula).slice(0, String(formula).indexOf('~')).trim() : null);
   if (!response) throw new Error('name the response: "y ~ …"');
+  const noise = noiseModelOf(study, response);
+  if (!noise.capabilities.mixed) throw new Error(`mixed models (REML) assume normal noise; ${response} is ${noise.label}`);
   const rows00 = observationTable(study, response);
   if (!rows00.length) throw new Error(`no results for ${response} yet`);
   // position terms (radius2, edge, slot …) become factors when the formula uses them

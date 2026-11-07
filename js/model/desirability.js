@@ -19,7 +19,7 @@
 import { optimiseMixture, referenceBlend, coxBlend, coxRange } from '../design/mixture.js';
 import { rng } from '../design/rng.js';
 import { code, decode, feasible } from '../study.js';
-import { fitModel, predict } from './ols.js';
+import { fitModel, predict } from './fit.js';
 import { fitMixedModel, observationTable, randomEffects, predictMixed } from './mixed.js';
 import { modelMatrix } from './formula.js';
 import { defaultFormula } from './defaults.js';

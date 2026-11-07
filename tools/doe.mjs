@@ -120,7 +120,8 @@ import { fitDose, effectiveDose, relativePotency, parallelism, inversePredict, d
   doseDesignQuality, guessScenarios, potencyPower, MODELS as DOSE_MODELS } from '../js/model/dose.js';
 import { pipettingCSV, plateMapHTML, plateMapText } from '../js/io/platemap.js';
 import { controlSummary, plateNumbers, runCapacity, ROLES, platesWithoutWells } from '../js/plate.js';
-import { fitModel, anova, lackOfFit, boxCox, lenth, twoLevelEffects, predict } from '../js/model/ols.js';
+import { fitModel, anova, predict } from '../js/model/fit.js';
+import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { hierarchyViolations } from '../js/model/formula.js';
 import { studyPower, detectableEffect } from '../js/model/power.js';

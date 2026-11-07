@@ -5,7 +5,7 @@ import { loadFixture } from './lib/fixtures.mjs';
 import { ccd, boxBehnken, predictionVariance, varianceProfile, uniformPrecisionCentre, rotatableAlpha } from '../js/design/rsm.js';
 import { toStudyDesign } from '../js/design/factorial.js';
 import { createStudy } from '../js/study.js';
-import { fitModel } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
 
 const key = (r) => r.map(v => (Math.abs(v) < 1e-12 ? 0 : v).toFixed(9)).join(',');
 const multiset = (X) => X.map(key).sort().join(';');

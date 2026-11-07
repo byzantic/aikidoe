@@ -12,7 +12,7 @@ import { toStudyDesign, fullFactorial } from '../js/design/factorial.js';
 import { siteScheme } from '../js/model/sites.js';
 import { hashUniform, hashNormal, trueMean, observeRuns, runVirtual } from '../js/learn/process.js';
 import { generateExercise, referenceStrategy, ofatStrategy, comparisonStrategy, gradeStudy, gradeAnswers, truthOf, keyOf, studentOf, seal, TOPICS, DIFFICULTIES, runExercise } from '../js/learn/exercise.js';
-import { fitModel } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
 
 section('hashed randomness');
 {

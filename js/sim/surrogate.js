@@ -5,7 +5,7 @@
 // from PRESS, RMSE_cv = √(PRESS / n) — the size of a typical prediction error at a point not used
 // in the fit — which the yield analysis compares with the margins to the specification limits.
 import { decode, code } from '../study.js';
-import { fitModel } from '../model/ols.js';
+import { fitModel } from '../model/fit.js';
 import { modelMatrix } from '../model/formula.js';
 import { defaultFormula } from '../model/defaults.js';
 import { maximinLHS, deviationSampler, toleranceSd } from './sample.js';

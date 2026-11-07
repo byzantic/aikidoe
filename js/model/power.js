@@ -14,24 +14,34 @@
 //
 // σ: give the process σ (from earlier data, or a measurement-system study when #17 lands);
 // Δ and σ enter only through Δ/σ.
+//
+// The information XᵀX is that of normal noise; a noise model (noise.js, issue #64) can weight the
+// runs by the information each carries at the anticipated mean (XᵀWX), as counts and proportions
+// will need. For normal noise the weights are equal and nothing changes.
 import { qr } from '../linalg.js';
 import { fDist, ncf } from '../dist.js';
 import { parseFormula, modelMatrix } from './formula.js';
 import { decode } from '../study.js';
 import { splitPlotInfo } from '../design/splitplot.js';
 import { _containment as containment, _indexGroups as indexGroups } from './mixed.js';
+import { noiseModel } from './noise.js';
 
 /**
  * Power from a model matrix mm = { X, columns, assign, model } (formula.js).
  * opts: delta (number, or { termLabel: Δ } with default 2), sigma (1), alpha (0.05),
- * coef (optional anticipated coefficient per column, overriding Δ/2).
+ * coef (optional anticipated coefficient per column, overriding Δ/2), noise (a noise model id,
+ * default 'normal') and mean (the anticipated mean per run, for noise models whose information
+ * depends on it).
  * Returns { n, rank, dfRes, terms: [{ term, df, lambda, power }], parameters: [{ name, term, lambda, power }] }.
  * Terms that are not estimable, nuisance (block) terms and, with dfRes = 0, everything get power NaN.
  */
-export function powerFromMatrix(mm, { delta = 2, sigma = 1, alpha = 0.05, coef, wholePlot, eta = 1 } = {}) {
-  const { X, columns, assign, model } = mm;
+export function powerFromMatrix(mm, { delta = 2, sigma = 1, alpha = 0.05, coef, wholePlot, eta = 1, noise = 'normal', mean } = {}) {
+  const { columns, assign, model } = mm;
   if (!(sigma > 0)) throw new Error('σ must be positive');
   if (!(alpha > 0 && alpha < 1)) throw new Error('α must be between 0 and 1');
+  // rows weighted by their information (W^½ X), when the noise model's weights are not all equal
+  const w = noiseModel(noise).weights(mm.X, { mean });
+  const X = w ? mm.X.map((r, i) => r.map(v => v * Math.sqrt(w[i]))) : mm.X;
   const n = X.length, f = qr(X), rank = f.rank;
   let dfRes = n - rank, V = f.unscaledCov(), dfOf = () => dfRes, strata = null;
   const aliased = new Set(f.aliased);

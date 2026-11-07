@@ -1,9 +1,10 @@
 // Ordinary least squares fits, ANOVA, diagnostics, Box–Cox and Lenth's method
-// (spec §6.2, issue #6).
+// (spec §6.2, issue #6): the implementation of the normal noise model (noise.js, issue #64).
+// Fitting a study goes through fit.js (fitModel, predict, anova), which picks the noise model.
 //
 //   fitOLS(mm, y)                 fit a model matrix (from formula.js) to a response vector
-//   fitModel(study, formula, o)   formula + study data → fit (per-run responses, §4.2)
-//   anova(fit, type)              type 1 (sequential), 2 or 3 table
+//   olsPredict(fit, X, o)         predictions with t intervals at model-matrix rows
+//   olsAnova(fit, type)           type 1 (sequential), 2 or 3 table
 //   lackOfFit(fit, groups)        pure-error and lack-of-fit test from replicated settings
 //   boxCox(fit, lambdas)          profile log-likelihood of the Box–Cox power (MASS convention)
 //   lenth(effects)                Lenth's PSE, ME and SME for unreplicated two-level designs
@@ -13,11 +14,13 @@
 // sequential sums of squares are those of R's lm() and anova().
 import { qr, solveUpper } from '../linalg.js';
 import { studentT, fDist, chi2, normal } from '../dist.js';
-import { observationsOf } from './sites.js';
-import { parseFormula, modelMatrix, containedIn } from './formula.js';
-import { runPositions } from '../plate.js';
+import { containedIn } from './formula.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
+
+// the normal-theory tools below (lack of fit, Box–Cox, Lenth) need a least-squares fit; fits from
+// other noise models (noise.js) carry their id in fit.noise
+const leastSquares = (fit, what) => { if ((fit.noise ?? 'normal') !== 'normal') throw new Error(`${what} assumes normal noise with constant variance (least squares); this fit is ${fit.noise}`); };
 
 /**
  * Fit y ≈ X β. mm = { X, columns, assign, model } from modelMatrix. Rows with a missing
@@ -75,109 +78,15 @@ export function fitOLS(mm, y, { names } = {}) {
   };
 }
 
-// ---------------------------------------------------------------- data from a study
-
 /**
- * Per-run response table: [{ run, settings, y, n }] for runs with at least one observation.
- * aggregate 'mean' (default) averages multiple observations of a run (sites, wafers, repeats);
- * 'none' keeps one row per observation (only appropriate when observations are true replicates).
+ * Predictions with intervals at model-matrix rows X: [{ fit, se, lower, upper, predLower,
+ * predUpper }] — confidence interval for the mean and prediction interval for a single new
+ * observation, at the given level (default 0.95). Aliased (NaN) coefficients contribute nothing,
+ * as in R's predict.lm.
  */
-export function responseTable(study, responseId, { aggregate = 'mean' } = {}) {
-  if (!study.responses.some(r => r.id === responseId)) throw new Error(`no response "${responseId}" in the study`);
-  const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
-  const obs = observationsOf(study, responseId).filter(o => o.value !== null);
-  const meta = (r) => ({ order: r.order, kind: r.kind, ...(r.block !== undefined ? { block: r.block } : {}) });
-  if (aggregate === 'none') return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1, ...meta(runs.get(o.run)) }));
-  const by = new Map();
-  for (const o of obs) { if (!by.has(o.run)) by.set(o.run, []); by.get(o.run).push(o.value); }
-  return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([run, v]) => ({ run, settings: runs.get(run).settings, y: sum(v) / v.length, n: v.length, ...meta(runs.get(run)) }));
-}
-
-/** Id for the block pseudo-factor that does not clash with the study's ids. */
-
-/**
- * Fit a formula to a study's data. opts: response (default: the formula's left side), aggregate,
- * rows, blocks ('auto' | false), includeConfirm.
- *
- * Blocks: when the runs used fall in more than one block (blocked designs, or stages added by
- * augmentation), a categorical Block term is added first in the model (effect coded, so
- * predictions are for the average block), unless blocks: false.
- * Confirmation runs (kind 'confirm') are left out unless includeConfirm, so they can be
- * checked against a model fitted without them.
- */
-export function fitModel(study, formula, opts = {}) {
-  let parsed;
-  try { parsed = parseFormula(formula, study.factors); } catch (e) {
-    const m = /unknown factor "(radius2|edge|waferX|waferY|slot|slotZone)"/.exec(e.message);
-    if (m) throw new Error(`${m[1]} is a position term: it varies within runs, so it needs a model of the individual readings (the mixed model), not of run means`);
-    throw e;
-  }
-  const response = opts.response ?? parsed.response;
-  if (!response) throw new Error('name the response: "y ~ …" or { response }');
-  let rows = opts.rows ?? responseTable(study, response, opts);
-  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
-  if (!rows.length) throw new Error(`no results for ${response} yet`);
-  const b = withBlockTerm(study, parsed, rows, opts);
-  const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
-  const fit = fitOLS(mm, b.rows.map(r => r.y));
-  return { ...fit, response, rows: b.rows, factors: b.factors };
-}
-
-/**
- * The model with nuisance terms first: a fixed Block term when the rows fall in more than one
- * block (unless opts.blocks === false), and for runs laid out on microplates (study.plates) the
- * position terms Edge (outer ring vs inner wells) and Row and Col (linear gradients across the
- * plate), each when it varies among the rows (unless opts.position === false). Returns
- * { model, factors, rows } with the nuisance values in each row's settings; nuisance terms are
- * flagged block: true (left out of effects, power and model reduction; predictions are for the
- * average block, an average well).
- */
-export function withBlockTerm(study, parsed, rows, opts = {}) {
-  const taken = new Set([...study.factors, ...study.responses].map(x => x.id));
-  const free = (id) => { while (taken.has(id)) id += '_'; taken.add(id); return id; };
-  const factors = [...study.factors], terms = [], extra = rows.map(() => ({}));
-  const labels = [...new Set(rows.map(r => (r.block === undefined ? '' : String(r.block))))].sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
-  if (opts.blocks !== false && labels.length > 1) {
-    const id = free('Block');
-    factors.push({ id, name: 'Block', type: 'categorical', levels: labels, block: true });
-    terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true });
-    rows.forEach((r, i) => { extra[i][id] = r.block === undefined ? '' : String(r.block); });
-  }
-  if (study.plates && opts.position !== false) {
-    const pos = runPositions(study);
-    const at = rows.map(r => pos.get(r.run));
-    if (at.every(Boolean)) {
-      const add = (name, f, value) => {
-        const vals = at.map(value);
-        if (new Set(vals.map(String)).size < 2) return;
-        const id = free(name);
-        factors.push({ ...f, id, name: f.name, block: true, position: true });
-        terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true, position: true });
-        vals.forEach((v, i) => { extra[i][id] = v; });
-      };
-      add('Edge', { name: 'Plate edge', type: 'categorical', levels: ['inner', 'edge'] }, (p) => (p.edge ? 'edge' : 'inner'));
-      add('Row', { name: 'Row gradient', type: 'continuous', low: -1, high: 1, transform: 'none' }, (p) => p.row);
-      add('Col', { name: 'Column gradient', type: 'continuous', low: -1, high: 1, transform: 'none' }, (p) => p.col);
-    }
-  }
-  if (!terms.length) return { model: parsed, factors: study.factors, rows };
-  return {
-    factors,
-    model: { ...parsed, terms: [...terms, ...parsed.terms] },
-    rows: rows.map((r, i) => ({ ...r, settings: { ...r.settings, ...extra[i] } })),
-  };
-}
-
-/**
- * Predictions with intervals at new settings (natural units): [{ fit, se, lower, upper,
- * predLower, predUpper }] — confidence interval for the mean and prediction interval for a
- * single new observation, at the given level (default 0.95). With a Block term, predictions are
- * for the average block. Aliased (NaN) coefficients contribute nothing, as in R's predict.lm.
- */
-export function predict(fit, rows, { level = 0.95 } = {}) {
-  const mm = modelMatrix(fit.model, fit.factors, rows);
+export function olsPredict(fit, X, { level = 0.95 } = {}) {
   const t = fit.dfRes > 0 ? studentT.ppf(1 - (1 - level) / 2, fit.dfRes) : NaN;
-  return mm.X.map(x => {
+  return X.map(x => {
     let yhat = 0, v = 0;
     for (let i = 0; i < x.length; i++) {
       if (Number.isNaN(fit.coef[i])) continue;
@@ -207,7 +116,7 @@ function rssOf(fit, keepCols) {
  * intercept row. Rows: { term, df, ss, ms, F, p }, then { term: 'Residuals', df, ss, ms }.
  * Terms with no estimable columns (completely aliased) are left out.
  */
-export function anova(fit, type = 1) {
+export function olsAnova(fit, type = 1) {
   const { model, dfRes, sigma2 } = fit;
   const rows = [];
   const push = (term, df, ss) => { if (df > 0) { const ms = ss / df, F = ms / sigma2; rows.push({ term, df, ss, ms, F, p: dfRes > 0 ? fDist.sf(F, df, dfRes) : NaN }); } };
@@ -247,6 +156,7 @@ export function anova(fit, type = 1) {
  * when there are no replicated settings.
  */
 export function lackOfFit(fit, groups) {
+  leastSquares(fit, 'the lack-of-fit test');
   const keys = groups ?? fit.rows.map(r => JSON.stringify(Object.entries(r.settings).sort()));
   const by = new Map();
   keys.forEach((k, i) => { if (!by.has(k)) by.set(k, []); by.get(k).push(fit.y[i]); });
@@ -271,6 +181,7 @@ export function lackOfFit(fit, groups) {
  * interval { ℓ ≥ max − χ²₁(0.95)/2 }, within the grid's range.
  */
 export function boxCox(fit, lambdas = range(-2, 2, 0.1)) {
+  leastSquares(fit, 'Box–Cox');
   const y = fit.y;
   if (y.some(v => !(v > 0))) throw new Error('Box–Cox needs a positive response');
   const n = y.length, lgm = sum(y.map(Math.log)) / n;
@@ -337,6 +248,7 @@ export function halfNormal(effects) {
  * intercept, with names. For use with lenth() and halfNormal().
  */
 export function twoLevelEffects(fit) {
+  leastSquares(fit, 'Effects for Lenth\'s method');
   // factor effects only: not the intercept, not the block term
   return fit.columns.map((c, j) => ({ name: c, effect: 2 * fit.coef[j] }))
     .filter((e, j) => fit.assign[j] !== -1 && !fit.model.terms[fit.assign[j]].block && Number.isFinite(e.effect));
