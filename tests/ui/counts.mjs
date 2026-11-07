@@ -69,6 +69,8 @@ try {
   const A = Number((await page.locator('tr[data-term="A"] td').nth(1).textContent()).replace('−', '-'));
   check('the A coefficient as R’s glm', Math.abs(A - P.output.coef[1]) < 1e-3 * Math.abs(P.output.coef[1]), A);
   check('no normal-theory panels (Lenth, Box–Cox, lack of fit)', !/Lenth|Box–Cox|lack of fit/.test(txt));
+  check('a half-normal plot with a simulated envelope', await page.locator('#glm-envelope svg').count() === 1 && /simulated envelope/.test(await page.textContent('#glm-envelope')));
+  check('a prediction with an interval for one new run, per unit exposure', /95% PI \(one run, per unit exposure\)/.test(await page.textContent('#prediction')));
   await shot('counts-analyse');
 
   section('overdispersion: the negative binomial in one click');
@@ -105,6 +107,24 @@ try {
   await page.click('#optimise'); await settle();
   const best = (await state()).ui.optimise?.result?.settings;
   check('the best settings for the colony rate: A high, B low', best && best.A > 0.9 && best.B < -0.9, JSON.stringify(best));
+  const yb = (await state()).ui.optimise.result.d[0].y;
+  check('the optimum’s prediction is a colony rate (response scale, not the log)', yb > 10 && yb < 40, yb);
+  check('robustness for a count: its Poisson variation at the mean', await page.locator('#robust').count() === 1 && /poisson variation at the mean/.test(await page.textContent('#robust')));
+
+  section('the Guide asks what each run gives');
+  await page.goto(`${url}#guide`); await settle();
+  await page.click('#guide-restart').catch(() => {}); await settle();
+  const choose = async (v) => { await page.click(`[data-choice="${v}"]`); await settle(); };
+  const type = async (id, v) => { await page.fill(`input[aria-label="guide ${id}"]`, String(v)); await page.click('#guide-next'); await settle(); };
+  await choose('understand'); await choose('good'); await type('factors', 3); await page.click('#guide-skip'); await settle();
+  await choose('no'); await choose('continuous'); await type('htc', 0); await choose('no'); await choose('no'); await choose('no'); await choose('none');
+  check('the kind of result', (await page.getAttribute('[data-question]', 'data-question')) === 'result');
+  await choose('count');
+  check('then the ratio that matters, not the scatter', (await page.getAttribute('[data-question]', 'data-question')) === 'ratio');
+  await choose('medium'); await page.click('#guide-skip'); await settle(); await choose('yes');
+  check('the plan says how the counts are analysed and roughly how many runs', /Poisson model/.test(await page.textContent('#guide')) && /rate ratio of 1.5/.test(await page.textContent('#guide')));
+  await page.click('#guide-create'); await settle();
+  check('the study’s response is a count', (await state()).doc.responses[0].distribution === 'poisson');
 
   section('no page errors');
   check('no page errors', !errors.length, errors.join('\n'));

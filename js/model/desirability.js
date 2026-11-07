@@ -20,6 +20,7 @@ import { optimiseMixture, referenceBlend, coxBlend, coxRange } from '../design/m
 import { rng } from '../design/rng.js';
 import { code, decode, feasible } from '../study.js';
 import { fitModel, predict } from './fit.js';
+import { LINKS, glmVariance } from './glm.js';
 import { fitMixedModel, observationTable, randomEffects, predictMixed } from './mixed.js';
 import { modelMatrix } from './formula.js';
 import { defaultFormula } from './defaults.js';
@@ -207,7 +208,8 @@ export function desirabilityGrid(study, models, at, fx, fy, { n = 41 } = {}) {
 /**
  * Fitted models of the responses that have a desirability goal: { formulas: { responseId: formula } }
  * (default: defaultFormula). Split-plot / nested readings use the mixed model (unless ols: true).
- * all: include responses without a goal (spec null). Each model: { id, spec, formula, fit, sigma (residual sd), predict(settings) → ŷ, predictBand(settings) → { fit, lower, upper } (95% CI) }.
+ * all: include responses without a goal (spec null). Each model: { id, spec, formula, fit, sigma (residual sd), predict(settings) → ŷ, predictBand(settings) → { fit, lower, upper } (95% CI) };
+ * a count or proportion response has residualVar(μ) (the variance of a new result at mean μ) instead of sigma, and ŷ on the response scale.
  * Responses without results are skipped and listed in `missing`.
  */
 export function fittedModels(study, { formulas = {}, ols = false, only = null, all = false } = {}) {
@@ -230,7 +232,12 @@ export function fittedModels(study, { formulas = {}, ols = false, only = null, a
     } else {
       const coefIdx = fit.coef.map((c, j) => (Number.isFinite(c) ? j : -1)).filter(j => j >= 0);
       const xb = (st) => { const x = modelMatrix(fit.model, fit.factors, [st]).X[0]; return coefIdx.reduce((a, j) => a + x[j] * fit.coef[j], 0); };
-      models.push({ id: r.id, spec, formula, fit, sigma: fit.sigma, predict: xb, predictBand: (st) => { const p = predict(fit, [st])[0]; return { fit: p.fit, lower: p.lower, upper: p.upper }; } });
+      if (fit.distribution) {
+        // counts and proportions: the mean on the response scale (a rate, a proportion), and the
+        // variance of a new result at that mean for robustness
+        const L = LINKS[fit.link];
+        models.push({ id: r.id, spec, formula, fit, sigma: NaN, residualVar: (mu) => glmVariance(fit, mu), predict: (st) => L.inv(xb(st)), predictBand: (st) => { const p = predict(fit, [st])[0]; return { fit: p.fit, lower: p.lower, upper: p.upper }; } });
+      } else models.push({ id: r.id, spec, formula, fit, sigma: fit.sigma, predict: xb, predictBand: (st) => { const p = predict(fit, [st])[0]; return { fit: p.fit, lower: p.lower, upper: p.upper }; } });
     }
   }
   return { models, missing };

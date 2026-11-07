@@ -15,8 +15,9 @@
 //
 // Numerics follow glm.fit: starting values, the convergence test |D − D_old| / (|D| + 0.1) < 1e-8,
 // step halving, the QR tolerance 1e-11, and the covariance from the last weighted QR.
-import { qr } from '../linalg.js';
-import { normal as N, chi2, fDist, studentT, lgamma } from '../dist.js';
+import { qr, eigSym } from '../linalg.js';
+import { normal as N, chi2, fDist, studentT, lgamma, lbeta, gammaInc, betaInc } from '../dist.js';
+import { rng } from '../design/rng.js';
 import { containedIn } from './formula.js';
 
 const EPS = 2.220446049250313e-16;
@@ -433,12 +434,14 @@ export function glmCompare(big, small) {
 // ---------------------------------------------------------------- predictions and intervals
 
 /**
- * Predictions at model-matrix rows X (offset 0: per unit exposure): the mean on the response
- * scale (a rate or a proportion), its delta-method standard error, and a confidence interval
- * transformed from the link scale (z, or t with an estimated dispersion). Prediction intervals for a
- * single new count or proportion are not given (NaN).
+ * Predictions at model-matrix rows X (offset 0: per unit exposure): the mean on the response scale
+ * (a rate or a proportion), its delta-method standard error, a confidence interval transformed from
+ * the link scale (z, or t with an estimated dispersion), and a prediction interval for a new run
+ * (predictiveInterval: the count, or proportion of successes, a new run with the given exposure
+ * and trials would give, per unit exposure or as a proportion, allowing for the uncertainty in
+ * the fit). opts: level, exposure (1), trials (the fit's typical trials), n (runs averaged, 1).
  */
-export function glmPredict(fit, X, { level = 0.95 } = {}) {
+export function glmPredict(fit, X, { level = 0.95, exposure = 1, trials, n = 1 } = {}) {
   const L = LINKS[fit.link];
   const c = fit.dispersionEstimated ? (fit.dfRes > 0 ? studentT.ppf(1 - (1 - level) / 2, fit.dfRes) : NaN) : N.ppf(1 - (1 - level) / 2);
   return X.map(x => {
@@ -449,9 +452,129 @@ export function glmPredict(fit, X, { level = 0.95 } = {}) {
       for (let j = 0; j < x.length; j++) if (!Number.isNaN(fit.coef[j])) v += x[i] * fit.cov[i][j] * x[j];
     }
     const s = Math.sqrt(v), m = L.inv(e);
-    return { fit: m, se: s * Math.abs(L.deriv(e)), lower: L.inv(e - c * s), upper: L.inv(e + c * s), predLower: NaN, predUpper: NaN, link: e, seLink: s };
+    const pi = predictiveInterval(fit, e, s, { level, exposure, trials, n });
+    return { fit: m, se: s * Math.abs(L.deriv(e)), lower: L.inv(e - c * s), upper: L.inv(e + c * s), predLower: pi.lower, predUpper: pi.upper, link: e, seLink: s };
   });
 }
+
+// Gauss–Hermite nodes and weights for E[g(Z)], Z ~ N(0, 1) (Golub–Welsch on the probabilists' Jacobi matrix)
+const gaussHermite = (K) => {
+  const J = Array.from({ length: K }, (_, i) => Array.from({ length: K }, (__, j) => (Math.abs(i - j) === 1 ? Math.sqrt(Math.max(i, j)) : 0)));
+  const { values, vectors } = eigSym(J);
+  const w = values.map((_, k) => vectors[0][k] ** 2), t = w.reduce((a, b) => a + b, 0);
+  return values.map((z, k) => ({ z, w: w[k] / t }));
+};
+const GH = gaussHermite(24), GH8 = gaussHermite(8);
+
+/** Typical trials of a binomial fit (the median of its runs'), for predictions. */
+const typicalTrials = (fit) => { const t = fit.weights.slice().sort((a, b) => a - b); return t[Math.floor(t.length / 2)] ?? 1; };
+
+/**
+ * The distribution of a new result: the total T of n runs at exposure e (counts) or with m trials
+ * each (proportions), at the linear predictor η ~ N(eta, s²) (the fit's uncertainty, integrated by
+ * Gauss–Hermite). Poisson: T ~ Poisson(n e μ); negative binomial: NB(n e μ, n θ); quasi-Poisson:
+ * the negative binomial with variance φ × mean; binomial: Bin(n m, p); quasi-binomial: the
+ * beta-binomial with variance φ × binomial. Returns { lower, upper } of T / (n e) or T / (n m) at the
+ * given level (the shortest equal-tailed interval of a discrete distribution, so coverage ≥ level).
+ */
+export function predictiveInterval(fit, eta, s, { level = 0.95, exposure = 1, trials, n = 1 } = {}) {
+  const L = LINKS[fit.link], counts = DISTRIBUTIONS[fit.distribution].counts;
+  const m = counts ? 1 : Math.max(1, Math.round(trials ?? typicalTrials(fit)));
+  const N = counts ? n * exposure : n * m;               // the scale of the total
+  const phi = fit.dispersionEstimated ? Math.max(1, fit.dispersion) : 1;
+  // the negative binomial's θ is uncertain too: log θ ~ N(log θ̂, (se/θ̂)²), integrated alongside
+  const thetas = fit.distribution === 'negbin' && fit.thetaSE > 0 && Number.isFinite(fit.thetaSE)
+    ? GH8.map(({ z, w }) => ({ w, th: fit.theta * Math.exp(Math.min(3, fit.thetaSE / fit.theta) * z) })) : [{ w: 1, th: fit.theta }];
+  const nodes = (Number.isFinite(s) && s > 0 ? GH : [{ z: 0, w: 1 }]).flatMap(({ z, w }) => thetas.map(t => ({ w: w * t.w, mu: L.inv(eta + s * z), th: t.th })));
+  // cdf of T at t for one node
+  const cdf = (t, mu, theta) => {
+    if (t < 0) return 0;
+    if (counts) {
+      const M = N * mu;
+      const th = fit.distribution === 'negbin' ? n * theta : phi > 1 + 1e-9 ? M / (phi - 1) : Infinity;
+      if (th === Infinity) return gammaInc(t + 1, M).Q;                      // Poisson
+      return betaInc(th / (th + M), th, t + 1).I;                             // negative binomial
+    }
+    if (t >= N) return 1;
+    const rho = phi > 1 + 1e-9 && N > 1 ? Math.min(0.999, (phi - 1) / (N - 1)) : 0;
+    if (!rho) return betaInc(1 - mu, N - t, t + 1, mu).I;                   // binomial
+    const a = mu * (1 - rho) / rho, b = (1 - mu) * (1 - rho) / rho;           // beta-binomial
+    let c = 0;
+    for (let k = 0; k <= t; k++) c += Math.exp(lchoose(N, k) + lbeta(k + a, N - k + b) - lbeta(a, b));
+    return Math.min(1, c);
+  };
+  const F = (t) => nodes.reduce((acc, nd) => acc + nd.w * cdf(t, nd.mu, nd.th), 0);
+  const quant = (p) => {
+    // smallest t with F(t) ≥ p: bracket upwards, then bisect
+    let lo = -1, hi = 1;
+    while (F(hi) < p) { lo = hi; hi *= 2; if (hi > 1e12) return Infinity; }
+    while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (F(mid) >= p) hi = mid; else lo = mid; }
+    return hi;
+  };
+  const a = (1 - level) / 2;
+  return { lower: quant(a) / N * (counts ? 1 : 1), upper: quant(1 - a) / N };
+}
+
+/** Variance of one new result (per unit exposure, or as a proportion of m trials) at mean μ. */
+export function glmVariance(fit, mu, { exposure = 1, trials } = {}) {
+  const counts = DISTRIBUTIONS[fit.distribution].counts, phi = fit.dispersionEstimated ? fit.dispersion : 1;
+  if (counts) { const M = exposure * mu, v = fit.distribution === 'negbin' ? M + M * M / fit.theta : phi * M; return v / (exposure * exposure); }
+  const m = trials ?? typicalTrials(fit);
+  return phi * mu * (1 - mu) / m;
+}
+
+/**
+ * Simulated envelope for a half-normal plot of |standardised deviance residuals| (Atkinson 1985):
+ * nsim data sets simulated from the fit (θ and dispersion fixed), each refitted with the same model,
+ * their sorted |residuals| giving pointwise 2.5 %, 50 % and 97.5 % bands. A residual outside the
+ * band is unusual for the model. Returns [{ q, observed, row, lower, median, upper }] in order.
+ */
+export function glmEnvelope(fit, { nsim = 99, seed = 1 } = {}) {
+  const R = rng(seed), n = fit.y.length, counts = DISTRIBUTIONS[fit.distribution].counts;
+  const phi = fit.dispersionEstimated ? Math.max(1, fit.dispersion) : 1;
+  const mm = { X: fit.X, columns: fit.columns, assign: fit.assign, model: fit.model };
+  const opts = { distribution: fit.distribution, link: fit.link, weights: fit.weights, offset: fit.offset, ...(fit.distribution === 'negbin' ? { theta: fit.theta } : {}), firth: fit.firth };
+  const abs = (f) => f.rstandard.map(Math.abs).map(v => (Number.isFinite(v) ? v : 0)).sort((a, b) => a - b);
+  const sims = [];
+  for (let k = 0; k < nsim; k++) {
+    const y = fit.fitted.map((mu, i) => {
+      if (counts) {
+        const th = fit.distribution === 'negbin' ? fit.theta : phi > 1 + 1e-9 ? mu / (phi - 1) : Infinity;
+        return poissonDraw(R, th === Infinity ? mu : mu * gammaDraw(R, th) / th);
+      }
+      const m = Math.round(fit.weights[i]); let x = 0, p = mu;
+      if (phi > 1 + 1e-9 && m > 1) { const rho = Math.min(0.999, (phi - 1) / (m - 1)), a = mu * (1 - rho) / rho, b = (1 - mu) * (1 - rho) / rho, g1 = gammaDraw(R, a), g2 = gammaDraw(R, b); p = g1 / (g1 + g2); }
+      for (let j = 0; j < m; j++) if (R.random() < p) x++;
+      return m > 0 ? x / m : 0;
+    });
+    try { sims.push(abs(fitGLM(mm, y, opts))); } catch { /* a degenerate simulated data set */ }
+  }
+  const obs = fit.rstandard.map((v, i) => ({ v: Math.abs(v), i })).filter(o => Number.isFinite(o.v)).sort((a, b) => a.v - b.v);
+  const pct = (a, p) => { const b = a.slice().sort((x, y) => x - y), h = (b.length - 1) * p, lo = Math.floor(h); return b[lo] + (b[Math.min(b.length - 1, lo + 1)] - b[lo]) * (h - lo); };
+  const m0 = obs.length;
+  return obs.map((o, k) => {
+    const col = sims.map(sv => sv[sv.length - m0 + k]).filter(Number.isFinite);
+    return { q: N.ppf(0.5 + 0.5 * (k + 0.5) / m0), observed: o.v, row: o.i, lower: pct(col, 0.025), median: pct(col, 0.5), upper: pct(col, 0.975) };
+  });
+}
+
+function poissonDraw(R, mu) {
+  if (mu > 500) { let t = 0; const k = Math.ceil(mu / 500); for (let i = 0; i < k; i++) t += poissonDraw(R, mu / k); return t; }
+  const Lm = Math.exp(-mu); let k = 0, p = R.random();
+  while (p > Lm) { k++; p *= R.random(); }
+  return k;
+}
+function gammaDraw(R, a) {
+  if (a < 1) return gammaDraw(R, a + 1) * R.random() ** (1 / a);
+  const d = a - 1 / 3, c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    let x, v;
+    do { const u1 = R.random() || 1e-300, u2 = R.random(); x = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); v = 1 + c * x; } while (v <= 0);
+    v = v * v * v; const u = R.random();
+    if (u < 1 - 0.0331 * x ** 4 || Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+export const _draw = { poisson: poissonDraw, gamma: gammaDraw };
 
 /**
  * Confidence intervals for the coefficients: method 'profile' (default; the deviance profile,

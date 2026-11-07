@@ -25,7 +25,7 @@ import { decode } from '../study.js';
 import { splitPlotInfo } from '../design/splitplot.js';
 import { _containment as containment, _indexGroups as indexGroups } from './mixed.js';
 import { noiseModel } from './noise.js';
-import { family, LINKS, canonicalLink, irls, fitGLM, glmCompare, DISTRIBUTIONS as GLM_DISTRIBUTIONS } from './glm.js';
+import { family, LINKS, canonicalLink, fitGLM, glmCompare, DISTRIBUTIONS as GLM_DISTRIBUTIONS, _draw } from './glm.js';
 import { chi2 as CHI2, ncChi2 } from '../dist.js';
 import { rng } from '../design/rng.js';
 
@@ -282,23 +282,8 @@ export function detectableRatio(result, { power = 0.8 } = {}) {
   });
 }
 
-// random draws for the simulation
-function poissonDraw(R, mu) {
-  if (mu > 500) { let s = 0; const k = Math.ceil(mu / 500); for (let i = 0; i < k; i++) s += poissonDraw(R, mu / k); return s; }
-  const L = Math.exp(-mu); let k = 0, p = R.random();
-  while (p > L) { k++; p *= R.random(); }
-  return k;
-}
-function gammaDraw(R, a) {
-  if (a < 1) return gammaDraw(R, a + 1) * R.random() ** (1 / a);
-  const d = a - 1 / 3, c = 1 / Math.sqrt(9 * d);
-  for (;;) {
-    let x, v;
-    do { const u1 = R.random() || 1e-300, u2 = R.random(); x = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); v = 1 + c * x; } while (v <= 0);
-    v = v * v * v; const u = R.random();
-    if (u < 1 - 0.0331 * x ** 4 || Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
-  }
-}
+// random draws for the simulation (glm.js)
+const poissonDraw = (R, mu) => _draw.poisson(R, mu), gammaDraw = (R, a) => _draw.gamma(R, a);
 const binomialDraw = (R, n, p) => { let k = 0; for (let i = 0; i < n; i++) if (R.random() < p) k++; return k; };
 
 /**

@@ -13,6 +13,9 @@ const saved = { get() { try { return JSON.parse(localStorage.getItem(STORE) ?? '
 const inline = (s) => { const d = h('span', {}); d.innerHTML = md(s).replace(/^<p>|<\/p>\s*$/g, ''); return d; };
 const manualLink = (page, anchor, label) => h('a', { href: `docs/manual/index.html?p=${page}${anchor ? `#${anchor}` : ''}`, target: '_blank', rel: 'noopener', 'data-manual': `${page}${anchor ? `#${anchor}` : ''}` }, label);
 
+// counts and proportions: the recommender's power for the ratio, at counts of 20 or 20 trials near 50 %
+const guideCounts = (c) => ({ distribution: { count: 'poisson', percent: 'binomial', passfail: 'bernoulli' }[c.result], baseline: c.result === 'count' ? 20 : 0.5, ratio: c.ratio, ...(c.result === 'percent' ? { trials: 20 } : c.result === 'passfail' ? { trials: 1 } : {}) });
+
 export function render(ctx) {
   const { state, setUI } = ctx;
   const ui = state.ui.guide ??= { answers: saved.get() };
@@ -73,7 +76,7 @@ function result(ctx, answers, ui, set) {
     const key = JSON.stringify(answers);
     if (ui.rec?.key === key) ({ rec, err: recErr } = ui.rec);
     else {
-      try { rec = recommend(guideStudy(answers), { goal: a.goal, budget: a.budget ?? undefined, delta: a.delta, optimal: a.optimal, restarts: 4 }); } catch (e) { recErr = e.message; }
+      try { rec = recommend(guideStudy(answers), { goal: a.goal, budget: a.budget ?? undefined, delta: a.delta, optimal: a.optimal, restarts: 4, ...(a.counts ? { counts: guideCounts(a.counts) } : {}) }); } catch (e) { recErr = e.message; }
       ui.rec = { key, rec, err: recErr };
     }
   }

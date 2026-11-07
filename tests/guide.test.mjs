@@ -15,10 +15,10 @@ section('the questionnaire');
     && asked({ aim: 'screen', types: 'multi', groups: 'yes' }).filter(q => q.id === 'categorical' || q.id === 'groupSize').length === 2);
   check('no curvature question when optimising (it is assumed)', !asked({ aim: 'optimise' }).some(q => q.id === 'curvature'));
   const a = {};
-  const pick = { aim: 'understand', measurement: 'good', factors: 3, names: null, mixture: 'no', types: 'continuous', htc: 0, groups: 'no', plates: 'no', curvature: 'unsure', constraints: 'none', effect: 'medium', budget: null, stages: 'yes' };
+  const pick = { aim: 'understand', measurement: 'good', factors: 3, names: null, mixture: 'no', types: 'continuous', htc: 0, groups: 'no', plates: 'no', curvature: 'unsure', constraints: 'none', result: 'measurement', effect: 'medium', budget: null, stages: 'yes' };
   let q, n = 0;
   while ((q = nextQuestion(a)) && n++ < 30) a[q.id] = pick[q.id];
-  check('a full path ends (optional questions skipped with null)', q === null && n === 14, `${n} questions`);
+  check('a full path ends (optional questions skipped with null)', q === null && n === 15, `${n} questions`);
   check('number answers: whole, in range, hard-to-change at most the factors', checkAnswer(QUESTIONS.find(x => x.id === 'factors'), 2.5) && checkAnswer(QUESTIONS.find(x => x.id === 'factors'), 0)
     && checkAnswer(QUESTIONS.find(x => x.id === 'htc'), 4, { factors: 3 }) && checkAnswer(QUESTIONS.find(x => x.id === 'htc'), 0, { factors: 3 }) === null && checkAnswer(QUESTIONS.find(x => x.id === 'budget'), null) === null);
   check('every question says why it matters', QUESTIONS.every(x => x.why.length > 40 && x.help.length === 2));
@@ -84,6 +84,13 @@ section('advice for typical cases');
     }
     check('every mixture combination: a valid mixture study and a mixture design family', !bad.length, bad.slice(0, 4).join('\n'));
   }
+  r = A({ aim: 'understand', factors: 3, result: 'count', ratio: 'medium' });
+  check('counts: a Poisson analysis, rate ratio 1.5, about 10 runs with counts of 20, and the study response is a count',
+    r.notes.some(n => /Poisson model/.test(n) && /rate ratio of 1.5 needs about 10 runs/.test(n)) && r.counts.ratio === 1.5 && guideStudy({ ...base, aim: 'understand', factors: 3, result: 'count' }).responses[0].distribution === 'poisson');
+  r = A({ aim: 'understand', factors: 3, result: 'passfail', ratio: 'large' });
+  check('pass/fail: a warning that one yes-or-no carries little information (odds ratio 3: about 105 runs)', r.warnings.some(w => /little information/.test(w) && /about 105 runs/.test(w)) && guideStudy({ ...base, aim: 'understand', factors: 3, result: 'passfail' }).responses[0].distribution === 'bernoulli');
+  check('counts and proportions: the ratio question instead of the scatter question', asked({ aim: 'screen', factors: 4, result: 'percent' }).some(q => q.id === 'ratio') && !asked({ aim: 'screen', factors: 4, result: 'percent' }).some(q => q.id === 'effect')
+    && asked({ aim: 'screen', factors: 4, result: 'measurement' }).some(q => q.id === 'effect'));
   r = advise({ aim: 'measure', operators: 'several' });
   check('measure: gauge R&R 10 × 3 × 2', r.family === 'gauge' && r.runs === 60);
   r = advise({ aim: 'simulate', factors: 4 });

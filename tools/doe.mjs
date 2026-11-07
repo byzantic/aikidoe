@@ -59,6 +59,7 @@
 //                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
 //        adds a stage of runs to the design as a new block
 //   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
+//        (counts and proportions: [--exposure e] [--trials n] for the new run)
 //        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
 //   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
 //   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
@@ -710,6 +711,7 @@ function cmdAugment({ pos, opt }) {
 function mixedFor(study, formula, opt) {
   if (opt.ols) return null;
   const resp = (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : '') || study.responses[0]?.id;
+  if (study.responses.find(r => r.id === resp)?.distribution) return null;      // counts and proportions: no mixed models yet
   try { if (!randomEffects(observationTable(study, resp)).length) return null; } catch { return null; }
   return fitMixedModel(study, formula);
 }
@@ -734,12 +736,16 @@ function cmdPredict({ pos, opt }) {
   const fit = fitModel(study, formula, opt.firth && resp?.distribution ? { firth: true } : {});
   const p = predict(fit, at);
   if (fit.distribution) {
-    // counts and proportions: the mean (a rate per unit exposure, or a proportion) with an interval
-    // from the link scale
-    put({ kind: 'glm', response: fit.response, predictions: at.map((s, i) => ({ settings: s, fit: p[i].fit, lower: p[i].lower, upper: p[i].upper, link: p[i].link, seLink: p[i].seLink })), level: 0.95 });
-    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: fit.distribution.includes('binomial') || fit.distribution === 'bernoulli' || fit.noise === 'bernoulli' ? 'proportion' : fit.offset.some(v => v !== 0) ? 'rate (per unit exposure)' : 'mean count' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }],
-      at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}` }))));
-    out(`${noiseOf(fit).label}: the interval is computed on the ${fit.link} scale and transformed back (prediction intervals for a single new count or proportion are not given yet)`);
+    // counts and proportions: the mean (a rate per unit exposure, or a proportion), its interval from
+    // the link scale, and the interval for one new run with the given exposure or trials
+    const prop = !['poisson', 'quasipoisson', 'negbin'].includes(fit.distribution);
+    const po = { ...(opt.exposure !== undefined ? { exposure: Number(opt.exposure) } : {}), ...(opt.trials !== undefined ? { trials: int(opt.trials, 'trials') } : resp?.trials ? { trials: resp.trials } : {}) };
+    const q = predict(fit, at, po);
+    put({ kind: 'glm', response: fit.response, ...po, predictions: at.map((s, i) => ({ settings: s, fit: q[i].fit, lower: q[i].lower, upper: q[i].upper, predLower: q[i].predLower, predUpper: q[i].predUpper, link: q[i].link, seLink: q[i].seLink })), level: 0.95 });
+    const what = prop ? `one run of ${po.trials ?? 'the typical number of'} trials` : `one run, exposure ${po.exposure ?? 1}`;
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: prop ? 'proportion' : fit.offset.some(v => v !== 0) ? 'rate (per unit exposure)' : 'mean count' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: `95% PI (${what})`, align: 'left' }],
+      at.map((s, i) => ({ at: showSettings(s), fit: q[i].fit, ci: `${num(q[i].lower)} … ${num(q[i].upper)}`, pi: `${num(q[i].predLower)} … ${num(q[i].predUpper)}` }))));
+    out(`${noiseOf(fit).label}: the mean's interval is computed on the ${fit.link} scale and transformed back; the prediction interval is for what a new run would give${prop ? ' (successes / trials)' : ' (count / exposure)'}, allowing for the uncertainty in the fit`);
     return;
   }
   put({ kind: 'ols', response: fit.response, predictions: at.map((s, i) => ({ settings: s, fit: p[i].fit, lower: p[i].lower, upper: p[i].upper, predLower: p[i].predLower, predUpper: p[i].predUpper })), level: 0.95 });
