@@ -11,6 +11,10 @@ import { parseStudy, serializeStudy } from '../js/study.js';
 import { EXAMPLES } from '../ui/examples.js';
 import { validate } from '../js/jsonschema.js';
 import { readdirSync, copyFileSync } from 'node:fs';
+import { createStudy } from '../js/study.js';
+import { splitPlotFull } from '../js/design/splitplot.js';
+import { toStudyDesign } from '../js/design/factorial.js';
+import { runVirtual } from '../js/learn/process.js';
 
 const DOE = fileURLToPath(new URL('../tools/doe.mjs', import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), 'aikidoe-cli-'));
@@ -282,6 +286,30 @@ try {
   check('fit --json --distribution quasipoisson: t tests and the dispersion', o.distribution === 'quasipoisson' && 't' in o.coefficients[0] && o.dispersion > 0 && o.aic === null);
   o = js('predict', 'jc.aikidoe.json', 'germ ~ A + B', '--at', 'A=1,B=-1');
   check('predict --json (binomial): a proportion with an interval inside 0 … 1', o.kind === 'glm' && o.predictions[0].fit > 0.5 && o.predictions[0].lower > 0 && o.predictions[0].upper < 1);
+  // counts in a split-plot (issue #64, phase 5): the GLMM with a random whole-plot intercept, automatically
+  {
+    const s0 = createStudy({ name: 'sp counts', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'D', low: 1, high: 10 }], responses: [{ id: 'n', distribution: 'poisson' }] });
+    const sd = createStudy({ ...s0, design: toStudyDesign(s0, splitPlotFull([2, 2], [true, false], { replicates: 5 }), { seed: 3 }) });
+    writeFileSync(join(dir, 'jg.aikidoe.json'), serializeStudy(createStudy(runVirtual({ seed: 9, factors: s0.factors, responses: [{ id: 'n', distribution: 'poisson', exposure: [50, 100], truth: { intercept: Math.log(0.5), terms: { T: 0.25, D: 0.3 } } }], nuisance: { wholePlot: 0.4 } }, sd))));
+  }
+  o = js('fit', 'jg.aikidoe.json', 'n ~ T + D', '--anova', '2');
+  check('fit --json (counts, split-plot): a GLMM with a random whole-plot intercept; T, the intercept on t (10 − 2 df)', o.kind === 'glmm' && o.random?.id === 'wholePlot' && o.random.groups === 10 && o.random.sigma > 0
+    && JSON.stringify(o.groupLevel) === '["(Intercept)","T"]' && o.coefficients.find(c => c.term === 'T').df === 8 && o.coefficients.find(c => c.term === 'D').df === null && o.tests.type === 2 && o.tests.rows[0].F > 0, JSON.stringify(o).slice(0, 300));
+  const og = js('fit', 'jg.aikidoe.json', 'n ~ T + D', '--random', 'none');
+  check('… --random none: the GLM, whose standard error for T is far smaller', og.kind === 'glm' && og.coefficients[1].se < o.coefficients[1].se / 2);
+  o = js('fit', 'jg.aikidoe.json', 'n ~ T + D', '--nagq', '1');
+  check('… --nagq 1: the Laplace approximation', o.kind === 'glmm' && o.nAGQ === 1);
+  o = js('predict', 'jg.aikidoe.json', 'n ~ T + D', '--at', 'T=37,D=10', '--exposure', '100');
+  check('predict --json (GLMM): a typical whole plot, the average over them, a new run in a new whole plot', o.kind === 'glmm' && o.predictions[0].marginal > o.predictions[0].fit && o.predictions[0].predLower < o.predictions[0].lower && o.predictions[0].predUpper > o.predictions[0].upper);
+  r = run('fit', 'jg.aikidoe.json', 'n ~ T + D', '--reduce');
+  check('… --reduce is refused for the GLMM', r.code === 1 && /drop terms by hand/.test(r.err));
+  r = run('fit', 'jg.aikidoe.json', 'n ~ T + D');
+  check('fit (GLMM): the table, σ and its test, the small-sample note', r.code === 0 && /random intercept per whole plot/.test(r.out) && /whole plot σ = .* on the log scale/.test(r.out) && /t on 10 − 2 = 8 df/.test(r.out), r.out + r.err);
+  r = run('report', 'jg.aikidoe.json', '--out', 'jg.html', '--date', '2026-01-01');
+  const rep = readFileSync(join(dir, 'jg.html'), 'utf8');
+  check('report: the split-plot counts with the random whole-plot intercept and its tests', r.code === 0 && /random intercept per whole plot \(10 of them/.test(rep) && /Likelihood-ratio tests \(type I\)/.test(rep) && /whole plot σ = /.test(rep), r.out + r.err);
+  r = run('fit', 'jc.aikidoe.json', 'colonies ~ A', '--random', 'block');
+  check('--random block without blocks is refused', r.code === 1 && /at least two blocks/.test(r.err));
   o = js('power', 'jc.aikidoe.json', '--model', 'A*B', '--response', 'colonies', '--baseline', '20', '--ratio', '1.5', '--simulate', '60', '--seed', '2');
   check('power --json for a rate ratio, with a simulation check', o.distribution === 'poisson' && o.terms.length === 3 && o.terms.every(x => x.power > 0.5 && x.simulated > 0.3 && x.detectableRatio > 1 && x.detectableRatio < 1.6), JSON.stringify(o.terms?.[0]));
   o = js('power', 'jc.aikidoe.json', '--response', 'germ', '--baseline', '1.5');

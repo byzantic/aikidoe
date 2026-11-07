@@ -57,8 +57,9 @@ ANOVA, ternary plots, Cox traces and blend optimisation ([manual](docs/manual/de
 
 Counts and proportions — colonies, cells, defects; germination, viability, pass/fail: Poisson,
 negative binomial and binomial generalised linear models, with exposure and trials, rate and odds
-ratios, analysis of deviance, checks for overdispersion and separation (Firth's method), and power
-for a rate or odds ratio
+ratios, analysis of deviance, checks for overdispersion and separation (Firth's method), random
+whole-plot or block effects (a GLMM, checked against `lme4::glmer`), and power for a rate or odds
+ratio
 ([manual](docs/manual/analysis.md#counts-and-proportions); `doe init --response count@poisson`).
 
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,

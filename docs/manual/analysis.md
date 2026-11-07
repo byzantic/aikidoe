@@ -257,9 +257,53 @@ Two checks come with every fit:
   flags it; **Firth's penalised likelihood** (`doe fit … --firth`; the Analyse step's button)
   gives finite estimates with Wald tests and intervals (as `brglm2` and `logistf`).
 
-Power for counts and proportions is in [power](concepts.md#power). Not yet: random effects for
-counts (split-plot designs and nested readings are fitted as if every run were independent, with a
-warning) ([issue #64](https://github.com/byzantic/aikidoe/issues/64)).
+Power for counts and proportions is in [power](concepts.md#power).
+
+### Random effects for counts and proportions
+
+In a split-plot, the runs of one whole plot share its setting of the hard-to-change factors and
+whatever else that whole plot did differently — a fresh batch of medium, an incubator that ran a
+little warm. Colony counts from the same whole plot go up or down together, and a model that
+treats every run as independent judges the hard-to-change factors against the run-to-run noise,
+which is far too small for them. The same holds for blocks (days, batches) when there are enough
+of them to be treated as a sample.
+
+aikidoe then fits a **generalised linear mixed model** (GLMM): the Poisson or binomial model with
+a **random intercept** per whole plot (or block) — a shift on the log or logit scale, drawn from
+a normal distribution with standard deviation σ. It does so automatically for a split-plot with a
+Poisson, binomial or pass/fail response; blocks are random when asked (`--random block`, or the
+Analyse step's *random effect* choice), and `--random none` fits the ordinary model.
+
+```text
+doe fit STUDY "colonies ~ T + M + D"              # a split-plot: a random whole-plot intercept
+doe fit STUDY "germinated ~ A + B" --random block
+doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
+```
+
+- **The fit**: maximum likelihood, the integral over each whole plot's shift by **adaptive
+  Gauss–Hermite quadrature** with 25 nodes (`--nagq`; `--nagq 1` is the Laplace approximation).
+  Checked against R's `lme4::glmer` for Poisson counts with an exposure, binomial proportions
+  (logit and probit) and pass/fail results, and for a fit where σ comes out as 0.
+- **σ** is reported on the link scale, with the likelihood-ratio test of σ = 0 (referred to
+  ½χ²₀ + ½χ²₁, since σ cannot be negative). σ estimated as 0 means no variation between whole
+  plots beyond the counts' own; the fit is then the ordinary one.
+- **Coefficients** with rate or odds ratios. Those that change only between whole plots — the
+  hard-to-change factors, and the intercept — are judged against the variation from one whole plot
+  to the next, and with few whole plots σ is uncertain and estimated too small. aikidoe therefore
+  gives them **t tests and intervals on m − q degrees of freedom** (m whole plots, q such
+  coefficients) and widens their standard errors by √(m/(m − q)), as REML does for measurements.
+  This is not in `lme4`, whose Wald z intervals for a hard-to-change factor covered the truth in
+  only 82–89 % of simulated split-plots with 8–12 whole plots; with the correction, 92–95 %.
+  Coefficients that change within whole plots keep the z tests.
+- **Tests** of the terms are likelihood ratios, σ re-estimated with and without the term (types
+  I, II and III); for a term that changes only between whole plots, as F = χ²/df on m − q df.
+- **Predictions** are for a *typical* whole plot (its shift 0) and, because the link scale is
+  not linear, also **averaged over whole plots** (larger, for counts); the prediction interval for
+  one new run allows for a new whole plot's shift.
+- Not available with a random effect: the negative binomial and quasi models (the random effect
+  already takes up the extra variation between whole plots), Firth's method, model reduction, and
+  power: the Design step's power for counts still treats the runs as independent, so it overstates
+  the power for hard-to-change factors.
 
 ## Mixed models
 

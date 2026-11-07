@@ -254,7 +254,7 @@ function countsPowerSection(study, d, cand, ui, set, model, alpha, controlsHead)
   };
   const rows = res.terms.filter(t => !t.block);
   return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls,
-    d.wholePlot ? h('div', { class: 'msg warning' }, 'Split-plot: this power treats every run as independent (random effects for counts and proportions come later), so it overstates the power for hard-to-change factors.') : null,
+    d.wholePlot ? h('div', { class: 'msg warning' }, 'Split-plot: this power treats every run as independent (the analysis fits a random whole-plot effect; this power does not), so it overstates the power for hard-to-change factors.') : null,
     dataTable([{ key: 'term', label: 'term' }, { key: 'df', label: 'df', cls: 'n' },
       { key: 'power', label: `power at ${rw} ${spec.ratio}`, cls: 'n', fmt: (v) => (Number.isNaN(v) ? h('span', { class: 'muted' }, 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
       ...(sim ? [{ key: 'sim', label: 'simulated', cls: 'n', fmt: (v) => (v ? `${num(v.power, 2)} ± ${num(v.se, 1)}` : '') }] : []),

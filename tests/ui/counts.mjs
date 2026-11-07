@@ -9,6 +9,11 @@ import { join } from 'node:path';
 import { serve } from '../../tools/serve.mjs';
 import { section, check, done } from '../lib/check.mjs';
 import { createStudy } from '../../js/study.js';
+import { splitPlotFull } from '../../js/design/splitplot.js';
+import { toStudyDesign } from '../../js/design/factorial.js';
+import { runVirtual } from '../../js/learn/process.js';
+import { fitCountMixedModel } from '../../js/model/glmm.js';
+import { num } from '../../js/format.js';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const shots = process.argv.includes('--shots') ? process.argv[process.argv.indexOf('--shots') + 1] : null;
@@ -125,6 +130,29 @@ try {
   check('the plan says how the counts are analysed and roughly how many runs', /Poisson model/.test(await page.textContent('#guide')) && /rate ratio of 1.5/.test(await page.textContent('#guide')));
   await page.click('#guide-create'); await settle();
   check('the study’s response is a count', (await state()).doc.responses[0].distribution === 'poisson');
+
+  section('a split-plot with counts: the random whole-plot effect (phase 5)');
+  {
+    const s0 = createStudy({ name: 'sp', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'D', low: 1, high: 10 }], responses: [{ id: 'n', distribution: 'poisson' }] });
+    const sd = createStudy({ ...s0, design: toStudyDesign(s0, splitPlotFull([2, 2], [true, false], { replicates: 5 }), { seed: 3 }) });
+    const sp = createStudy(runVirtual({ seed: 9, factors: s0.factors, responses: [{ id: 'n', distribution: 'poisson', truth: { intercept: Math.log(40), terms: { T: 0.25, D: 0.3 } } }], nuisance: { wholePlot: 0.4 } }, sd));
+    const ref = fitCountMixedModel(sp, 'n ~ T + D');
+    await page.goto(url); await settle();
+    await page.evaluate((d) => window.aikidoe.setDoc(d), JSON.parse(JSON.stringify(sp))); await settle();
+    await page.click('[data-step="analyse"]'); await settle();
+    await page.fill('#formula', 'n ~ T + D'); await page.keyboard.press('Tab'); await settle();
+    check('automatically: a random whole-plot intercept', await page.locator('#glmm-fit').count() === 1 && (await page.inputValue('select[aria-label="random effect"]')) === 'wholePlot');
+    check('σ as the library fits it', (await page.textContent('#glmm-sigma')) === num(ref.sigma, 3), await page.textContent('#glmm-sigma'));
+    const dfOf = (t) => page.locator(`#glmm-fit tr[data-term="${t}"] td`).nth(4).textContent();
+    check('T, hard to change, on t with 10 − 2 df; D on z', (await dfOf('T')) === '8' && (await dfOf('D')) === 'z' && /change only between whole plots/.test(await page.textContent('#glmm-fit')), `${await dfOf('T')} ${await dfOf('D')}`);
+    check('likelihood-ratio tests, T as an F', await page.locator('#glmm-tests').count() === 1 && /\bF\b/.test(await page.textContent('#glmm-tests')));
+    check('the estimated whole-plot effects', await page.locator('#glmm-effects svg').count() === 1);
+    await shot('counts-glmm');
+    await page.selectOption('select[aria-label="random effect"]', 'none'); await settle();
+    check('none: the GLM, with the split-plot warning and the way back', await page.locator('#glm-tests').count() === 1 && await page.locator('#glm-splitplot').count() === 1);
+    await page.click('#use-glmm'); await settle();
+    check('… one click back to the random whole-plot effect', await page.locator('#glmm-fit').count() === 1);
+  }
 
   section('no page errors');
   check('no page errors', !errors.length, errors.join('\n'));

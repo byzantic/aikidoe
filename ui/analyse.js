@@ -17,6 +17,8 @@ import { plateAnalysisPanel } from './plates.js';
 import { doseAnalysis } from './dose.js';
 import { mixtureAnalysis } from './mixture.js';
 import { glmAnalysis } from './glm.js';
+import { glmmAnalysis, cached } from './glmm.js';
+import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
 
 /** A sensible first model for the study's design. */
 
@@ -85,10 +87,24 @@ export function render(ctx) {
 
   let fit = null, fitErr = null;
   try { fit = fitModel(study, formula, { ...(ui.noPosition ? { position: false } : {}), ...(ui.firth && resp.distribution ? { firth: true } : {}) }); } catch (e) { fitErr = e; }
-  // counts and proportions: a generalised linear model (no mixed models yet)
+  // counts and proportions: a generalised linear model, with a random intercept per whole plot (a
+  // split-plot, automatically) or per block (when asked)
   if (resp.distribution) {
-    if (fitErr) return h('div', {}, controls, h('div', { class: 'msg error' }, fitErr.message));
-    return h('div', {}, controls, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), confirmPanel(ctx, fit));
+    const can = (id) => { try { return !!randomGroupOf(study, id); } catch { return false; } };
+    const hasWP = can('wholePlot'), hasB = can('block');
+    const choice = ui.countRandom ?? (hasWP && ['poisson', 'binomial', 'bernoulli'].includes(resp.distribution) ? 'wholePlot' : 'none');
+    const picker = hasWP || hasB ? h('div', { class: 'row small', id: 'count-random' }, h('label', { class: 'inline' }, 'random effect',
+      select([...(hasWP ? [{ value: 'wholePlot', label: 'whole plots' }] : []), ...(hasB ? [{ value: 'block', label: 'blocks' }] : []), { value: 'none', label: 'none (runs independent)' }], choice,
+        (v) => set({ countRandom: v, reduce: null }), { 'aria-label': 'random effect' })),
+      help('analysis', 'random-effects-for-counts-and-proportions')) : null;
+    if (choice !== 'none' && !ui.firth) {
+      let gm;
+      try { gm = cached(study, JSON.stringify(['fit', formula, choice]), () => fitCountMixedModel(study, formula, { random: choice })); }
+      catch (e) { return h('div', {}, controls, picker, h('div', { class: 'msg error' }, e.message)); }
+      return h('div', {}, controls, picker, glmmAnalysis(ctx, gm, { ui, set, setFormula, rhs, resp }));
+    }
+    if (fitErr) return h('div', {}, controls, picker, h('div', { class: 'msg error' }, fitErr.message));
+    return h('div', {}, controls, picker, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), confirmPanel(ctx, fit));
   }
 
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)

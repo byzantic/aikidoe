@@ -45,6 +45,9 @@
 //        odds ratios and profile intervals [--wald], analysis of deviance, overdispersion and
 //        separation checks [--firth]; [--distribution poisson|negbin|quasipoisson|binomial|… --link L]
 //        to try another than the response's
+//        counts and proportions in a split-plot (or with blocks): a GLMM with a random intercept per
+//        whole plot (automatic) or block [--random wholePlot|block|none] [--nagq 25 (1: Laplace)];
+//        likelihood-ratio tests, σ of the random effect and its test
 //        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
 //        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
 //        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
@@ -59,7 +62,8 @@
 //                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
 //        adds a stage of runs to the design as a new block
 //   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
-//        (counts and proportions: [--exposure e] [--trials n] for the new run)
+//        (counts and proportions: [--exposure e] [--trials n] for the new run; with a random effect
+//        [--random …]: for a typical whole plot or block, averaged over them, and a new run in a new one)
 //        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
 //   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
 //   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
@@ -139,6 +143,7 @@ import { hierarchyViolations, parseFormula, modelMatrix } from '../js/model/form
 import { studyPower, detectableEffect, detectableRatio, simulatePower } from '../js/model/power.js';
 import { reduceModel, reduceMixed } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects, predictMixed, runMeanWeights } from '../js/model/mixed.js';
+import { fitCountMixedModel, randomGroupOf, glmmTests, glmmConfint, predictCountMixed } from '../js/model/glmm.js';
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
 import { fittedModels, optimiseDesirability, dValue } from '../js/model/desirability.js';
@@ -514,7 +519,7 @@ function printGLM(study, fit, opt) {
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
   out(`${nm.label}, ${fit.link} link${fit.firth ? ', Firth’s penalised likelihood' : ''}${fit.distribution === 'negbin' ? `, θ = ${num(fit.theta, 4)} (s.e. ${num(fit.thetaSE, 3)})` : ''}`);
   out(`${fit.n} observations, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.offset.some(v => v !== 0) ? '; exposure as an offset (rates per unit exposure)' : ''}`);
-  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this fit treats all runs as independent, so the tests of whole-plot effects are too optimistic (random effects for counts are not supported yet)');
+  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this fit treats all runs as independent, so the tests of whole-plot effects are too optimistic (drop --random none for the random whole-plot effect)');
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
   out('');
@@ -541,6 +546,51 @@ function printGLM(study, fit, opt) {
     overdispersion: fit.overdispersion, separation: fit.separation, warnings: fit.warnings, tests: { type: fit.firth ? 'wald' : type, rows: tests } });
 }
 
+/** The random grouping for a count or proportion response's fit: --random wholePlot|block|none, or the whole plots of a split-plot. */
+function countRandomOf(study, opt, distribution) {
+  const r = opt.random === undefined ? 'auto' : String(opt.random);
+  if (r === 'none') return null;
+  // automatically only for the distributions a random effect is available for (a negative binomial or quasi model stays fixed)
+  if (r === 'auto' && !['poisson', 'binomial', 'bernoulli'].includes(distribution)) return null;
+  if (!['auto', 'block', 'wholePlot'].includes(r)) fail(`--random ${r}: for counts and proportions use wholePlot, block or none`);
+  return randomGroupOf(study, r)?.id ?? null;
+}
+
+/** A GLMM (counts, proportions with a random whole-plot or block intercept): coefficients, σ, tests. */
+function printGLMM(study, formula, random, opt) {
+  const fo = { random, ...(opt.nagq !== undefined ? { nAGQ: int(opt.nagq, 'nagq') } : {}), ...(opt.distribution ? { noise: String(opt.distribution) } : {}), ...(opt.link ? { link: String(opt.link) } : {}) };
+  const fit = fitCountMixedModel(study, formula, fo);
+  const nm = noiseOf(fit), ratioName = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null, gs = `${fit.random.name}s`;
+  out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'} + a random intercept per ${fit.random.name}`);
+  out(`${nm.label}, ${fit.link} link; ${fit.nAGQ === 1 ? 'Laplace approximation' : `adaptive Gauss–Hermite quadrature (${fit.nAGQ} nodes)`}, maximum likelihood`);
+  out(`${fit.n} observations in ${fit.random.m} ${gs}, ${fit.rank} fixed coefficients${fit.offset.some(v => v !== 0) ? '; exposure as an offset (rates per unit exposure)' : ''}`);
+  for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
+  if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  out('');
+  const ci = glmmConfint(fit);
+  const rows = fit.columns.map((c, j) => ({ term: c, est: fit.coef[j], se: fit.se[j], z: fit.z[j], df: fit.df[j], p: fit.p[j], ci: ci.find(x => x.name === c) })).filter(r => !Number.isNaN(r.est));
+  out(table([
+    { key: 'term', label: 'term', align: 'left' }, { key: 'est', label: 'estimate' }, { key: 'se', label: 'std. error' }, { key: 'z', label: 'z or t' }, { key: 'dft', label: 'df', align: 'left' }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars },
+    ...(ratioName ? [{ key: 'ratio', label: ratioName }, { key: 'rci', label: '95% interval', align: 'left' }] : []),
+  ], rows.map(r => ({ ...r, dft: r.df === Infinity ? 'z' : `t ${r.df}`, ratio: r.ci?.ratio?.estimate, rci: r.ci?.ratio ? `${num(r.ci.ratio.lower, 4)} … ${num(r.ci.ratio.upper, 4)}` : '' }))));
+  out(`coded units: each continuous factor runs from −1 (low) to +1 (high)${ratioName ? `; ${ratioName === 'odds ratio' ? 'an' : 'a'} ${ratioName} is the factor of change per coded unit (squared for low → high)` : ''}`);
+  if (fit.groupLevel.length && !fit.boundary) out(`${fit.groupLevel.join(', ')} vary only between ${gs}: t on ${fit.random.m} − ${fit.groupLevel.length} = ${fit.dfGroups} df, standard errors × √(${fit.random.m}/${fit.dfGroups}) (a small-sample correction); the others: Wald z`);
+  out(`
+${fit.random.name} σ = ${num(fit.sigma, 4)} on the ${fit.link} scale${fit.boundary ? ' (estimated as 0: no variation between them beyond the noise; the fit is the GLM\'s)' : ` (s.e. ${num(fit.sigmaSE, 3)}); σ = 0 tested by the likelihood ratio χ² = ${num(fit.sigmaTest.chi2, 4)}, p ${pval(fit.sigmaTest.p).startsWith("<") ? pval(fit.sigmaTest.p) : `= ${pval(fit.sigmaTest.p)}`} (½χ²₀ + ½χ²₁)`}`);
+  out(`log-likelihood = ${num(fit.loglik)}   AIC = ${num(fit.aic)}`);
+  for (const w of fit.warnings) out(`warning: ${w}`);
+  const type = opt.anova ? int(opt.anova, 'anova') : 1;
+  const tests = glmmTests(fit, type);
+  out(`
+likelihood-ratio tests (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'}; σ re-estimated in each model${tests.some(r => r.F !== undefined) ? `; terms that vary only between ${gs} as F = χ²/df on ${fit.dfGroups} df` : ''})`);
+  out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'chi2', label: 'χ²' }, { key: 'F', label: 'F', fmt: (v) => (v === undefined ? '' : num(v)) }, { key: 'p', label: 'p', fmt: pval }], tests));
+  put({ kind: 'glmm', response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`, distribution: fit.noise, link: fit.link, nAGQ: fit.nAGQ,
+    random: { id: fit.random.id, name: fit.random.name, groups: fit.random.m, sigma: fit.sigma, sigmaSE: fit.sigmaSE, boundary: fit.boundary, test: fit.sigmaTest, modes: fit.modes },
+    n: fit.n, rank: fit.rank, aliased: fit.aliased, units: 'coded', groupLevel: fit.groupLevel, dfGroups: fit.dfGroups,
+    coefficients: rows.map(r => ({ term: r.term, estimate: r.est, se: r.se, seWald: fit.seWald[fit.columns.indexOf(r.term)], statistic: r.z, df: r.df === Infinity ? null : r.df, p: r.p, lower: r.ci.lower, upper: r.ci.upper, ...(r.ci.ratio ? { ratio: r.ci.ratio } : {}) })),
+    loglik: fit.loglik, aic: fit.aic, converged: fit.converged, warnings: fit.warnings, tests: { type, rows: tests } });
+}
+
 function cmdFit({ pos, opt }) {
   const [file, formula] = pos;
   const study = load(file);
@@ -549,6 +599,15 @@ function cmdFit({ pos, opt }) {
   const glmResp = opt.distribution && opt.distribution !== 'normal' ? String(opt.distribution) : study.responses.find(r => r.id === respId)?.distribution;
   if (opt.firth && !glmResp) fail('--firth is for a pass/fail or binomial response (set the response\'s distribution)');
   if (glmResp && (opt.lenth || opt.boxcox)) fail(`--lenth and --boxcox assume normal noise; ${respId} is ${glmResp}`);
+  // counts and proportions with whole plots (or blocks, when asked): the GLMM
+  if (glmResp && !opt.ols) {
+    const g = countRandomOf(study, opt, glmResp);
+    if (g) {
+      if (opt.reduce) fail('--reduce: model reduction of a model with a random effect for counts is not available; drop terms by hand, using its likelihood-ratio tests');
+      if (opt.firth) fail('--firth: Firth\'s penalised likelihood is for fixed-effect models; with separated proportions, try --random none --firth');
+      return printGLMM(study, formula, g, opt);
+    }
+  }
   if (!opt.ols && !glmResp) {
     const resp = respId;
     const requested = opt.random ? String(opt.random).split(',').map(x => x.trim()).filter(Boolean) : 'auto';
@@ -733,6 +792,21 @@ function cmdPredict({ pos, opt }) {
     return;
   }
   const resp = study.responses.find(r => r.id === (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : ''));
+  const g = resp?.distribution && !opt.ols ? countRandomOf(study, opt, resp.distribution) : null;
+  if (g) {
+    // counts and proportions with a random intercept: a typical whole plot or block, the average over
+    // them, and one new run in a new one
+    const fit = fitCountMixedModel(study, formula, { random: g, ...(opt.nagq !== undefined ? { nAGQ: int(opt.nagq, 'nagq') } : {}) });
+    const prop = !['poisson', 'quasipoisson', 'negbin'].includes(fit.distribution), gn = fit.random.name;
+    const po = { ...(opt.exposure !== undefined ? { exposure: Number(opt.exposure) } : {}), ...(opt.trials !== undefined ? { trials: int(opt.trials, 'trials') } : resp?.trials ? { trials: resp.trials } : {}) };
+    const q = predictCountMixed(fit, at, po);
+    put({ kind: 'glmm', response: fit.response, random: { id: fit.random.id, sigma: fit.sigma }, ...po, predictions: at.map((s, i) => ({ settings: s, fit: q[i].fit, lower: q[i].lower, upper: q[i].upper, marginal: q[i].marginal, predLower: q[i].predLower, predUpper: q[i].predUpper, link: q[i].link, seLink: q[i].seLink })), level: 0.95 });
+    const what = prop ? `one run of ${po.trials ?? 'the typical number of'} trials` : `one run, exposure ${po.exposure ?? 1}`;
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: `typical ${gn}` }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'marg', label: `average over ${gn}s` }, { key: 'pi', label: `95% PI (${what}, new ${gn})`, align: 'left' }],
+      at.map((s, i) => ({ at: showSettings(s), fit: q[i].fit, ci: `${num(q[i].lower)} … ${num(q[i].upper)}`, marg: q[i].marginal, pi: `${num(q[i].predLower)} … ${num(q[i].predUpper)}` }))));
+    out(`${noiseOf(fit).label} with a random ${gn} intercept (σ = ${num(fit.sigma, 4)}): "typical" is a ${gn} whose effect is 0 on the ${fit.link} scale; the average over ${gn}s${fit.sigma > 0 ? ' differs from it because the scale is not linear' : ' is the same (σ = 0)'}; the prediction interval includes a new ${gn}'s effect`);
+    return;
+  }
   const fit = fitModel(study, formula, opt.firth && resp?.distribution ? { firth: true } : {});
   const p = predict(fit, at);
   if (fit.distribution) {
@@ -813,7 +887,7 @@ function countsPower(study, opt) {
 
 function printCountsPower(study, model, c, { alpha, target, opt }) {
   const { response, ...spec } = c;
-  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this power treats every run as independent (random effects for counts and proportions are not supported yet), so it overstates the power for hard-to-change factors');
+  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this power treats every run as independent (it has no random whole-plot effect, which the analysis fits), so it overstates the power for hard-to-change factors');
   const p = studyPower(study, { model, alpha, ...spec });
   const per = (v) => (Array.isArray(v) ? `${v.join(', ')} (cycled over the runs)` : v);
   const odds = String(c.distribution).includes('binomial') || c.distribution === 'bernoulli', rname = odds ? 'odds ratio' : 'rate ratio';
