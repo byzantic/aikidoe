@@ -7,16 +7,17 @@
 # drc's optimiser stops a little short of the minimum on harder fits (LL.5, separate curves), so
 # each fit is also "polished": the RSS minimised from drc's estimates with optim (BFGS, tight
 # tolerance) and the standard errors and the delta-method effective doses recomputed there from a
-# numDeriv Hessian — the same quantities, at the exact minimum. (For the Weibull models drc's own
-# ED standard errors differ from the delta method on its own covariance; the polished values are
-# the delta method.)
+# numDeriv Hessian — the same quantities, at the exact minimum. drc's own ED standard errors
+# change between versions (absolute EDs and the Weibull models differ between CRAN 4.0-0 and the
+# GitHub 4.0.3), so only its ED estimates are recorded; the standard errors and intervals of the
+# effective doses are the delta method computed here.
 source("tests/ref/fixture.R")
 suppressPackageStartupMessages({ library(drc); library(numDeriv) })
 set.seed(20261107)
 
 cases <- list()
 coefs <- function(m) { s <- summary(m)$coefficients; list(names = I(rownames(s)), estimate = I(unname(s[, 1])), se = I(unname(s[, 2]))) }
-eds <- function(m, ps, ...) { e <- ED(m, ps, interval = "delta", display = FALSE, ...); list(p = I(ps), estimate = I(unname(e[, 1])), se = I(unname(e[, 2])), lower = I(unname(e[, 3])), upper = I(unname(e[, 4]))) }
+eds <- function(m, ps, ...) { e <- ED(m, ps, display = FALSE, ...); list(p = I(ps), estimate = I(unname(e[, 1]))) }
 
 curve_fn <- list(
   LL.4 = function(x, t) t[2] + (t[3] - t[2]) / (1 + (x / t[4])^t[1]),
@@ -31,7 +32,7 @@ ed_fn <- list(   # relative EDp, as drc defines it; t = (b, c, d, e[, f]) or (b,
   W1.4 = function(t, p) t[4] * (-log((100 - p) / 100))^(1 / t[1]),
   W2.4 = function(t, p) t[4] * (-log(p / 100))^(1 / t[1]))
 
-polish <- function(rss, start, n, ps, edf) {
+polish <- function(rss, start, n, ps, edf, absf = NULL, ys = NULL) {
   o <- optim(start, rss, method = "BFGS", control = list(reltol = 1e-15, maxit = 10000, parscale = abs(start) + 1e-3))
   o <- optim(o$par, rss, method = "Nelder-Mead", control = list(reltol = 1e-15, maxit = 20000))
   o <- optim(o$par, rss, method = "BFGS", control = list(reltol = 1e-15, maxit = 10000, parscale = abs(o$par) + 1e-3))
@@ -43,6 +44,10 @@ polish <- function(rss, start, n, ps, edf) {
     e <- t(sapply(ps, function(p) { est <- edf(o$par, p); g <- grad(function(t) edf(t, p), o$par); se <- sqrt(drop(t(g) %*% V %*% g)); c(est, se, est - q * se, est + q * se) }))
     out$ed <- list(p = I(ps), estimate = I(e[, 1]), se = I(e[, 2]), lower = I(e[, 3]), upper = I(e[, 4]))
   }
+  if (!is.null(absf)) {
+    e <- t(sapply(ys, function(y) { est <- absf(o$par, y); g <- grad(function(t) absf(t, y), o$par); c(est, sqrt(drop(t(g) %*% V %*% g))) }))
+    out$edAbsolute <- list(y = I(ys), estimate = I(e[, 1]), se = I(e[, 2]))
+  }
   out
 }
 
@@ -52,7 +57,8 @@ for (mod in c("LL.4", "LL.3", "LL.5", "W1.4", "W2.4")) {
   out <- c(coefs(m), list(rss = sum(residuals(m)^2), df = df.residual(m), ed = eds(m, c(10, 50, 90))))
   if (mod == "LL.4") out$edAbsolute <- eds(m, c(2, 4, 6), type = "absolute")
   f <- curve_fn[[mod]]
-  out$polished <- polish(function(t) sum((ryegrass$rootl - f(ryegrass$conc, t))^2), unname(coef(m)), nrow(ryegrass), c(10, 50, 90), ed_fn[[mod]])
+  absf <- if (mod == "LL.4") function(t, y) t[4] * ((t[3] - t[2]) / (y - t[2]) - 1)^(1 / t[1]) else NULL
+  out$polished <- polish(function(t) sum((ryegrass$rootl - f(ryegrass$conc, t))^2), unname(coef(m)), nrow(ryegrass), c(10, 50, 90), ed_fn[[mod]], absf, c(2, 4, 6))
   cases[[length(cases) + 1]] <- list(name = paste("ryegrass", mod), input = list(model = mod, x = I(ryegrass$conc), y = I(ryegrass$rootl)), output = out)
 }
 # log-scale intervals: LL2.4 estimates log(e); fls back-transforms

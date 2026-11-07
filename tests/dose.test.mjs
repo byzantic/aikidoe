@@ -29,10 +29,10 @@ for (const c of fx.cases.filter(x => /^ryegrass (LL|W)[^ ]*$/.test(x.name))) {
   near(`${c.name}: ED10, ED50, ED90 with delta intervals`, ed.flatMap(e => [e.estimate, e.se, e.lower, e.upper]),
     P.ed.p.flatMap((_, i) => [P.ed.estimate[i], P.ed.se[i], P.ed.lower[i], P.ed.upper[i]]), { rel: 1e-5 });
   near(`${c.name}: ED estimates (drc)`, ed.map(e => e.estimate), c.output.ed.estimate, { rel: 1e-2 });
-  if (c.input.model.startsWith('LL')) near(`${c.name}: ED standard errors (drc)`, ed.map(e => e.se), c.output.ed.se, { rel: 2e-2 });
-  if (c.output.edAbsolute) {
-    const ea = c.output.edAbsolute.p.map(p => effectiveDose(f, p, { type: 'absolute' }));
-    near(`${c.name}: doses at absolute responses 2, 4, 6 (drc)`, ea.flatMap(e => [e.estimate, e.se]), c.output.edAbsolute.p.flatMap((_, i) => [c.output.edAbsolute.estimate[i], c.output.edAbsolute.se[i]]), { rel: 1e-3 });
+  if (P.edAbsolute) {
+    const ea = P.edAbsolute.y.map(y => effectiveDose(f, y, { type: 'absolute' }));
+    near(`${c.name}: doses at absolute responses 2, 4, 6, with delta standard errors`, ea.flatMap(e => [e.estimate, e.se]), P.edAbsolute.y.flatMap((_, i) => [P.edAbsolute.estimate[i], P.edAbsolute.se[i]]), { rel: 1e-5 });
+    near(`${c.name}: doses at absolute responses (drc)`, ea.map(e => e.estimate), c.output.edAbsolute.estimate, { rel: 1e-2 });
   }
 }
 {
