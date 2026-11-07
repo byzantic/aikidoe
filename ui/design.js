@@ -18,6 +18,7 @@ import { doseDesignPanel } from './dose.js';
 import { mixtureDesignPanel } from './mixture.js';
 import { platesWithoutWells } from '../js/plate.js';
 import { designPower, detectableEffect, detectableRatio, simulatePower } from '../js/model/power.js';
+import { glmmPowerFromMatrix, detectableGlmmRatio, simulateGlmmPower } from '../js/model/power-glmm.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
 import { candidates, buildCandidate, intendedModel, wholePlotChoices, defaultWholePlots, recommend, GOALS } from '../js/design/recommend.js';
 
@@ -199,7 +200,7 @@ function diagnostics(study, d, modelFor) {
         W - 1 - nWP < 2 ? h('div', { class: 'msg warning' }, `${W} whole plots leave ${Math.max(0, df)} degrees of freedom for the whole-plot error after the whole-plot effects above: too few to test them. Use more whole plots or replicate.`) : null);
     }
     if (d.kind === 'optimal-split-plot') parts.push(h('div', { class: 'row small', 'data-efficiency': '' }, h('span', { class: 'stat' }, 'D-optimal for ', h('b', {}, d.params.model)), h('span', { class: 'stat' }, 'η = ', h('b', {}, d.params.eta)), h('span', { class: 'stat' }, 'log|XᵀV⁻¹X| = ', h('b', {}, num(d.params.logDet, 5)))));
-    parts.push(h('p', { class: 'muted small' }, 'Analysis: the Analyse step fits a mixed model (REML), testing whole-plot effects against the whole-plot variance.'));
+    parts.push(h('p', { class: 'muted small' }, 'Analysis: the Analyse step fits a mixed model (REML for measurements; for counts and proportions a model with a random whole-plot shift), testing whole-plot effects against the whole-plot variation.'));
   }
   if (d.kind === 'full-factorial' && !d.block) parts.push(h('p', { class: 'small' }, 'Every main effect and interaction can be estimated.'));
   if (d.kind === 'optimal' || d.kind === 'definitive-screening' || d.kind === 'lhs') {
@@ -242,25 +243,36 @@ function countsPowerSection(study, d, cand, ui, set, model, alpha, controlsHead)
     prop && spec.distribution !== 'bernoulli' && r.trials === undefined ? numIn('trials', 'trials per run', 'the number of trials (cells, seeds …) in each run', spec.trials, { min: 1, step: 1 }) : null,
     spec.distribution === 'negbin' ? numIn('theta', 'θ', 'the overdispersion you expect: variance μ + μ²/θ (smaller θ, more variable)', spec.theta, { min: 0 }) : null,
     spec.distribution.startsWith('quasi') ? numIn('dispersion', 'dispersion', 'variance as a multiple of the Poisson or binomial variance', spec.dispersion, { min: 1 }) : null);
+  // a split-plot with Poisson, binomial or pass/fail results: the analysis's random whole-plot effect, with σ on the link scale
+  const wpSigma = d.wholePlot && ['poisson', 'binomial', 'bernoulli'].includes(spec.distribution) ? (c.sigmaWp ?? 0.3) : null;
+  if (wpSigma !== null) controls.append(numIn('sigmaWp', `whole-plot σ (${prop ? 'logit' : 'log'} scale)`, 'how much whole plots differ beyond the run-to-run variation, as the standard deviation of their shift on the link scale (0.3 on the log scale: whole plots about 30 % apart)', wpSigma, { min: 0, step: 0.05 }));
   let res, err = null;
-  try { res = designPower(study, d.X, { model, block: d.block, alpha, ...spec }); } catch (e) { err = e.message; }
+  try {
+    res = wpSigma !== null ? glmmPowerFromMatrix(designMatrix(study, d, model), d.wholePlot.map(String), { ...spec, alpha, sigma: wpSigma })
+      : designPower(study, d.X, { model, block: d.block, alpha, ...spec });
+  } catch (e) { err = e.message; }
   if (err) return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, h('div', { class: 'msg error' }, err));
-  const det = Object.fromEntries(detectableRatio(res, { power: 0.8 }).map(x => [x.term, x.ratio]));
-  const simKey = JSON.stringify([cand.id, model, spec, alpha]);
+  const det = Object.fromEntries((wpSigma !== null ? detectableGlmmRatio(res, { power: 0.8 }) : detectableRatio(res, { power: 0.8 })).map(x => [x.term, x.ratio]));
+  const nsim = wpSigma !== null ? 100 : 200;
+  const simKey = JSON.stringify([cand.id, model, spec, alpha, wpSigma]);
   const sim = pw.sim?.key === simKey ? Object.fromEntries(pw.sim.result.map(x => [x.term, x])) : null;
   const runSim = () => {
     const m = designMatrix(study, d, model);
-    set({ power: { ...pw, sim: { key: simKey, result: simulatePower(m, { ...spec, alpha, nsim: 200, seed: study.seed }) } } });
+    set({ power: { ...pw, sim: { key: simKey, result: wpSigma !== null ? simulateGlmmPower(m, d.wholePlot.map(String), { ...spec, alpha, sigma: wpSigma, nsim, seed: study.seed })
+      : simulatePower(m, { ...spec, alpha, nsim, seed: study.seed }) } } });
   };
   const rows = res.terms.filter(t => !t.block);
   return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls,
-    d.wholePlot ? h('div', { class: 'msg warning' }, 'Split-plot: this power treats every run as independent (the analysis fits a random whole-plot effect; this power does not), so it overstates the power for hard-to-change factors.') : null,
+    d.wholePlot && wpSigma === null ? h('div', { class: 'msg warning' }, 'Split-plot: this power treats every run as independent (a random whole-plot effect is available for Poisson, binomial and pass/fail results only), so it overstates the power for hard-to-change factors.') : null,
+    wpSigma !== null ? h('p', { class: 'small', id: 'power-splitplot' }, `Split-plot: ${res.groups} whole plots. A factor that changes only between whole plots is judged against how much they differ (an F test on ${res.dfGroups} df, as in the analysis); the others against the run-to-run variation.`) : null,
+    wpSigma !== null && res.dfGroups < 1 ? h('div', { class: 'msg warning' }, `${res.groups} whole plots leave nothing to judge the hard-to-change factors against: add replicates (more whole plots).`) : null,
     dataTable([{ key: 'term', label: 'term' }, { key: 'df', label: 'df', cls: 'n' },
-      { key: 'power', label: `power at ${rw} ${spec.ratio}`, cls: 'n', fmt: (v) => (Number.isNaN(v) ? h('span', { class: 'muted' }, 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
+      ...(wpSigma !== null ? [{ key: 'wholePlot', label: 'tested against', fmt: (v) => (v ? 'whole plots' : 'runs') }] : []),
+      { key: 'power', label: `power at ${rw} ${spec.ratio}`, cls: 'n', fmt: (v, t) => (Number.isNaN(v) ? h('span', { class: 'muted' }, t.wholePlot && res.dfGroups < 1 ? 'no df' : 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
       ...(sim ? [{ key: 'sim', label: 'simulated', cls: 'n', fmt: (v) => (v ? `${num(v.power, 2)} ± ${num(v.se, 1)}` : '') }] : []),
       { key: 'det', label: `${rw} for 80%`, cls: 'n', fmt: (v) => (Number.isFinite(v) ? num(v, 3) : '> 1000') }],
     rows.map(t => ({ ...t, det: det[t.term], sim: sim?.[t.term] })), { rowAttrs: () => ({ 'data-power': '' }) }),
-    h('div', { class: 'row small' }, h('button', { class: 'btn small', id: 'power-simulate', onclick: runSim }, 'check by simulation (200 experiments)'),
+    h('div', { class: 'row small' }, h('button', { class: 'btn small', id: 'power-simulate', onclick: runSim }, `check by simulation (${nsim} experiments${wpSigma !== null ? ', a few seconds' : ''})`),
       h('span', { class: 'muted' }, `${prop ? `Odds ratio: the odds of success at a factor’s high setting over its low setting (${spec.trials} trials per run).` : 'Rate ratio: the mean count at a factor’s high setting over its low setting.'} Each term is assessed alone with the others at the baseline: Wald tests with the information at the expected ${prop ? 'proportions' : 'counts'}${spec.dispersion ? ', F with the dispersion' : ''}; the simulation runs the likelihood-ratio test the analysis uses.`)));
 }
 

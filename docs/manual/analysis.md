@@ -301,9 +301,10 @@ doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
   not linear, also **averaged over whole plots** (larger, for counts); the prediction interval for
   one new run allows for a new whole plot's shift.
 - Not available with a random effect: the negative binomial and quasi models (the random effect
-  already takes up the extra variation between whole plots), Firth's method, model reduction, and
-  power: the Design step's power for counts still treats the runs as independent, so it overstates
-  the power for hard-to-change factors.
+  already takes up the extra variation between whole plots), Firth's method and model reduction.
+  Power for a split-plot with counts or proportions takes the whole-plot σ
+  ([power](concepts.md#power)); without it, power treats the runs as independent and overstates
+  it for hard-to-change factors.
 
 ## Mixed models
 

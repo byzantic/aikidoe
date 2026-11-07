@@ -154,6 +154,24 @@ try {
     check('… one click back to the random whole-plot effect', await page.locator('#glmm-fit').count() === 1);
   }
 
+  section('Design: power in a split-plot, with the whole-plot σ');
+  {
+    const s0 = createStudy({ name: 'spd', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'D', low: 1, high: 10 }], responses: [{ id: 'n', distribution: 'poisson' }] });
+    await page.goto(url); await settle();
+    await page.evaluate((d) => window.aikidoe.setDoc(d), JSON.parse(JSON.stringify(s0))); await settle();
+    await page.click('[data-step="design"]'); await settle();
+    await page.selectOption('select[aria-label="power for"]', 'n'); await settle();
+    check('two whole plots: no df for the hard-to-change factor, said so', /leave nothing to judge/.test(await page.textContent('#power')));
+    await page.fill('input[aria-label="replicates"]', '5'); await page.keyboard.press('Tab'); await settle();
+    check('a split-plot candidate: the whole-plot σ, and which terms are judged between whole plots', await page.locator('input[aria-label="power sigmaWp"]').count() === 1 && await page.locator('#power-splitplot').count() === 1 && /whole plots/.test(await page.textContent('#power')));
+    const powerOf = async (t) => Number(await page.locator(`#power tr[data-power]:has(td:first-child:text-is("${t}")) td`).nth(3).textContent());
+    const t1 = await powerOf('T'), d1 = await powerOf('D');
+    await page.fill('input[aria-label="power sigmaWp"]', '0.8'); await page.keyboard.press('Tab'); await settle();
+    const t2 = await powerOf('T'), d2 = await powerOf('D');
+    check(`more whole-plot variation: T's power falls (${t1} → ${t2}), D's hardly moves (${d1} → ${d2})`, t2 < t1 && Math.abs(d2 - d1) < 0.05);
+    await shot('counts-splitplot-power');
+  }
+
   section('no page errors');
   check('no page errors', !errors.length, errors.join('\n'));
 } finally {

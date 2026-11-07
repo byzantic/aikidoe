@@ -2351,6 +2351,16 @@
                   "number",
                   "null"
                 ]
+              },
+              "ddf": {
+                "type": "integer"
+              },
+              "test": {
+                "enum": [
+                  "F",
+                  "chi2"
+                ],
+                "description": "split-plot counts: F on dfGroups df for a term that changes only between whole plots, χ² otherwise"
               }
             }
           }
@@ -2375,6 +2385,18 @@
         },
         "target": {
           "type": "number"
+        },
+        "wholePlots": {
+          "type": "integer",
+          "description": "split-plot counts and proportions (--sigma-wp): the number of whole plots"
+        },
+        "dfGroups": {
+          "type": "integer",
+          "description": "the df of the whole-plot F tests: whole plots − coefficients constant within them"
+        },
+        "sigmaWholePlot": {
+          "type": "number",
+          "description": "σ of the whole-plot shift on the link scale (--sigma-wp)"
         }
       }
     },

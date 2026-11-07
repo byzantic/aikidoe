@@ -117,6 +117,37 @@ On the Design step, choose the response in the power section ("for"); the recomm
 the designs by that power. `doe recommend … --response colonies --baseline 20 --ratio 1.4` does
 the same.
 
+In a **split-plot** the analysis gives counts and proportions a random whole-plot shift
+([random effects](analysis.md#random-effects-for-counts-and-proportions)), so a hard-to-change
+factor is judged against how much the whole plots differ, not against the counts' own scatter.
+Give that difference as **σ of the whole-plot shift** on the log (counts) or logit (proportions)
+scale — 0.3 on the log scale means whole plots typically about 30 % apart — with `--sigma-wp`, or
+the Design step's *whole-plot σ*. A factor that changes only between whole plots is then an F test
+on (whole plots − such coefficients) df, as in the analysis; the others are χ² tests. The
+approximation, at the expected counts, is within a few points of `lme4::glmer` simulations of the
+analysis and a little conservative for whole-plot factors; `--simulate` fits the random-effect
+model to simulated experiments (slower: a few seconds per hundred).
+
+```console
+$ doe init spc.aikidoe.json --factor temp:30:37:°C! --factor dna:1:10:ng --response colonies@poisson --seed 4
+created spc.aikidoe.json: 2 factors, 1 responses, seed 4
+$ doe design spc.aikidoe.json --full --replicates 6
+spc.aikidoe.json: split-plot-full, 24 runs, randomisation restricted, seed 4
+split-plot: 12 whole plots of 2 runs; whole-plot (hard-to-change) factors temp are set once per whole plot
+$ doe power spc.aikidoe.json --model "temp + dna" --response colonies --baseline 20 --ratio 1.5 --sigma-wp 0.3
+power for temp + dna, poisson (log link) with a random whole-plot intercept: 24 runs in 12 whole plots; whole-plot σ = 0.3 on the log scale; α = 0.05; baseline mean count 20
+term  df  tested against          rate ratio  power   rate ratio for 80%
+----  --  ----------------------  ----------  ------  ------------------
+temp   1  whole plots (F, 10 df)         1.5  0.3997  1.956
+dna    1  runs (χ²)                      1.5  0.9926  1.293
+rate ratio: the mean count at a factor's high setting over its low setting, each term alone, the others at the baseline. A term that changes only between whole plots is judged against the whole-plot variation, an F on 10 df as in the analysis; the others by χ² (Wald approximation at the expected means)
+```
+
+With twelve incubator loads (whole plots) of two plates each, the temperature needs a rate ratio
+of about 2 for 80 % power; the DNA, varied within each load, about 1.3. The temperature is judged
+on the twelve loads: eight plates per load bring its ratio only to 1.84, twenty-four loads of two
+plates to 1.53.
+
 ## Hierarchy
 
 A model is **hierarchical** if, whenever it contains an interaction (A:B) or a power (A²), it
