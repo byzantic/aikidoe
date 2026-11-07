@@ -90,7 +90,8 @@ more than a count of 4 — and a proportion cannot go below 0 % or above 100 %. 
 raw values gives wrong intervals and can predict impossible values; a log or logit transform helps
 only partly, and breaks down at zero counts and at 0 % or 100 %. The right tool is a **generalised
 linear model** (GLM): a linear model for the log of the mean count, or the log-odds of the
-proportion, with the noise the data actually have.
+proportion, with the noise the data actually have. Lesson 17 in the app's Learn tab practises this
+on generated colony counts and germination tests ([exercises](exercises.md)).
 
 Set the response's **kind** on the Define step (or `distribution` in the study file; `doe init …
 --response count@poisson`):

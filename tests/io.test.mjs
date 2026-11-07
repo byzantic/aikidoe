@@ -110,5 +110,12 @@ section('problems are reported, not silently fixed');
   const rows = ['C', 'N', 'S', 'E', 'W'].map((site, i) => `3,Rs,${[58.2, 58.9, 59.1, 58.7, 99][i]},${site}`).join('\n');
   check('outlier flagged but kept', has(importResults(s, `run,response,value,site\n${rows}\n`), 'warning', /far from the other Rs values/) && importResults(s, `run,response,value,site\n${rows}\n`).observations.length === 5);
   check('runs with no results listed', has(importResults(s, `run,response,value,site\n${rows}\n`), 'info', /no results yet for run\(s\) 1, 2, 4/));
+  // counts (issue #64): judged per unit exposure on the log scale — a 200 µL plate is not an outlier
+  const c0 = createStudy({ name: 'c', factors: [{ id: 'A', low: 0, high: 1 }], responses: [{ id: 'n', distribution: 'poisson' }, { id: 'g', distribution: 'binomial', trials: 50 }] });
+  const cs = createStudy({ ...c0, design: { kind: 'custom', runs: Array.from({ length: 8 }, (_, i) => ({ run: i + 1, order: i + 1, settings: { A: i % 2 } })) } });
+  const ccsv = (vals) => `run,response,value,exposure\n${vals.map(([v, e], i) => `${i + 1},n,${v},${e}`).join('\n')}\n`;
+  const fine = [[10, 10], [12, 10], [9, 10], [11, 10], [10, 10], [11, 10], [9, 10], [205, 200]];
+  check('counts: a large plate with a large count is not flagged', !has(importResults(cs, ccsv(fine)), 'warning', /far from/));
+  check('counts: a count far off for its exposure is', has(importResults(cs, ccsv([...fine.slice(0, 7), [210, 10]])), 'warning', /far from the other n values \(per unit exposure, on the log scale\)/));
 }
 done();

@@ -45,6 +45,7 @@ const DESIGN = {
     await page.fill('input[aria-label="mixture runs"]', String((await st()).exercise.budget)); await page.keyboard.press('Tab'); await settle();
     await page.selectOption('select[aria-label="mixture criterion"]', 'I'); await settle();
   },
+  counts: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '2'); await page.keyboard.press('Tab'); },
   plate: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
   'split-plot': async () => { await page.click('tr[data-design="sp-full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
 };
@@ -111,6 +112,33 @@ try {
     check(`graded: ${score} / 100`, score === 100);
     if (lesson.compare) check('lesson 1 compares with one factor at a time', /would have scored/.test(await page.textContent('#ofat-score')));
     if (shots && seed === 1) await page.screenshot({ path: join(shots, `learn-${lesson.id}.png`), fullPage: true });
+  }
+
+  section('counts: rate ratios answered by hand');
+  {
+    await page.goto(`${url}#lesson=counts&difficulty=hard&seed=4`); await page.waitForSelector('#exercise'); await settle();
+    const ex = generateExercise({ topic: 'counts', difficulty: 'hard', seed: 4 }), ref = referenceStrategy(ex);
+    await DESIGN.counts(); await settle(); await page.click('#create-design'); await settle(); await page.click('#get-results'); await settle();
+    const s = await st();
+    check('the results carry the volume plated (colonies) or come out of the trials (seeds)', s.observations.length === ex.budget && s.observations.every(o => Number.isInteger(o.value) && (s.responses[0].distribution === 'binomial' || o.exposure > 0)));
+    check('hint: fit, check overdispersion, read the ratios', /overdispersion/.test(await page.textContent('#exercise-hints')));
+    await page.click('#toggle-grade'); await settle();
+    await page.click('#fill-answers'); await settle();
+    const a = (await st()).exercise.answers;
+    check('"fill in" gives the model answer\'s ratios', JSON.stringify(Object.keys(a.ratios).sort()) === JSON.stringify(Object.keys(ref.answers.ratios).sort())
+      && Object.entries(a.ratios).every(([k, v]) => Math.abs(Math.log(v.estimate / ref.answers.ratios[k].estimate)) < 1e-6));
+    const f = Object.keys(a.ratios)[0];
+    check('the answer form has a ratio row per active factor', await page.locator(`input[aria-label="answer ratio ${f} estimate"]`).count() === 1 && /ratio \(high ÷ low\)/.test(await page.textContent('#grade-panel')));
+    await page.click('#grade-answers'); await settle();
+    check('graded on the filled-in ratios: 100', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) === 100);
+    check('the comparison: least squares on the raw values', /Least squares on the raw .* would have scored/.test(await page.textContent('#ofat-score')));
+    // a ratio typed the wrong way up (low ÷ high) is on the wrong side of 1
+    const v = a.ratios[f];
+    await page.fill(`input[aria-label="answer ratio ${f} estimate"]`, String(1 / v.estimate)); await page.keyboard.press('Tab'); await settle();
+    await page.fill(`input[aria-label="answer ratio ${f} lower"]`, String(1 / v.upper)); await page.keyboard.press('Tab'); await settle();
+    await page.fill(`input[aria-label="answer ratio ${f} upper"]`, String(1 / v.lower)); await page.keyboard.press('Tab'); await settle();
+    await page.click('#grade-answers'); await settle();
+    check('a ratio the wrong way up loses its points', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) < 100 && /true (rate|odds) ratio/.test(await page.textContent('#grade-result')));
   }
 
   section('answers by hand, progress');

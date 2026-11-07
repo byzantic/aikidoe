@@ -425,6 +425,17 @@ Implementation (#38):
   of the true range, none at ≥ 50 %), prediction 10 (full within 1.5σ, none beyond 4σ), weights
   renormalised to the questions asked; −20 over budget. Without answers, the study's data are
   analysed the standard way and that is graded.
+- Later topics, each with its own scenarios and a comparison strategy: `plate` (#63; tidy plate
+  layout), `dose` (#65; evenly spaced doses), `mixture` (#62; one component at a time) and `counts`
+  (#64, lesson 17): a count response (Poisson, or negative binomial when harder, with the volume
+  plated as the exposure, drawn per run from 10–200 µL) or successes out of 50 (binomial, with
+  logit-scale extra variation when harder); the truth on the link scale with ratios from low to
+  high drawn by difficulty; the reference is a replicated 2^k (16 or 32 runs) with a GLM of main
+  effects and two-factor interactions, the negative binomial or quasi-binomial when it shows
+  overdispersion, Firth's method when separated, ratios exp(2β) with profile intervals; power by the
+  Wald approximation with the actual exposures, θ, or φ = 1 + n p(1 − p) σ²; the grader judges
+  each ratio on the log scale (side of 1, interval holding the truth); the comparison is least
+  squares on the raw counts on the same design.
 - Self-study: the truth sealed in the study's `exercise` field (XOR keystream from the id, base64).
   Class mode: `doe exercise new --set N --out DIR` writes keys and student studies; `exercise run KEY
   sheet.csv` returns long-format results; `exercise grade KEY STUDY`.
@@ -451,6 +462,8 @@ working (e.g. "these two effects are aliased — can you tell them apart?"), and
 11. Measurement systems: gauge R&R before the experiment (M3).
 12. Robust design: noise factors and propagation of error (M4).
 13. Simulation and yield (M5).
+14. Plates (#63). 15. Dose–response (#65). 16. Mixtures (#62).
+17. Counts and percentages: when least squares is the wrong tool (#64).
 
 Lessons for features not yet built are listed but locked. Progress is kept in the browser
 (per viewer).

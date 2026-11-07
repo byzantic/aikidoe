@@ -581,13 +581,13 @@ export const _draw = { poisson: poissonDraw, gamma: gammaDraw };
  * as MASS / R ≥ 4.4 confint.glm, but solved exactly rather than interpolated) or 'wald'. With a
  * log or logit link the exponentiated intervals are rate or odds ratios (ratio: true).
  * Returns [{ name, estimate, lower, upper, ratio?: { estimate, lower, upper } }] for the estimable
- * coefficients.
+ * coefficients (only those named in names, when given).
  */
-export function glmConfint(fit, { level = 0.95, method = fit.firth ? 'wald' : 'profile' } = {}) {
+export function glmConfint(fit, { level = 0.95, method = fit.firth ? 'wald' : 'profile', names } = {}) {
   const z = N.ppf(1 - (1 - level) / 2);
   const fam = family(fit.distribution, fit.link, fit.theta);
   const ratio = fit.link === 'log' || fit.link === 'logit';
-  return fit.columns.map((name, j) => ({ name, j })).filter(c => !Number.isNaN(fit.coef[c.j])).map(({ name, j }) => {
+  return fit.columns.map((name, j) => ({ name, j })).filter(c => !Number.isNaN(fit.coef[c.j]) && (!names || names.includes(c.name))).map(({ name, j }) => {
     const b = fit.coef[j], s = fit.se[j];
     let lower = b - z * s, upper = b + z * s;
     if (method === 'profile') {

@@ -161,4 +161,36 @@ export const SCENARIOS = {
     factors: [{ id: 'Cu', name: 'Copper', units: 'wt %', low: 80, high: 95 }, { id: 'Zn', name: 'Zinc', units: 'wt %', low: 3, high: 15 }, { id: 'Sn', name: 'Tin', units: 'wt %', low: 1, high: 6 }],
     mixture: { total: 100 },
   },
+  // counts and proportions (issue #64): used by the counts topic only. The response is a count
+  // (with the exposure each run's count is made over) or successes out of a fixed number of
+  // trials; base is the mean count per unit exposure, or the proportion, at the centre
+  transformation: {
+    counts: true,
+    title: 'Bacterial transformation',
+    text: 'Competent E. coli are transformed with a plasmid and plated on selective agar; the transformants are counted the next morning. Too few colonies come up, and the lab wants to know which steps of the protocol set the transformation efficiency. Each plate gets 10, 50, 100 or 200 µL of the recovered cells — whatever volume the person plating chose — and the volume is recorded with the plate’s count.',
+    response: { id: 'colonies', name: 'Colonies', units: 'per plate', distribution: 'poisson', base: 1, exposureUnits: 'µL plated', exposure: [10, 50, 100, 200] },
+    factors: [
+      { id: 'shock', name: 'Heat-shock time', units: 's', low: 30, high: 90 },
+      { id: 'shockT', name: 'Heat-shock temperature', units: '°C', low: 37, high: 45 },
+      { id: 'recovery', name: 'Recovery time', units: 'min', low: 30, high: 120 },
+      { id: 'DNA', name: 'Plasmid DNA', units: 'ng', low: 1, high: 100, transform: 'log' },
+      { id: 'OD', name: 'Cell density', units: 'OD600', low: 0.3, high: 0.8 },
+      { id: 'CaCl2', name: 'CaCl₂', units: 'mM', low: 50, high: 100 },
+      { id: 'medium', name: 'Recovery medium', levels: ['LB', 'SOC'] },
+    ],
+  },
+  germination: {
+    counts: true,
+    title: 'Seed germination',
+    text: 'Seeds of a wild-flower species germinate poorly, which holds up a restoration project. The seed bank sows 50 seeds in each Petri dish, counts the germinated seeds after 14 days, and wants to know which pre-treatments and conditions raise the germination rate.',
+    response: { id: 'germinated', name: 'Germinated seeds', units: 'of 50', distribution: 'binomial', trials: 50, base: 0.45 },
+    factors: [
+      { id: 'GA3', name: 'Gibberellic acid', units: 'mg/L', low: 10, high: 500, transform: 'log' },
+      { id: 'temp', name: 'Temperature', units: '°C', low: 15, high: 25 },
+      { id: 'light', name: 'Light', units: 'h/day', low: 0, high: 16 },
+      { id: 'priming', name: 'Priming time', units: 'h', low: 0, high: 24 },
+      { id: 'water', name: 'Water per dish', units: 'mL', low: 3, high: 6 },
+      { id: 'soak', name: 'Soaking medium', levels: ['water', 'KNO3'] },
+    ],
+  },
 };

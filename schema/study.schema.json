@@ -135,7 +135,7 @@
         },
         "answers": {
           "type": "object",
-          "description": "{ active: [factor ids], effects: { id: { estimate, lower, upper } }, best: settings, prediction: { value } }"
+          "description": "{ active: [factor ids], effects: { id: { estimate, lower, upper } }, ratios: { id: { estimate, lower, upper } } (rate or odds ratios, counts topic), best: settings, prediction: { value }, ec50 and potency: { estimate, lower, upper } (dose topic) }"
         }
       }
     }
