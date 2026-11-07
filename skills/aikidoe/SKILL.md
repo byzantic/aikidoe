@@ -34,7 +34,7 @@ exposure offsets and trials; rate and odds ratios with profile intervals, analys
 overdispersion and separation checks, Firth: `doe init --response count@poisson`, `doe fit
 [--distribution …] [--firth]`; in a split-plot (or with `--random block`) a GLMM with a random
 whole-plot or block intercept; power for a rate or odds ratio: `doe power --response R --baseline b
---ratio r [--simulate N]`, which treats runs as independent);
+--ratio r [--simulate N]`, in a split-plot with `--sigma-wp σ` for the whole-plot shift);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.
 

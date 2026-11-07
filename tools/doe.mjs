@@ -56,6 +56,7 @@
 //   power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
 //        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
 //        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
+//        [--sigma-wp σ]  in a split-plot: σ of the whole-plot shift on the link scale (the analysis's random effect)
 //   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
@@ -144,6 +145,7 @@ import { studyPower, detectableEffect, detectableRatio, simulatePower } from '..
 import { reduceModel, reduceMixed } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects, predictMixed, runMeanWeights } from '../js/model/mixed.js';
 import { fitCountMixedModel, randomGroupOf, glmmTests, glmmConfint, predictCountMixed } from '../js/model/glmm.js';
+import { studyGlmmPower, studyGlmmMatrix, simulateGlmmPower, detectableGlmmRatio } from '../js/model/power-glmm.js';
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
 import { fittedModels, optimiseDesirability, dValue } from '../js/model/desirability.js';
@@ -887,7 +889,12 @@ function countsPower(study, opt) {
 
 function printCountsPower(study, model, c, { alpha, target, opt }) {
   const { response, ...spec } = c;
-  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this power treats every run as independent (it has no random whole-plot effect, which the analysis fits), so it overstates the power for hard-to-change factors');
+  const split = study.design.runs.some(r => r.wholePlot !== undefined);
+  if (opt['sigma-wp'] !== undefined) {
+    if (!split) fail('--sigma-wp is for a split-plot design (whole plots)');
+    return printSplitPlotCountsPower(study, model, { ...spec, sigma: Number(opt['sigma-wp']) }, { alpha, target, opt });
+  }
+  if (split) out('warning: split-plot design — this power treats every run as independent, so it overstates the power for hard-to-change factors: give --sigma-wp, the whole-plot σ on the link scale, for the analysis\'s random whole-plot effect');
   const p = studyPower(study, { model, alpha, ...spec });
   const per = (v) => (Array.isArray(v) ? `${v.join(', ')} (cycled over the runs)` : v);
   const odds = String(c.distribution).includes('binomial') || c.distribution === 'bernoulli', rname = odds ? 'odds ratio' : 'rate ratio';
@@ -900,6 +907,23 @@ function printCountsPower(study, model, c, { alpha, target, opt }) {
   out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ratio', label: rname }, { key: 'power', label: 'power' }, ...(sim ? [{ key: 'sim', label: `simulated (${opt.simulate})`, align: 'left' }] : []), { key: 'det', label: `${rname} for ${target * 100}%` }],
     rows.map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: Number.isFinite(det[t.term]) ? num(det[t.term], 4) : '> 1000', ...(sim ? { sim: `${num(sim[t.term].power, 3)} ± ${num(sim[t.term].se, 2)}` } : {}) }))));
   out(`${rname}: the ${odds ? 'odds of success' : 'mean count'} at a factor's high setting over its low setting; each term assessed alone, with the others at the baseline (Wald test${p.dispersion ? ', F with the dispersion' : ''})${sim ? '; simulated: the likelihood-ratio test on simulated experiments' : ''}`);
+}
+
+/** Power for counts or proportions in a split-plot, with the whole-plot σ: Wald approximation, simulation on request. */
+function printSplitPlotCountsPower(study, model, spec, { alpha, target, opt }) {
+  const p = studyGlmmPower(study, { model, alpha, ...spec });
+  const odds = String(spec.distribution).includes('binomial') || spec.distribution === 'bernoulli', rname = odds ? 'odds ratio' : 'rate ratio';
+  const per = (v) => (Array.isArray(v) ? `${v.join(', ')} (cycled over the runs)` : v);
+  out(`power for ${model}, ${spec.distribution} (${p.link} link) with a random whole-plot intercept: ${p.n} runs in ${p.groups} whole plots; whole-plot σ = ${spec.sigma} on the ${p.link} scale; α = ${alpha}; baseline ${odds ? 'proportion' : 'mean count'} ${spec.baseline}${odds ? `, ${per(spec.trials)} trials per run` : spec.exposure !== 1 ? ` per unit exposure, exposure ${per(spec.exposure)}` : ''}`);
+  const det = Object.fromEntries(detectableGlmmRatio(p, { power: target }).map(d => [d.term, d.ratio]));
+  let sim = null;
+  if (opt.simulate) { const { mm, groups } = studyGlmmMatrix(study, model); sim = Object.fromEntries(simulateGlmmPower(mm, groups, { ...spec, alpha, nsim: int(opt.simulate, 'simulate'), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed }).map(s => [s.term, s])); }
+  const rows = p.terms.filter(t => !t.block);
+  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, wholePlots: p.groups, dfGroups: p.dfGroups, sigmaWholePlot: spec.sigma, alpha, target, distribution: spec.distribution, link: p.link, baseline: spec.baseline, ratio: spec.ratio,
+    terms: rows.map(t => ({ term: t.term, df: t.df, ...(t.ddf !== undefined ? { ddf: t.ddf } : {}), test: t.test, ratio: t.ratio, power: t.power, detectableRatio: det[t.term], ...(sim ? { simulated: sim[t.term].power, simulatedSE: sim[t.term].se } : {}) })) });
+  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'tested', label: 'tested against', align: 'left' }, { key: 'ratio', label: rname }, { key: 'power', label: 'power' }, ...(sim ? [{ key: 'sim', label: `simulated (${opt.simulate})`, align: 'left' }] : []), { key: 'det', label: `${rname} for ${target * 100}%` }],
+    rows.map(t => ({ ...t, tested: t.wholePlot ? `whole plots (F, ${t.ddf} df)` : 'runs (χ²)', power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: Number.isFinite(det[t.term]) ? num(det[t.term], 4) : '> 1000', ...(sim ? { sim: `${num(sim[t.term].power, 3)} ± ${num(sim[t.term].se, 2)}` } : {}) }))));
+  out(`${rname}: the ${odds ? 'odds of success' : 'mean count'} at a factor's high setting over its low setting, each term alone, the others at the baseline. A term that changes only between whole plots is judged against the whole-plot variation, an F on ${p.dfGroups} df as in the analysis; the others by χ² (Wald approximation at the expected means${sim ? '; simulated: the GLMM fitted to simulated experiments, likelihood-ratio tests' : ''})`);
 }
 
 /** The model matrix of the study's design for a model (for simulation). */

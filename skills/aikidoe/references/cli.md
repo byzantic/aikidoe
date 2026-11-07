@@ -68,6 +68,7 @@ Commands
   power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
+       [--sigma-wp σ]  in a split-plot: σ of the whole-plot shift on the link scale (the analysis's random effect)
   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
                 | --optimal --runs n [--model …] [--criterion D|I|A]
