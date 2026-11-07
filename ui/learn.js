@@ -94,7 +94,7 @@ function gradePanel(ctx, ex, lesson, ui, set) {
   const active = new Set(a.active ?? []);
   const parts = [];
   parts.push(h('div', { class: 'row' },
-    h('button', { class: 'btn', id: 'fill-answers', onclick: () => { try { const der = deriveAnswers(ex, study); update(dd => { dd.exercise.answers = { active: der.active, effects: der.effects, ...(der.best ? { best: der.best } : {}), ...(der.prediction ? { prediction: der.prediction } : {}), ...(der.ec50 ? { ec50: der.ec50, potency: der.potency } : {}), ...(der.ratios ? { ratios: der.ratios } : {}) }; }); } catch (e) { ctx.toast(e.message); } } }, 'Fill in from the standard analysis'),
+    h('button', { class: 'btn', id: 'fill-answers', onclick: () => { try { const der = deriveAnswers(ex, study); update(dd => { dd.exercise.answers = { active: der.active, effects: der.effects, ...(der.best ? { best: der.best } : {}), ...(der.prediction ? { prediction: der.prediction } : {}), ...(der.ec50 ? { ec50: der.ec50, potency: der.potency } : {}), ...(der.ratios ? { ratios: der.ratios } : {}), ...(der.percent ? { percent: der.percent } : {}) }; }); } catch (e) { ctx.toast(e.message); } } }, 'Fill in from the standard analysis'),
     h('button', { class: 'btn primary', id: 'grade-analysis', onclick: () => grade(ctx, ex, lesson, set, true) }, 'Grade the standard analysis of my data'),
     h('button', { class: 'btn primary', id: 'grade-answers', onclick: () => grade(ctx, ex, lesson, set, false) }, 'Grade my answers')));
   if (qs.has('active')) parts.push(h('div', { class: 'row small' }, 'Active factors: ', fs.map(f => h('label', { class: 'inline' }, h('input', { type: 'checkbox', checked: active.has(f.id), 'aria-label': `answer active ${f.id}`,
@@ -109,6 +109,11 @@ function gradePanel(ctx, ex, lesson, ui, set) {
       fs.filter(f => active.has(f.id)).map(f => { const e = a.ratios?.[f.id] ?? {}; const inp = (k) => h('input', { class: 'num', type: 'number', step: 'any', min: 0, value: e[k] ?? '', 'aria-label': `answer ratio ${f.id} ${k}`,
         onchange: (ev) => setA(an => { an.ratios = { ...(an.ratios ?? {}) }; an.ratios[f.id] = { ...(an.ratios[f.id] ?? {}), [k]: Number(ev.target.value) }; }) });
         return { f: f.id, e: inp('estimate'), l: inp('lower'), u: inp('upper') }; })));
+  }
+  if (qs.has('percent')) {
+    const e = a.percent ?? {}, inp = (k) => h('input', { class: 'num', type: 'number', step: 'any', value: e[k] ?? '', 'aria-label': `answer percent ${k}`,
+      onchange: (ev) => setA(an => { an.percent = { ...(an.percent ?? {}), [k]: Number(ev.target.value) }; }) });
+    parts.push(h('div', { class: 'row small', id: 'answer-percent' }, 'mean % at the question’s settings:', inp('estimate'), '95% interval', inp('lower'), '…', inp('upper')));
   }
   if (qs.has('best')) parts.push(h('div', { class: 'row small' }, 'Best settings: ', fs.map(f => h('label', { class: 'inline' }, f.id,
     f.type === 'categorical' ? select(f.levels.map(String).map(v => ({ value: v, label: v })), String(a.best?.[f.id] ?? f.levels[0]), (v) => setA(an => { an.best = { ...(an.best ?? {}), [f.id]: v }; }), { 'aria-label': `answer best ${f.id}` })
@@ -142,6 +147,6 @@ function feedback(r) {
     r.ofat ? h('p', { class: 'small', id: 'ofat-score' }, `${r.ofat.strategy[0].toUpperCase()}${r.ofat.strategy.slice(1)}, on the same process and budget, would have scored ${r.ofat.score}.`) : null,
     h('details', {}, h('summary', {}, 'The truth and the model answer'),
       h('p', { class: 'small' }, r.truth.ec50 !== undefined ? `True EC50 of the test ${num(r.truth.ec50, 4)}; true relative potency ${num(r.truth.potency, 4)}.`
-        : r.truth.ratios ? `Active: ${r.truth.active.join(', ')}. True ${r.truth.ratio} ratios (high ÷ low): ${Object.entries(r.truth.ratios).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.` : `Active: ${r.truth.active.join(', ')}. True effects: ${Object.entries(r.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.`),
+        : r.truth.ratios ? `Active: ${r.truth.active.join(', ')}. True ${r.truth.ratio} ratios (high ÷ low): ${Object.entries(r.truth.ratios).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.${r.truth.percent !== undefined ? ` True mean germination at the question’s settings: ${num(r.truth.percent, 3)} %.` : ''}` : `Active: ${r.truth.active.join(', ')}. True effects: ${Object.entries(r.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.`),
       r.modelAnswer ? h('ul', { class: 'small' }, r.modelAnswer.steps.map(s => h('li', {}, s))) : null));
 }

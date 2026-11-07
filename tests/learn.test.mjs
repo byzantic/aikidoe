@@ -94,11 +94,20 @@ section('the counts topic: ratios graded on the log scale, least squares as the 
   for (const scenario of ['transformation', 'germination']) {
     const ex = generateExercise({ topic: 'counts', difficulty: 'medium', seed: 3, scenario }), t = truthOf(ex);
     const prop = scenario === 'germination', r0 = ex.study.responses[0];
-    check(`${scenario}: the study declares the ${prop ? 'binomial (50 seeds per dish)' : 'Poisson'} response; the questions ask for ${prop ? 'odds' : 'rate'} ratios`,
-      r0.distribution === (prop ? 'binomial' : 'poisson') && (!prop || r0.trials === 50) && ex.questions.some(q => q.kind === 'ratios' && q.ratio === (prop ? 'odds' : 'rate')));
+    check(`${scenario}: the study declares the ${prop ? 'binomial (the seeds sown recorded per dish)' : 'Poisson'} response; the questions ask for ${prop ? 'odds' : 'rate'} ratios${prop ? ' and a percentage' : ''}`,
+      r0.distribution === (prop ? 'binomial' : 'poisson') && r0.trials === undefined && ex.questions.some(q => q.kind === 'ratios' && q.ratio === (prop ? 'odds' : 'rate')) && ex.questions.some(q => q.kind === 'percent') === prop);
     const ref = referenceStrategy(ex), g = gradeStudy(ex, ref.study);
     check(`${scenario}: the model answer earns 100 (${ref.steps.at(-1)})`, g.score === 100 && g.truth.ratios && g.parts.some(p => p.id === 'ratios'));
     if (!prop) check('colonies: every result has the volume plated', ref.study.observations.every(o => [10, 50, 100, 200].includes(o.exposure)));
+    if (prop) {
+      check('germination: every dish has its seeds sown, several sizes, successes within them', ref.study.observations.every(o => [10, 20, 30, 50].includes(o.trials) && o.value <= o.trials) && new Set(ref.study.observations.map(o => o.trials)).size > 1);
+      const pq = ex.questions.find(q => q.kind === 'percent'), m = trueMean({ ...t.process, factors: ex.study.factors }, r0.id, pq.settings);
+      const corners = ex.study.factors.reduce((acc, f) => acc.flatMap(c => (f.type === 'categorical' ? f.levels : [f.low, f.high]).map(v => ({ ...c, [f.id]: v }))), [{}]);
+      check('the percentage is asked at the corner nearest 0 or 100 %', corners.every(c => { const q = trueMean({ ...t.process, factors: ex.study.factors }, r0.id, c); return Math.min(q, 1 - q) >= Math.min(m, 1 - m) - 1e-12; }));
+      const part = (ans) => gradeAnswers(ex, t, ans, { runs: ex.budget }).parts.find(p => p.id === 'percent');
+      const tp = 100 * m, out = part({ ...ref.answers, percent: { estimate: tp, lower: tp - 200, upper: tp + 200 } }), miss = part({ ...ref.answers, percent: { estimate: 50, lower: 49, upper: 51 } });
+      check('percentage: an interval beyond 0–100 % loses half, one that misses the truth the other half', out.score === out.max / 2 && miss.score === (Math.abs(tp - 50) > 1 ? miss.max / 2 : miss.max) && part(ref.answers).score === part(ref.answers).max);
+    }
     const inv = { ...ref.answers, ratios: Object.fromEntries(Object.entries(ref.answers.ratios).map(([k, e]) => [k, { estimate: 1 / e.estimate, lower: 1 / e.upper, upper: 1 / e.lower }])) };
     check(`${scenario}: ratios on the wrong side of 1 lose the ratio points`, gradeAnswers(ex, t, inv, { runs: ex.budget }).parts.find(p => p.id === 'ratios').score === 0);
     const narrow = { ...ref.answers, ratios: Object.fromEntries(Object.entries(g.truth.ratios).map(([k, v]) => [k, { estimate: v * 1.3, lower: v * 1.2, upper: v * 1.4 }])) };
@@ -113,6 +122,16 @@ section('the counts topic: ratios graded on the log scale, least squares as the 
     if (seed === 1) check('the counterpart is least squares on the raw counts, on the reference design', /least squares/.test(o.strategy) && o.answers.distribution === 'normal');
   }
   check(`colonies: least squares on the raw counts averages ${(ls / n).toFixed(1)} (the GLM 100)`, ls / n < 75);
+  // germination: least squares on the percentages finds the factors, but its interval at a corner near
+  // 0 or 100 % runs past the possible range
+  let lp = 0, past = 0; const N = 10;
+  for (let seed = 1; seed <= N; seed++) {
+    const ex = generateExercise({ topic: 'counts', difficulty: 'easy', seed, scenario: 'germination' }), o = comparisonStrategy(ex);
+    lp += gradeStudy(ex, createStudy({ ...o.study, exercise: { id: ex.id, answers: o.answers } })).score;
+    if (o.answers.percent.lower < 0 || o.answers.percent.upper > 100) past++;
+    if (seed === 1) check('the germination counterpart is least squares on the percentages', /percentages/.test(o.strategy));
+  }
+  check(`germination: least squares on the percentages averages ${(lp / N).toFixed(1)} (the GLM 100); its interval leaves 0–100 % in ${past} of ${N}`, lp / N < 95 && past >= 1);
   const ex = generateExercise({ topic: 'counts', difficulty: 'hard', seed: 4, scenario: 'transformation' }), ref = referenceStrategy(ex);
   check('hard colonies: overdispersed counts, analysed as negative binomial', truthOf(ex).process.responses[0].distribution === 'negbin' && ref.answers.distribution === 'negbin' && /negative binomial/.test(ref.answers.analysis));
   check('easy colonies: Poisson counts, Poisson analysis', ['poisson'].includes(referenceStrategy(generateExercise({ topic: 'counts', difficulty: 'easy', seed: 4, scenario: 'transformation' })).answers.distribution));
@@ -206,6 +225,18 @@ section('class mode round trip from the CLI');
     const ra = Object.entries(JSON.parse(readFileSync(join(dir, 'cnt', 'counts-medium-7.key.json'), 'utf8')).truth.modelAnswer.answers.ratios)[0];
     r = doe('exercise', 'answer', 'cnt/counts-medium-7.aikidoe.json', '--active', ra[0], '--ratio', `${ra[0]}=${1 / ra[1].estimate}:${1 / ra[1].upper}:${1 / ra[1].lower}`);
     check('counts: --ratio records a ratio answer', r.status === 0 && JSON.parse(readFileSync(join(dir, 'cnt', 'counts-medium-7.aikidoe.json'), 'utf8')).exercise.answers.ratios[ra[0]].estimate > 0, r.stdout + r.stderr);
+    // germination: the seeds sown come back with each dish
+    doe('exercise', 'new', '--set', '1', '--topic', 'counts', '--difficulty', 'easy', '--seed', '5', '--scenario', 'germination', '--out', 'grm');
+    doe('design', 'grm/counts-easy-5.aikidoe.json', '--full', '--replicates', '2');
+    doe('sheet', 'grm/counts-easy-5.aikidoe.json', '--csv', 'gsheet.csv');
+    r = doe('exercise', 'run', 'grm/counts-easy-5.key.json', 'gsheet.csv', '--out', 'gres.csv');
+    const gres = readFileSync(join(dir, 'gres.csv'), 'utf8').trim().split('\n');
+    check('germination, class mode: the results have the seeds sown', r.status === 0 && gres[0] === 'run,response,value,trials' && gres.slice(1).every(l => [10, 20, 30, 50].includes(Number(l.split(',')[3]))), r.stdout + r.stderr);
+    doe('import', 'grm/counts-easy-5.aikidoe.json', 'gres.csv');
+    r = doe('exercise', 'grade', 'grm/counts-easy-5.key.json', 'grm/counts-easy-5.aikidoe.json');
+    check('germination: graded on the standard analysis — 100, with the true percentage', r.status === 0 && /score: 100 \/ 100/.test(r.stdout) && /mean germination at the question's settings/.test(r.stdout), r.stdout + r.stderr);
+    r = doe('exercise', 'answer', 'grm/counts-easy-5.aikidoe.json', '--percent', '12:5:20');
+    check('--percent records the percentage answer', r.status === 0 && JSON.parse(readFileSync(join(dir, 'grm', 'counts-easy-5.aikidoe.json'), 'utf8')).exercise.answers.percent.upper === 20, r.stdout + r.stderr);
     r = doe('exercise', 'answer', 'cnt/counts-medium-7.aikidoe.json', '--ratio', `${ra[0]}=-1:0:2`);
     check('counts: a ratio must be positive', r.status === 1 && /ratios, all > 0/.test(r.stderr));
   } finally { rmSync(dir, { recursive: true, force: true }); }

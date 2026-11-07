@@ -115,7 +115,7 @@ Commands
   exercise run STUDY                     self-study: results for the runs of the design
   exercise run KEY SHEET.csv [--out RESULTS.csv]   class mode: results for a student's run sheet
   exercise answer STUDY [--active A,B] [--effect "A=est:lo:hi" …] [--best "A=…,B=…"] [--prediction v]
-       [--ec50 est:lo:hi] [--potency est:lo:hi]   (dose topic)   [--ratio "A=est:lo:hi" …]   (counts topic)
+       [--ec50 est:lo:hi] [--potency est:lo:hi]   (dose topic)   [--ratio "A=est:lo:hi" …] [--percent est:lo:hi]   (counts topic)
   exercise grade STUDY | exercise grade KEY STUDY   score, feedback, the model answer and the truth
        (without answers, the study's data are analysed the standard way and that is graded)
   exercise topics                        the topics, difficulties and scenarios
