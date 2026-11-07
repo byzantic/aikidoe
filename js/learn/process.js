@@ -17,6 +17,14 @@
 // A response may instead follow a dose–response curve (issue #65): curve: { model: 'LL.4', dose,
 // by?, params: { b, c, d, e }, levels: { L: { e, … } } } — the curve's value at the run's dose, with
 // the parameters of the run's level of the factor by; cv adds multiplicative noise (exp(cv·z)).
+// A response may instead be a count or a proportion (issue #64): distribution 'poisson', 'negbin'
+// (with theta: the variance is μ + μ²/θ) or 'binomial' (successes out of trials, the study's
+// response trials). Its truth is then the linear predictor on the link scale — the log of the mean
+// count per unit exposure, or the logit of the proportion — sigma (default 0) adds normal
+// run-to-run variation on that scale (extra-binomial variation), the nuisance shifts act on that
+// scale too, and exposure: [values] gives each run an exposure (the volume plated, say) drawn from
+// the list and recorded with its observation. Counts and successes are drawn by inverting their
+// distribution function at a hashed uniform, so they are as reproducible as the normal draws.
 // Truth terms are labels over coded factor values (−1 … +1; log factors on the log scale):
 // 'A', 'A:B', 'I(A^2)', 'I(A*B)', a two-level categorical factor as −1 / +1 (first level −1),
 // 'g.L' for an indicator of level L of a categorical factor, and the position terms 'radius2'
@@ -31,7 +39,7 @@
 import { code } from '../study.js';
 import { runPositions, parseWell, ring } from '../plate.js';
 import { sitePositions } from '../model/sites.js';
-import { normal } from '../dist.js';
+import { normal, gammaQ, betaInc } from '../dist.js';
 import { MODELS as DOSE } from '../model/dose.js';
 
 // ---------------------------------------------------------------- hashed randomness
@@ -49,6 +57,27 @@ export function hashUniform(...parts) {
 }
 /** A standard normal determined by its key parts. */
 export const hashNormal = (...parts) => normal.ppf(hashUniform(...parts));
+
+/** Smallest k ≥ 0 with cdf(k) ≥ u (cdf non-decreasing, reaching 1; max: the largest possible k). */
+function discreteQuantile(cdf, u, guess, max = Infinity) {
+  let lo = -1, hi = Math.min(max, Math.max(0, Math.ceil(guess)));
+  while (hi < max && cdf(hi) < u) { lo = hi; hi = Math.min(max, 2 * hi + 1); }
+  while (hi - lo > 1) { const m = Math.floor((lo + hi) / 2); if (cdf(m) >= u) hi = m; else lo = m; }
+  return hi;
+}
+
+/**
+ * A count or number of successes at the uniform u: Poisson(mu), negative binomial (mu, theta) or
+ * binomial (trials, p = mu).
+ */
+export function countQuantile(distribution, u, mu, { theta, trials } = {}) {
+  if (distribution === 'poisson') return discreteQuantile((k) => gammaQ(k + 1, mu), u, mu);
+  if (distribution === 'negbin') { const p = theta / (theta + mu); return discreteQuantile((k) => betaInc(p, theta, k + 1, mu / (theta + mu)).I, u, mu); }
+  if (distribution === 'binomial') return discreteQuantile((k) => (k >= trials ? 1 : betaInc(1 - mu, trials - k, k + 1, mu).I), u, trials * mu, trials);
+  throw new Error(`a virtual process cannot draw ${distribution} results (poisson, negbin or binomial)`);
+}
+const PROPORTION = new Set(['binomial']);
+const expit = (e) => 1 / (1 + Math.exp(-e)), logit = (p) => Math.log(p / (1 - p));
 
 const settingsKey = (factors, s) => factors.map(f => (typeof s[f.id] === 'number' ? +s[f.id].toPrecision(12) : s[f.id])).join('|');
 
@@ -81,6 +110,7 @@ export function trueMean(process, responseId, settings, ctx = {}) {
   const c = { coded, raw: settings, factorsById: fById, ...ctx };
   let y = r.truth.intercept ?? 0;
   for (const [label, coef] of Object.entries(r.truth.terms ?? {})) y += coef * label.split(':').reduce((a, comp) => a * compValue(comp, c), 1);
+  if (r.distribution) return PROPORTION.has(r.distribution) ? expit(y) : Math.exp(y);
   return r.transform === 'log' ? Math.exp(y) : y;
 }
 
@@ -112,13 +142,24 @@ export function observeRuns(process, study, { runs, all = false, offset = null }
     for (const resp of process.responses) {
       const sr = study.responses.find(x => x.id === resp.id);
       if (!sr || sr.derived) continue;
-      const sigma = resp.sigma ?? 1;
+      const sigma = resp.sigma ?? (resp.distribution ? 0 : 1);
       const shared = (n.wholePlot && r.wholePlot !== undefined ? n.wholePlot * hashNormal(seed, resp.id, 'wp', r.wholePlot) : 0)
         + (n.block && r.block !== undefined ? n.block * hashNormal(seed, resp.id, 'block', r.block) : 0)
         + (n.drift ? n.drift * sigma * (order - 1) : 0)
         + sigma * hashNormal(seed, resp.id, 'run', key, rep)
         + (offset ? offset(r.run, resp.id) : 0)
         + (n.plate && wells?.has(r.run) ? plateEffect(process, study, resp.id, wells.get(r.run)) : 0);
+      if (resp.distribution) {
+        // a count or proportion: the shifts on the link scale, then a draw
+        const m = trueMean(process, resp.id, r.settings), prop = PROPORTION.has(resp.distribution);
+        const eta = (prop ? logit(m) : Math.log(m)) + shared;
+        const exposure = resp.exposure?.length ? resp.exposure[Math.floor(hashUniform(seed, resp.id, 'exposure', key, rep) * resp.exposure.length)] : undefined;
+        const trials = sr.trials ?? resp.trials;
+        const u = hashUniform(seed, resp.id, 'count', key, rep);
+        const value = prop ? countQuantile('binomial', u, expit(eta), { trials }) : countQuantile(resp.distribution, u, Math.exp(eta) * (exposure ?? 1), { theta: resp.theta });
+        out.push({ run: r.run, response: resp.id, value, ...(exposure !== undefined ? { exposure } : {}) });
+        continue;
+      }
       const outlier = n.outliers && hashUniform(seed, resp.id, 'outlier', key, rep) < n.outliers.p ? (hashUniform(seed, resp.id, 'osign', key, rep) < 0.5 ? -1 : 1) * n.outliers.size * sigma : 0;
       const bias = n.gauge?.bias ?? 0;
       const levels = sr.levels ?? ['run'];

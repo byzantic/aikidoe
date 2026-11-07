@@ -99,7 +99,7 @@
 //   exercise run STUDY                     self-study: results for the runs of the design
 //   exercise run KEY SHEET.csv [--out RESULTS.csv]   class mode: results for a student's run sheet
 //   exercise answer STUDY [--active A,B] [--effect "A=est:lo:hi" …] [--best "A=…,B=…"] [--prediction v]
-//        [--ec50 est:lo:hi] [--potency est:lo:hi]   (dose topic)
+//        [--ec50 est:lo:hi] [--potency est:lo:hi]   (dose topic)   [--ratio "A=est:lo:hi" …]   (counts topic)
 //   exercise grade STUDY | exercise grade KEY STUDY   score, feedback, the model answer and the truth
 //        (without answers, the study's data are analysed the standard way and that is graded)
 //   exercise topics                        the topics, difficulties and scenarios
@@ -1355,7 +1355,9 @@ async function cmdExercise({ pos, opt }) {
       const csv = plates
         ? ['run,plate,well,response,value', ...st.observations.map(o => { const w = st.plates.wells.find(x => x.run === o.run); return `${o.run},${w.plate},${w.well},${o.response},${o.value}`; }),
           ...st.plates.readings.map(x => `,${x.plate},${x.well},${x.response},${x.value}`)].join('\n') + '\n'
-        : ['run,response,value', ...st.observations.map(o => `${o.run},${o.response},${o.value}`)].join('\n') + '\n';
+        : st.observations.some(o => o.exposure !== undefined)
+          ? ['run,response,value,exposure', ...st.observations.map(o => `${o.run},${o.response},${o.value},${o.exposure ?? ''}`)].join('\n') + '\n'
+          : ['run,response,value', ...st.observations.map(o => `${o.run},${o.response},${o.value}`)].join('\n') + '\n';
       const over = runs.length > key.budget;
       put({ runs: runs.length, budget: key.budget, overBudget: over, ...(opt.out ? { file: String(opt.out) } : { csv }) });
       if (opt.out) { writeFileSync(String(opt.out), csv); out(`${opt.out}: results for ${runs.length} runs (budget ${key.budget})${over ? ' — over budget' : ''}`); }
@@ -1383,6 +1385,7 @@ async function cmdExercise({ pos, opt }) {
     for (const e of list(opt.effect)) { const [id, v] = String(e).split('='); const [est, lo, hi] = (v ?? '').split(':').map(Number); if (![est, lo, hi].every(Number.isFinite)) fail(`--effect "${e}": give id=estimate:lower:upper`); (a.effects ??= {})[id.trim()] = { estimate: est, lower: lo, upper: hi }; }
     if (opt.best) a.best = parseSettingsLoose(study, String(opt.best));
     if (opt.prediction !== undefined) a.prediction = { value: Number(opt.prediction) };
+    for (const e of list(opt.ratio)) { const [id, v] = String(e).split('='); const [est, lo, hi] = (v ?? '').split(':').map(Number); if (![est, lo, hi].every(x => Number.isFinite(x) && x > 0)) fail(`--ratio "${e}": give id=estimate:lower:upper (ratios, all > 0)`); (a.ratios ??= {})[id.trim()] = { estimate: est, lower: lo, upper: hi }; }
     for (const k of ['ec50', 'potency']) if (opt[k] !== undefined) { const [est, lo, hi] = String(opt[k]).split(':').map(Number); if (![est, lo, hi].every(Number.isFinite)) fail(`--${k}: give estimate:lower:upper`); a[k] = { estimate: est, lower: lo, upper: hi }; }
     save(file, createStudy({ ...study, exercise: { ...study.exercise, answers: a } }));
     put({ file, answers: a });
@@ -1401,7 +1404,9 @@ async function cmdExercise({ pos, opt }) {
     out(table([{ key: 'id', label: 'question', align: 'left' }, { key: 'pts', label: 'points' }, { key: 'note', label: '', align: 'left' }],
       g.parts.map(p => ({ ...p, pts: p.max ? `${num(p.score, 3)} / ${num(p.max, 3)}` : num(p.score, 3) }))));
     out(`score: ${g.score} / 100`);
-    out(g.truth.ec50 !== undefined ? `\ntruth: EC50 ${num(g.truth.ec50, 4)}, relative potency ${num(g.truth.potency, 4)}` : `\ntruth: active ${g.truth.active.join(', ')}; effects ${Object.entries(g.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`);
+    out(g.truth.ec50 !== undefined ? `\ntruth: EC50 ${num(g.truth.ec50, 4)}, relative potency ${num(g.truth.potency, 4)}`
+      : g.truth.ratios ? `\ntruth: active ${g.truth.active.join(', ')}; ${g.truth.ratio} ratios ${Object.entries(g.truth.ratios).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`
+      : `\ntruth: active ${g.truth.active.join(', ')}; effects ${Object.entries(g.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`);
     if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(g.modelAnswer.answers.ec50 ? `  → EC50 ${num(g.modelAnswer.answers.ec50.estimate, 4)}, potency ${num(g.modelAnswer.answers.potency.estimate, 4)}; power of the reference design for the potency ${num(g.modelAnswer.power, 3)}` : `  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
     return;
   }

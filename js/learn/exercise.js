@@ -13,15 +13,25 @@ import { mixtureDesign, optimiseMixture, randomBlend, coxBlend, coxRange, refere
 import { fitDose, effectiveDose, relativePotency, dilutionSeries, potencyPower, MODELS as DOSE } from '../model/dose.js';
 import { foldover } from '../design/augment.js';
 import { fitModel, predict } from '../model/fit.js';
+import { glmConfint } from '../model/glm.js';
 import { fitMixedModel } from '../model/mixed.js';
 import { studentT } from '../dist.js';
 import { solve as solveLin } from '../linalg.js';
-import { studyPower } from '../model/power.js';
+import { studyPower, studyGlmPower } from '../model/power.js';
 import { SCENARIOS } from './scenarios.js';
 import { runVirtual, trueMean, hashNormal as hn } from './process.js';
 
 export const EXERCISE_FORMAT = 'aikidoe-exercise/1';
 export const DIFFICULTIES = { easy: 4, medium: 3, hard: 2.4 };   // smallest active effect, in σ (low → high)
+// counts topic: the range the active factors' ratios (low → high) are drawn from, and the
+// variation beyond Poisson or binomial (θ of the negative binomial; σ on the logit scale)
+// (proportions: odds ratios, larger, so that some conditions come close to 0 or 100 %)
+export const COUNT_DIFFICULTIES = {
+  easy: { ratio: [1.8, 2.6], odds: [3, 6], theta: null, sigma: 0 },
+  medium: { ratio: [1.5, 2.2], odds: [2.5, 5], theta: [20, 50], sigma: 0.2 },
+  hard: { ratio: [1.4, 1.9], odds: [2, 4], theta: [12, 30], sigma: 0.3 },
+};
+const isProportion = (d) => d === 'binomial' || d === 'quasibinomial' || d === 'bernoulli';
 
 /**
  * Topics: factors, budget, which factors are active, nuisance, questions, and the reference
@@ -48,6 +58,11 @@ export const TOPICS = {
   // prediction at a check blend
   mixture: { title: 'Mixtures: the best blend', lesson: 16, mixture: true, k: () => 3, budget: 14, questions: ['best', 'prediction'] },
   dose: { title: 'Dose–response: EC50 and relative potency', lesson: 15, dose: true, k: () => 2, budget: 48, questions: ['ec50', 'potency'] },
+  // counts and proportions (issue #64): colonies per plate (Poisson or negative binomial, with the
+  // volume plated as the exposure) or seeds germinated out of 50 (binomial, extra-binomial
+  // variation when harder); the active factors and their rate or odds ratios
+  counts: { title: 'Counts and percentages', lesson: 17, counts: true, k: (d) => (d === 'easy' ? 3 : 4), budget: (k) => (k === 3 ? 16 : 32), active: (g) => 2 + g.int(2), interaction: 0.5,
+    questions: ['active', 'ratios'] },
   plate: { title: 'Plates: where a sample sits matters', lesson: 14, k: (d) => (d === 'easy' ? 3 : 4), budget: 48, active: (g) => 2 + g.int(2), interaction: 0.5,
     plate: true, nuisance: (sigma) => ({ plate: { edge: -2 * sigma, corner: -1 * sigma, col: 0.6 * sigma, colQuad: 1.2 * sigma, rowSd: 0.8 * sigma } }),
     questions: ['active', 'effects'] },
@@ -90,7 +105,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   const g0 = rng(seed ^ 0x5eed);
   // plate scenarios belong to the plate topic (and only they have plates), so the other topics'
   // choice of scenario — and their exercises for a given seed — are as before
-  const kindOf = (x) => (x.mixture ? 'mixture' : x.dose ? 'dose' : x.plate ? 'plate' : null);
+  const kindOf = (x) => (x.mixture ? 'mixture' : x.dose ? 'dose' : x.plate ? 'plate' : x.counts ? 'counts' : null);
   const pool0 = Object.keys(SCENARIOS).filter(id => kindOf(SCENARIOS[id]) === kindOf(T));
   const scId = scenario ?? pool0[g0.int(pool0.length)];
   const sc = SCENARIOS[scId];
@@ -112,9 +127,10 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   let last = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const g = rng((seed * 2654435761 + attempt * 97 + 13) >>> 0);
-    const truth = T.dose ? { intercept: 0, terms: {} } : T.mixture ? mixtureTruth(difficulty, g, factors, response, mixture) : makeTruth(topic, difficulty, g, factors, response);
+    const truth = T.dose ? { intercept: 0, terms: {} } : T.mixture ? mixtureTruth(difficulty, g, factors, response, mixture) : T.counts ? countsTruth(topic, difficulty, g, factors, response) : makeTruth(topic, difficulty, g, factors, response);
     const curve = T.dose ? doseTruth(sc.dose, factors, g, difficulty) : null;
-    const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, sigma: response.sigma, truth, decimals: response.decimals, ...(curve ? { curve } : {}) }],
+    const counted = T.counts ? countNoise(difficulty, g, response) : null;
+    const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, ...(counted ?? { sigma: response.sigma }), truth, decimals: response.decimals, ...(curve ? { curve } : {}) }],
       nuisance: T.nuisance ? T.nuisance(response.sigma) : {}, ...(sc.plate ? { controls: sc.plate.truth } : {}) };
     const questions = makeQuestions(T.dose ? { ...T, refLabel: factors[1].levels[0], testLabel: factors[1].levels[1] } : T, factors, response, g, mixture);
     const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt, mixture });
@@ -128,6 +144,30 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
     }
   }
   throw new Error(`could not generate a solvable ${topic} exercise for seed ${seed} (last: score ${last.grade.score}, power ${last.power.toFixed(2)})`);
+}
+
+/**
+ * The true model of a counts exercise, on the link scale (log of the mean count per unit exposure,
+ * or logit of the proportion): two or three active factors, each with a ratio (low → high) drawn
+ * from the difficulty's range, more or less, and perhaps an interaction between two of them.
+ */
+function countsTruth(topic, difficulty, g, factors, response) {
+  const T = TOPICS[topic], [lo, hi] = COUNT_DIFFICULTIES[difficulty][isProportion(response.distribution) ? 'odds' : 'ratio'];
+  const size = () => Math.log(lo + (hi - lo) * g.random()) / 2;     // a coefficient: half the log ratio
+  const sign = () => (g.random() < 0.5 ? -1 : 1);
+  const terms = {}, act = pick(g, factors, T.active(g));
+  for (const f of act) terms[f.id] = sign() * size();
+  if (T.interaction && act.length >= 2 && g.random() < T.interaction) terms[`${act[0].id}:${act[1].id}`] = sign() * size() * 0.9;
+  // a proportion's centre is drawn around the scenario's, so that some conditions come close to 0 or 100 %
+  const intercept = isProportion(response.distribution) ? Math.log(response.base / (1 - response.base)) + (g.random() - 0.5) * 1.2 : Math.log(response.base);
+  return { intercept, terms };
+}
+
+/** The process's count or proportion noise for a counts exercise: distribution, θ or σ, trials, exposure. */
+function countNoise(difficulty, g, response) {
+  const D = COUNT_DIFFICULTIES[difficulty], between = ([a, b]) => a + (b - a) * g.random();
+  if (isProportion(response.distribution)) return { distribution: 'binomial', trials: response.trials, sigma: D.sigma };
+  return D.theta ? { distribution: 'negbin', theta: +between(D.theta).toPrecision(3), exposure: response.exposure } : { distribution: 'poisson', exposure: response.exposure };
 }
 
 /** The true curves of a dose exercise: reference EC50 and slope drawn from the scenario's ranges, the
@@ -181,6 +221,12 @@ function makeQuestions(T, factors, response, g, mixture) {
     if (q === 'active') qs.push({ id: 'active', kind: 'active', text: `Which factors affect ${response.name.toLowerCase()} (alone or through an interaction)?` });
     if (q === 'ec50') qs.push({ id: 'ec50', kind: 'ec50', text: `What is the EC50 of the ${T.testLabel ?? 'test'} (the dose giving half the full effect), with a 95 % interval?` });
     if (q === 'potency') qs.push({ id: 'potency', kind: 'potency', text: `How potent is the ${T.testLabel ?? 'test'} relative to the ${T.refLabel ?? 'reference'} (EC50 of the ${T.refLabel ?? 'reference'} ÷ EC50 of the ${T.testLabel ?? 'test'}), with a 95 % interval?` });
+    if (q === 'ratios') {
+      const prop = isProportion(response.distribution), per = response.exposureUnits ? ` per ${response.exposureUnits.replace(/ plated$/, '')}` : '';
+      qs.push({ id: 'ratios', kind: 'ratios', ratio: prop ? 'odds' : 'rate', text: prop
+        ? `For each factor that matters, estimate its odds ratio (the odds of ${response.name.toLowerCase()} at its high setting ÷ at its low setting), with a 95 % interval.`
+        : `For each factor that matters, estimate its rate ratio (the mean ${response.name.toLowerCase()}${per} at its high setting ÷ at its low setting), with a 95 % interval.` });
+    }
     if (q === 'effects') qs.push({ id: 'effects', kind: 'effects', text: `For each factor that matters, estimate its effect (low → high) on ${response.name.toLowerCase()}, with a 95 % interval.` });
     if (q === 'best') qs.push({ id: 'best', kind: 'best', goal: response.goal, text: `Which settings ${goal} ${response.name.toLowerCase()}, within the ranges?` });
     if (q === 'prediction') {
@@ -196,7 +242,8 @@ function makeQuestions(T, factors, response, g, mixture) {
 function assemble({ id, topic, difficulty, seed, scenario, sc, factors, response, budget, questions, process, attempt, mixture }) {
   const study = createStudy({ aikidoe: FORMAT_VERSION, name: `${sc.title} (${TOPICS[topic].title.toLowerCase()})`, seed, ...(mixture ? { mixture } : {}),
     description: `${sc.text} Budget: ${budget} runs.`,
-    factors, responses: [{ id: response.id, name: response.name, units: response.units, ...(questions.some(q => q.kind === 'best') ? { goal: response.goal } : {}) }],
+    factors, responses: [{ id: response.id, name: response.name, units: response.units, ...(response.distribution ? { distribution: response.distribution } : {}), ...(response.trials ? { trials: response.trials } : {}),
+      ...(questions.some(q => q.kind === 'best') ? { goal: response.goal } : {}) }],
     // the plates, with their controls; the runs are laid out by the student
     ...(sc.plate ? { plates: { rows: 8, cols: 12, controls: sc.plate.controls, layout: 'balanced' } } : {}) });
   return { format: EXERCISE_FORMAT, id, topic, difficulty, seed, scenario, title: TOPICS[topic].title, text: sc.text, budget, questions,
@@ -270,6 +317,7 @@ const MAX = 'maximize';
 export function deriveAnswers(ex, study, { alpha = 0.05 } = {}) {
   const T = TOPICS[ex.topic], r = study.responses[0].id;
   if (T.dose) return doseAnswers(ex, study);
+  if (T.counts) return countAnswers(ex, study, { alpha });
   const formula = T.mixture ? `${r} ~ mixquadratic` : T.curvature ? `${r} ~ quadratic` : (ex.topic === 'screening' || ex.topic === 'fraction') ? `${r} ~ main` : `${r} ~ 2fi`;
   const mixed = study.design.runs.some(x => x.wholePlot !== undefined);
   const fit = mixed ? fitMixedModel(study, formula) : fitModel(study, formula);
@@ -349,6 +397,14 @@ export function referenceStrategy(ex, truth = truthOf(ex)) {
       st = createStudy(layoutPlates(st, { layout: 'balanced', seed: ex.seed }).study);
       steps.push('laid out on the plate with the balanced layout: controls spread over the plate, the runs placed so that the effects are not entangled with the edge or the row and column gradients; fit main effects and two-factor interactions with the position terms (Edge, Row, Col)');
       break;
+    }
+    case 'counts': {
+      const reps = ex.budget / 2 ** k, prop = isProportion(base.responses[0].distribution);
+      st = make(fullFactorial(levels, { replicates: reps, continuous: cont }), `2^${k} full factorial, ${reps} replicates (${ex.budget} runs)`);
+      st = createStudy(runExercise({ ...ex, truth }, st));
+      const a = countAnswers(ex, st);
+      steps.push(`a ${prop ? 'binomial' : 'Poisson'} model (${prop ? 'logit' : 'log'} link${prop ? '' : ', the volume plated as the exposure'}) with main effects and two-factor interactions; ${a.analysis === 'as declared' ? 'no overdispersion' : `${a.analysis}`}; ${prop ? 'odds' : 'rate'} ratios from the coefficients, with ${/Firth/.test(a.analysis) ? 'Wald' : 'profile-likelihood'} intervals`);
+      return { strategy: 'reference', steps, study: st, answers: a };
     }
     case 'split-plot': st = make(splitPlotFull(levels, base.factors.map(f => !!f.htc), { replicates: 3 }), `split-plot full factorial, hard-to-change ${base.factors.find(f => f.htc).id} reset for 6 whole plots (3 per level); mixed model, Kenward–Roger tests`); break;
     default: throw new Error(`no reference strategy for ${ex.topic}`);
@@ -465,6 +521,7 @@ export function comparisonStrategy(ex, truth = truthOf(ex)) {
   if (T.dose) return linearDoseStrategy(ex, truth);
   if (T.mixture) return coxStrategy(ex, truth);
   if (T.plate) return tidyPlateStrategy(ex, truth);
+  if (T.counts) return leastSquaresCountStrategy(ex, truth);
   return ofatStrategy(ex, truth);
 }
 
@@ -481,7 +538,65 @@ export function tidyPlateStrategy(ex, truth = truthOf(ex)) {
   return { strategy: 'tidy plate layout', steps: ['the same design, laid out by hand: conditions in standard order, replicates side by side, row by row'], study: st, answers: deriveAnswers(ex, st) };
 }
 
+/**
+ * The counts topic's analysis: a GLM of the declared distribution with main effects and two-factor
+ * interactions; the negative binomial (counts) or quasi-binomial (proportions) when it shows
+ * overdispersion, Firth's penalised likelihood when proportions are separated. Active factors by
+ * the coefficients' tests at α; each active factor's rate or odds ratio low → high, exp(2β), with
+ * the profile-likelihood interval (Wald for Firth's). leastSquares: least squares on the raw
+ * counts or successes instead (the comparison), the ratio being of the fitted means at the high
+ * and low settings, its interval that of the coefficient carried through.
+ */
+export function countAnswers(ex, study, { alpha = 0.05, leastSquares = false } = {}) {
+  const resp = study.responses[0], r = resp.id, formula = `${r} ~ 2fi`, prop = isProportion(resp.distribution);
+  let fit, analysis = 'as declared';
+  if (leastSquares) { fit = fitModel(study, formula, { noise: 'normal' }); analysis = `least squares on the raw ${prop ? 'numbers of successes' : 'counts'}`; }
+  else {
+    fit = fitModel(study, formula);
+    if (fit.separation) { fit = fitModel(study, formula, { firth: true }); analysis = 'the proportions are separated: Firth’s penalised likelihood'; }
+    else if (fit.overdispersion?.detected) {
+      const ratio = fit.overdispersion.ratio;
+      fit = fitModel(study, formula, { noise: prop ? 'quasibinomial' : 'negbin' });
+      analysis = `overdispersed (Pearson χ²/df ${ratio.toFixed(2)}): ${prop ? 'the quasi-binomial model' : 'the negative binomial model'}`;
+    }
+  }
+  const terms = fit.columns.map((c, j) => ({ term: c, p: fit.p[j] })).filter(t => t.term !== '(Intercept)');
+  const sig = terms.filter(t => t.p < alpha).map(t => t.term);
+  const active = [...new Set(sig.flatMap(t => t.split(':')))].filter(id => study.factors.some(f => f.id === id));
+  const colOf = (id) => { const f = study.factors.find(x => x.id === id); return f.type === 'categorical' ? fit.columns.find(x => x.startsWith(id) && !x.includes(':')) : id; };
+  const ratios = {};
+  if (leastSquares) {
+    // the fitted means at the high and low settings, the others at the centre
+    const b0 = fit.coef[fit.columns.indexOf('(Intercept)')], m = prop ? resp.trials : 1;
+    const conv = (b) => { const hi = (b0 + b) / m, lo = (b0 - b) / m; if (!(hi > 0 && lo > 0) || (prop && !(hi < 1 && lo < 1))) return NaN; return prop ? (hi / (1 - hi)) / (lo / (1 - lo)) : hi / lo; };
+    for (const id of active) {
+      const j = fit.columns.indexOf(colOf(id)); if (j < 0) continue;
+      const t = studentT.ppf(0.975, Math.max(1, fit.dfRes)), b = fit.coef[j], se = fit.se[j];
+      ratios[id] = { estimate: conv(b), lower: conv(b - t * se), upper: conv(b + t * se) };
+    }
+  } else {
+    const ci = glmConfint(fit, { names: active.map(colOf) });
+    for (const id of active) {
+      const c = ci.find(x => x.name === colOf(id)); if (!c) continue;
+      ratios[id] = { estimate: Math.exp(2 * c.estimate), lower: Math.exp(2 * c.lower), upper: Math.exp(2 * c.upper) };
+    }
+  }
+  return { active, ratios, runs: study.design.runs.length, formula, analysis, distribution: leastSquares ? 'normal' : fit.distribution };
+}
+
+/**
+ * Least squares on the raw counts (counts topic): the reference design, analysed as if the counts
+ * were measurements with constant noise — the volume plated left out, the intervals symmetric and
+ * equally wide everywhere. For comparison with the reference strategy.
+ */
+export function leastSquaresCountStrategy(ex, truth = truthOf(ex)) {
+  const ref = referenceStrategy(ex, truth);
+  const prop = isProportion(ex.study.responses[0].distribution);
+  return { strategy: `least squares on the raw ${prop ? 'numbers germinated' : 'counts'}`, steps: [`the same design, analysed by least squares on the raw ${prop ? 'numbers of successes' : 'counts'}; ratios of the fitted means`], study: ref.study, answers: countAnswers(ex, ref.study, { leastSquares: true }) };
+}
+
 export function referencePower(ex, truth, study) {
+  if (TOPICS[ex.topic].counts) return countPower(ex, truth, study);
   if (TOPICS[ex.topic].dose) {
     // the potency question: the power of the reference's last stage for the true ratio
     const resp = truth.process.responses[0], c = resp.curve, [ref, test] = Object.keys(c.levels);
@@ -510,6 +625,34 @@ export function referencePower(ex, truth, study) {
   return min;
 }
 
+/**
+ * The counts topic: the smallest power, in the reference design and model (main effects and
+ * two-factor interactions), of the true terms at their true ratios, by the Wald approximation at
+ * the means the model expects (each term alone, the others at the centre), with the runs' actual
+ * exposures, θ, or the dispersion that the extra-binomial variation σ gives at the centre,
+ * 1 + n p(1 − p) σ².
+ */
+function countPower(ex, truth, study) {
+  const resp = truth.process.responses[0], prop = resp.distribution === 'binomial';
+  const centre = prop ? 1 / (1 + Math.exp(-resp.truth.intercept)) : Math.exp(resp.truth.intercept);
+  const runs = study.design.runs.filter(r => r.kind !== 'confirm');
+  const exposure = runs.map(r => study.observations.find(o => o.run === r.run)?.exposure ?? 1);
+  const order = (t) => t.split(':').sort((a, b) => study.factors.findIndex(f => f.id === a) - study.factors.findIndex(f => f.id === b)).join(':');
+  const terms = Object.entries(resp.truth.terms).map(([t, b]) => [order(t), b]);
+  if (!terms.length) return 1;
+  const opts = prop ? { distribution: (resp.sigma ?? 0) > 0 ? 'quasibinomial' : 'binomial', trials: resp.trials, dispersion: 1 + resp.trials * centre * (1 - centre) * (resp.sigma ?? 0) ** 2 }
+    : { distribution: resp.distribution, exposure, ...(resp.theta ? { theta: resp.theta } : {}) };
+  let min = 1;
+  try {
+    for (const [t, b] of terms) {
+      const p = studyGlmPower({ ...study, observations: [] }, { model: '2fi', baseline: centre, ratio: { [t]: Math.exp(2 * Math.abs(b)), default: 1 }, ...opts });
+      const pt = p.terms.find(x => x.term === t);
+      if (pt && Number.isFinite(pt.power)) min = Math.min(min, pt.power);
+    }
+  } catch { return 0; }
+  return min;
+}
+
 // ---------------------------------------------------------------- grading
 
 /** The true active factors, effects (low → high) and optimum of an exercise. */
@@ -521,6 +664,11 @@ export function trueFacts(ex, truth = truthOf(ex)) {
   }
   const active = [...new Set(Object.keys(resp.truth.terms).flatMap(t => t.replace(/I\((\w+)\^2\)/g, '$1').split(':')))];
   const effects = Object.fromEntries(ex.study.factors.filter(f => resp.truth.terms[f.id] !== undefined).map(f => [f.id, 2 * resp.truth.terms[f.id]]));
+  if (resp.distribution) {
+    // counts and proportions: the effects are ratios low → high, exp(2β) (rate or odds ratios)
+    const ratios = Object.fromEntries(Object.entries(effects).map(([k, v]) => [k, Math.exp(v)]));
+    return { active, effects: {}, ratios, ratio: resp.distribution === 'binomial' ? 'odds' : 'rate', mu: (s) => trueMean(proc, resp.id, s), sigma: NaN };
+  }
   const mu = (s) => trueMean(proc, resp.id, s);
   const goal = ex.study.responses[0].goal ?? MAX;
   const opt = bestSettings(ex.study, mu, goal);
@@ -529,13 +677,15 @@ export function trueFacts(ex, truth = truthOf(ex)) {
 }
 
 /**
- * Grade answers: { active: [ids], effects: { id: { estimate, lower, upper } }, best: settings,
- * prediction: { value } } and runs used. Returns { score (0–100), parts: [{ id, score, max, note }],
+ * Grade answers: { active: [ids], effects: { id: { estimate, lower, upper } }, ratios (rate or odds
+ * ratios low → high, as effects), best: settings, prediction: { value }, ec50, potency } and runs
+ * used. Ratios are judged on the log scale: the side of 1 they fall on, and whether the interval
+ * holds the true ratio. Returns { score (0–100), parts: [{ id, score, max, note }],
  * truth facts for feedback }.
  */
 export function gradeAnswers(ex, truth, answers, { runs } = {}) {
   const F = trueFacts(ex, truth), parts = [];
-  const W = { active: 40, effects: 25, best: 25, prediction: 10, ec50: 50, potency: 50 };
+  const W = { active: 40, effects: 25, ratios: 25, best: 25, prediction: 10, ec50: 50, potency: 50 };
   const qs = ex.questions.filter(q => W[q.kind]);
   const total = qs.reduce((a, q) => a + W[q.kind], 0);
   for (const q of qs) {
@@ -557,6 +707,18 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
         if (!signOk || !inside) notes.push(`${id}: true effect ${t.toPrecision(3)}, yours ${a.estimate.toPrecision(3)} [${a.lower.toPrecision(3)}, ${a.upper.toPrecision(3)}]`);
       }
       parts.push({ id: 'effects', max, score: ids.length ? max * s / ids.length : max, note: notes.join('; ') || 'every true effect has the right sign and is inside your interval' });
+    } else if (q.kind === 'ratios') {
+      // as effects, on the log scale: the sign of the log ratio, and whether the interval holds the truth
+      const ids = Object.keys(F.ratios), what = `${F.ratio} ratio`;
+      let s = 0; const notes = [];
+      for (const id of ids) {
+        const a = answers.ratios?.[id], t = F.ratios[id];
+        if (!a || !(a.estimate > 0)) { notes.push(`${id}: no estimate`); continue; }
+        const signOk = Math.sign(Math.log(a.estimate)) === Math.sign(Math.log(t)), inside = a.lower <= t && t <= a.upper;
+        s += (signOk ? 0.5 : 0) + (inside ? 0.5 : 0);
+        if (!signOk || !inside) notes.push(`${id}: true ${what} ${t.toPrecision(3)}, yours ${a.estimate.toPrecision(3)} [${(a.lower ?? NaN).toPrecision(3)}, ${(a.upper ?? NaN).toPrecision(3)}]`);
+      }
+      parts.push({ id: 'ratios', max, score: ids.length ? max * s / ids.length : max, note: notes.join('; ') || `every true ${what} is on the right side of 1 and inside your interval` });
     } else if (q.kind === 'best') {
       if (!answers.best) { parts.push({ id: 'best', max, score: 0, note: 'no settings given' }); continue; }
       const v = F.mu(answers.best), span = Math.abs(F.bestValue - F.worstValue) || 1;
@@ -585,7 +747,7 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
     if (over) score -= 20;
   }
   score = Math.max(0, Math.round(score * 10) / 10);
-  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue, ...(F.ec50 !== undefined ? { ec50: F.ec50, potency: F.potency } : {}) } };
+  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue, ...(F.ec50 !== undefined ? { ec50: F.ec50, potency: F.potency } : {}), ...(F.ratios ? { ratios: F.ratios, ratio: F.ratio } : {}) } };
 }
 
 /** Grade a study: its exercise answers if given, else answers derived by the standard analysis. */

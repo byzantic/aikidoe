@@ -69,6 +69,13 @@ A **mixture design** spreads blends over the region the bounds leave — the cor
 
 On the Design step choose a mixture design within the budget (an optimal design for the quadratic model fits a constrained region best). The Analyse step fits the Scheffé quadratic; the ternary plot shows where the best blend is. Answer with that blend and a prediction for the blend given.`,
     manual: [M('designs-mixture', '', 'mixture designs'), M('designs-mixture', 'mixture-models', 'Scheffé models'), M('designs-mixture', 'constrained-regions', 'constrained regions')] },
+  { id: 'counts', n: 17, title: 'Counts and percentages: when least squares is the wrong tool', topic: 'counts', difficulty: 'medium', compare: true,
+    text: `Colonies on a plate, seeds that germinate out of those sown: these results are **counts** and **proportions**, not measurements with constant noise. A count of 200 varies far more than a count of 5, a percentage cannot go below 0 % or above 100 %, and a plate with twice the volume on it has twice the colonies whatever the protocol did. Least squares on the raw numbers treats all of that as the same scatter everywhere.
+
+A **generalised linear model** works on the log of the mean count (or the log-odds of the proportion), with Poisson or binomial noise. The volume plated goes in as the **exposure**, so the model is for colonies per µL; an effect becomes a **ratio** — how many times more colonies at a factor's high setting than at its low one (a rate ratio), or how many times the odds of germinating (an odds ratio). When the counts vary more than Poisson allows (**overdispersion**: one plate is not quite like another), the negative binomial gives honest intervals; for proportions, the quasi-binomial.
+
+The design is the easy part: a replicated full factorial fits the budget. Run it (for colonies, the Run step shows the volume plated beside each count). On the Analyse step, look at the overdispersion check and switch model if it asks, then answer with the active factors and their ratios from low to high, each with its interval (the Analyse step's ratios are per coded unit, half the range: square them, ends of the interval too). Then compare with what least squares on the raw numbers would have given.`,
+    manual: [M('analysis', 'counts-and-proportions', 'counts and proportions'), M('concepts', 'power', 'power for counts')] },
   { id: 'gauge', n: 11, title: 'Measurement systems: gauge R&R', topic: null,
     text: 'Coming later: is the measurement good enough for the experiment? A gauge study on a virtual gauge.', manual: [M('process', 'gauge-rr', 'gauge R&R')] },
   { id: 'robust', n: 12, title: 'Robust design', topic: null,
@@ -82,7 +89,8 @@ export function hints(lesson, ex, study) {
   const out = [], d = study.design, budget = ex.budget, T = TOPICS[ex.topic];
   const results = d && study.observations.some(o => o.value !== null);
   if (!d) {
-    out.push(T.mixture ? `Choose a mixture design of at most ${budget} runs on the Design step: the components add up to ${study.mixture?.total}, so factorial designs do not apply.`
+    out.push(T.counts ? `Choose a design of at most ${budget} runs on the Design step: a full factorial, replicated, fits the budget. The power section has a choice for count and proportion responses.`
+      : T.mixture ? `Choose a mixture design of at most ${budget} runs on the Design step: the components add up to ${study.mixture?.total}, so factorial designs do not apply.`
       : T.dose ? `Plan the doses on the Design step (Dose–response design), at most ${budget} runs: a wide range-finding series first, a decade or so apart, leaves room for a second stage.`
       : `Choose a design of at most ${budget} runs on the Design step${ex.topic === 'screening' ? ' — Recommend, with goal "screen" and the budget, ranks the options' : ''}.`);
     return out;
@@ -93,6 +101,15 @@ export function hints(lesson, ex, study) {
     if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
     if (results && stages === 1 && n < budget) out.push(`Look at the curves on the Analyse step: are there several doses on the slope? If not, add doses around the EC50 as a second stage (${budget - n} runs left).`);
     if (results && !out.length) out.push('Analyse the curves, then grade: by your own answers, or by the standard analysis (parallel curves) of your data.');
+    return out;
+  }
+  if (T.counts) {
+    const n = d.runs.length, r = study.responses[0], prop = r.distribution === 'binomial' || r.distribution === 'quasibinomial';
+    if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
+    if (results && d.runs.some(x => !study.observations.some(o => o.run === x.run && o.value !== null))) out.push('Some runs have no results yet: get them before analysing.');
+    if (results && !out.length) out.push(prop
+      ? `Fit main effects and two-factor interactions on the Analyse step: the model is binomial, out of ${r.trials} per run. If it reports overdispersion, switch to the quasi-binomial; if it reports separation, to Firth’s method. The odds ratios with their intervals are the answer. Then grade.`
+      : 'Fit main effects and two-factor interactions on the Analyse step: the model is Poisson, per µL plated. If it reports overdispersion, switch to the negative binomial. The rate ratios with their intervals are the answer. Then grade.');
     return out;
   }
   if (T.mixture) {

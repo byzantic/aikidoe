@@ -86,7 +86,7 @@ section('advice for typical cases');
   }
   r = A({ aim: 'understand', factors: 3, result: 'count', ratio: 'medium' });
   check('counts: a Poisson analysis, rate ratio 1.5, about 10 runs with counts of 20, and the study response is a count',
-    r.notes.some(n => /Poisson model/.test(n) && /rate ratio of 1.5 needs about 10 runs/.test(n)) && r.counts.ratio === 1.5 && guideStudy({ ...base, aim: 'understand', factors: 3, result: 'count' }).responses[0].distribution === 'poisson');
+    r.notes.some(n => /Poisson model/.test(n) && /rate ratio of 1.5 needs about 10 runs/.test(n)) && r.counts.ratio === 1.5 && r.lessons.includes('counts') && guideStudy({ ...base, aim: 'understand', factors: 3, result: 'count' }).responses[0].distribution === 'poisson');
   r = A({ aim: 'understand', factors: 3, result: 'passfail', ratio: 'large' });
   check('pass/fail: a warning that one yes-or-no carries little information (odds ratio 3: about 105 runs)', r.warnings.some(w => /little information/.test(w) && /about 105 runs/.test(w)) && guideStudy({ ...base, aim: 'understand', factors: 3, result: 'passfail' }).responses[0].distribution === 'bernoulli');
   check('counts and proportions: the ratio question instead of the scatter question', asked({ aim: 'screen', factors: 4, result: 'percent' }).some(q => q.id === 'ratio') && !asked({ aim: 'screen', factors: 4, result: 'percent' }).some(q => q.id === 'effect')

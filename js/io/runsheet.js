@@ -317,13 +317,19 @@ export function importResults(study, text, opts = {}) {
   if (clash) problems.push({ severity: 'info', line: null, column: null, message: `${clash} value(s) replace values already in the study (or are added alongside them with mode "append")` });
   // robust outlier flags per response (and site), never dropped
   const z = opts.outlierZ ?? 5;
+  // (counts: on the log scale, per unit exposure; successes out of trials: on the logit scale —
+  // a count's spread grows with its mean, and a large plate is not an outlier; pass/fail: none)
   for (const r of study.responses) {
+    if (r.distribution === 'bernoulli') continue;
     const v = obs.filter(x => x.o.response === r.id && x.o.value !== null);
     if (v.length < 5) continue;
-    const vals = v.map(x => x.o.value);
+    const counts = ['poisson', 'quasipoisson', 'negbin'].includes(r.distribution), prop = ['binomial', 'quasibinomial'].includes(r.distribution);
+    const tr = (o) => (counts ? Math.log((o.value + 0.5) / (o.exposure ?? 1)) : prop ? (() => { const n = o.trials ?? r.trials ?? 1; return Math.log((o.value + 0.5) / (n - o.value + 0.5)); })() : o.value);
+    const vals = v.map(x => tr(x.o));
     const med = median(vals), mad = 1.4826 * median(vals.map(x => Math.abs(x - med)));
     if (!(mad > 0)) continue;
-    for (const x of v) if (Math.abs(x.o.value - med) / mad > z) warn(x.line, x.column, `${x.o.value} is far from the other ${r.id} values (robust z = ${((x.o.value - med) / mad).toFixed(1)}); check it, it is kept`);
+    const scale = counts ? ' (per unit exposure, on the log scale)' : prop ? ' (on the logit scale)' : '';
+    v.forEach((x, i) => { const zz = (vals[i] - med) / mad; if (Math.abs(zz) > z) warn(x.line, x.column, `${x.o.value} is far from the other ${r.id} values${scale} (robust z = ${zz.toFixed(1)}); check it, it is kept`); });
   }
   const got = new Set(obs.map(x => x.o.run));
   const none = [...runs.keys()].filter(k => !got.has(k) && !study.observations.some(o => o.run === k));

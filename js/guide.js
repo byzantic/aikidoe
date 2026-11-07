@@ -344,7 +344,7 @@ export function advise(a) {
   if (corners && out.family !== 'bbd') notes.push('Extremes unsafe: shrink the ranges so that every corner is safe, use a face-centred design, or define constraints and use an optimal design.');
 
   // counts and proportions (issue #64)
-  if (['count', 'percent', 'passfail'].includes(a.result)) countsAdvice(a, out, { notes, warnings, read });
+  if (['count', 'percent', 'passfail'].includes(a.result)) { countsAdvice(a, out, { notes, warnings, read }); lesson('counts'); }
 
   // effect size → runs
   const need = Math.ceil(32 / out.delta ** 2) + 6;
