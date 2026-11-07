@@ -6,6 +6,7 @@ import { num, pval, stars } from '../format.js';
 import { runSheet } from './runsheet.js';
 import { fitModel, anova } from '../model/fit.js';
 import { lackOfFit } from '../model/ols.js';
+import { noiseOf } from '../model/noise.js';
 import { fitMixedModel, observationTable, randomEffects } from '../model/mixed.js';
 import { defaultFormula } from '../model/defaults.js';
 import { checkConfirmation } from '../design/augment.js';
@@ -37,7 +38,7 @@ export function scatterSVG(points, { xLabel = '', yLabel = '', w = 320, h = 240,
 function responseSection(study, r, formula) {
   const out = [`<h2 id="response-${esc(r.id)}">${esc(r.name)}${r.units ? ` (${esc(r.units)})` : ''}</h2>`];
   let mixed = false;
-  try { mixed = randomEffects(observationTable(study, r.id)).length > 0; } catch { /* no data */ }
+  try { mixed = !r.distribution && randomEffects(observationTable(study, r.id)).length > 0; } catch { /* no data */ }
   try {
     if (mixed) {
       const m = fitMixedModel(study, formula);
@@ -45,6 +46,15 @@ function responseSection(study, r, formula) {
       out.push('<h3>Variance components</h3>', tbl(['source', 'variance', 'std. dev.', '95% CI (variance)'], m.varcomp.map(v => [v.name, v.variance, v.sd, v.boundary ? 'on the boundary (0)' : `${num(v.lower)} … ${num(v.upper)}`])));
       out.push('<h3>Fixed effects</h3>', tbl(['term', 'estimate', 'std. error', 'df', 't', 'p', ''], m.columns.map((c, j) => [c, m.coef[j], m.seKR[j], m.dfKR[j], m.t[j], pval(m.pKR[j]), stars(m.pKR[j])]).filter(x => Number.isFinite(x[1]))));
       out.push('<h3>Tests of model terms</h3>', tbl(['term', 'F', 'ndf', 'ddf', 'p', 'tested in'], m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block).map(t => [t.term, t.FKR, t.df, t.ddfKR, pval(t.pKR), t.stratum ?? ''])));
+    } else if (r.distribution) {
+      // counts and proportions: the generalised linear model
+      const fit = fitModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;
+      out.push(`<p>Model: <code>${esc(formula)}</code> — ${esc(nm.label)}, ${esc(fit.link)} link${fit.distribution === 'negbin' ? `, θ = ${esc(num(fit.theta))}` : ''}${fit.firth ? ', Firth' : ''}, ${fit.n} observations; coefficients on the ${esc(fit.link)} scale in coded units.${fit.aliased.length ? ` Aliased (not estimable): ${esc(fit.aliased.join(', '))}.` : ''}</p>`);
+      out.push(tbl(['term', 'estimate', 'std. error', fit.statistic, 'p', '', ...(ratio ? [ratio] : [])], fit.columns.map((c, j) => [c, fit.coef[j], fit.se[j], fit.t[j], pval(fit.p[j]), stars(fit.p[j]), ...(ratio ? [Math.exp(fit.coef[j])] : [])]).filter(x => Number.isFinite(x[1]))));
+      out.push(`<p class="stats">deviance = ${esc(num(fit.deviance))} on ${fit.dfRes} df · null deviance = ${esc(num(fit.nullDeviance))}${Number.isFinite(fit.aic) ? ` · AIC = ${esc(num(fit.aic))}` : ''}${fit.dispersionEstimated ? ` · dispersion = ${esc(num(fit.dispersion))}` : ''}${fit.overdispersion ? ` · Pearson χ²/df = ${esc(num(fit.overdispersion.ratio))}` : ''}</p>`);
+      for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
+      const rows = anova(fit, 1), F = rows.some(x => x.F !== undefined);
+      out.push(`<h3>Analysis of deviance (type I)</h3>`, tbl(['source', 'df', 'deviance', F ? 'F' : 'χ²', 'p'], rows.map(x => [x.term, x.df, x.deviance ?? '', (F ? x.F : x.chi2) ?? '', x.p === undefined ? '' : pval(x.p)])));
     } else {
       const fit = fitModel(study, formula);
       out.push(`<p>Model: <code>${esc(formula)}</code> — least squares on ${fit.n} runs${fit.rows.some(x => x.n > 1) ? ' (per-run means)' : ''}; coefficients in coded units (−1 … +1).${fit.aliased.length ? ` Aliased (not estimable): ${esc(fit.aliased.join(', '))}.` : ''}</p>`);

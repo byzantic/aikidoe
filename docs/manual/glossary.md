@@ -19,6 +19,10 @@ stage); the design and analysis account for it.
 their proportions to each other; the traces of the response along it show each component's effect.
 See [analysis](designs-mixture.md#analysis).
 
+**Deviance** — for counts and proportions, twice the log-likelihood lost against a model that fits
+every run exactly: the analogue of the residual sum of squares. A term's drop in deviance is its
+likelihood-ratio χ². See [counts and proportions](analysis.md#counts-and-proportions).
+
 **Defining relation** — the set of words (products of factors) equal to the identity in a regular
 fraction; it gives every alias.
 
@@ -39,6 +43,10 @@ centroids of its edges and faces, a design for constrained mixtures. See
 [constrained regions](designs-mixture.md#constrained-regions).
 
 **Fold-over** — a second fraction with signs reversed, run to separate aliased effects.
+
+**Generalised linear model (GLM)** — a linear model for a transform of the mean (the log of a count,
+the log-odds of a proportion) with the noise of the data (Poisson, binomial …), fitted by maximum
+likelihood. See [counts and proportions](analysis.md#counts-and-proportions).
 
 **Generator** — the rule defining an added factor's column in a fraction, e.g. `E = ABCD`.
 
@@ -62,6 +70,11 @@ independently. See [mixture designs](designs-mixture.md).
 **Mixed model** — a model with fixed effects (the factors) and random effects (whole plots, runs,
 wafers) for nested sources of variation.
 
+**Odds ratio** — with a logit link, e^b: the factor by which the odds of success change per coded unit.
+
+**Overdispersion** — counts or proportions varying more than the Poisson or binomial allows
+(Pearson χ²/df well above 1); remedied by the negative binomial or a quasi-likelihood model.
+
 **Parallel curves** — dose–response curves of the same shape shifted along the log-dose axis; the
 condition for a single relative potency. See [relative potency](dose-response.md#relative-potency).
 
@@ -82,6 +95,9 @@ the confidence interval for the mean).
 **Randomisation** — doing the runs in a random order, so that unknown trends do not masquerade as
 effects.
 
+**Rate ratio** — with a log link, e^b: the factor by which the mean count (per unit exposure)
+changes per coded unit.
+
 **REML** — restricted maximum likelihood: the standard way to estimate variance components.
 
 **Relative potency** — how many times less of a test compound gives the same effect as a reference:
@@ -97,6 +113,9 @@ measurement of the same run).
 **Scheffé model** — a polynomial for a mixture without an intercept (it is absorbed in the linear
 terms): Σ βᵢ zᵢ, plus blending terms βᵢⱼ zᵢ zⱼ (quadratic) and so on. See
 [Scheffé models](designs-mixture.md#mixture-models).
+
+**Separation** — a factor setting giving only successes (or only failures), so the fitted odds
+there are infinite; Firth's penalised likelihood gives finite estimates.
 
 **Split-plot** — a design in which hard-to-change factors are set once per whole plot and the
 others vary within it.

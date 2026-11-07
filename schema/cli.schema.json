@@ -1568,6 +1568,297 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "response",
+            "formula",
+            "distribution",
+            "link",
+            "n",
+            "rank",
+            "dfRes",
+            "coefficients",
+            "deviance",
+            "tests"
+          ],
+          "properties": {
+            "kind": {
+              "const": "glm"
+            },
+            "response": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "distribution": {
+              "enum": [
+                "poisson",
+                "quasipoisson",
+                "negbin",
+                "binomial",
+                "quasibinomial",
+                "bernoulli"
+              ]
+            },
+            "link": {
+              "enum": [
+                "log",
+                "identity",
+                "sqrt",
+                "logit",
+                "probit",
+                "cloglog"
+              ]
+            },
+            "firth": {
+              "type": "boolean"
+            },
+            "n": {
+              "type": "integer"
+            },
+            "rank": {
+              "type": "integer"
+            },
+            "dfRes": {
+              "type": "integer"
+            },
+            "aliased": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "units": {
+              "const": "coded"
+            },
+            "coefficients": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "estimate",
+                  "se",
+                  "p"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "se": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "t": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "lower": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "upper": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "ratio": {
+                    "type": "object",
+                    "description": "exp of the estimate and interval: a rate ratio (log link) or odds ratio (logit)",
+                    "properties": {
+                      "estimate": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "lower": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "upper": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "deviance": {
+              "type": "number"
+            },
+            "nullDeviance": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "dfNull": {
+              "type": "integer"
+            },
+            "aic": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "dispersion": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "theta": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "thetaSE": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "overdispersion": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "pearson": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "df": {
+                  "type": "integer"
+                },
+                "ratio": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "p": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "detected": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "separation": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tests": {
+              "type": "object",
+              "required": [
+                "type",
+                "rows"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    1,
+                    2,
+                    3,
+                    "wald"
+                  ]
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "term",
+                      "df"
+                    ],
+                    "properties": {
+                      "term": {
+                        "type": "string"
+                      },
+                      "df": {
+                        "type": "integer"
+                      },
+                      "deviance": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "chi2": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "F": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "p": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "description": "a generalised linear model (a count or proportion response, issue #64)"
         }
       ]
     },
@@ -1631,7 +1922,8 @@
         "kind": {
           "enum": [
             "ols",
-            "mixed"
+            "mixed",
+            "glm"
           ]
         },
         "response": {
@@ -1645,9 +1937,7 @@
               "settings",
               "fit",
               "lower",
-              "upper",
-              "predLower",
-              "predUpper"
+              "upper"
             ],
             "properties": {
               "settings": {
@@ -1694,8 +1984,17 @@
                   "number",
                   "null"
                 ]
+              },
+              "link": {
+                "type": "number",
+                "description": "glm: the prediction on the link scale"
+              },
+              "seLink": {
+                "type": "number",
+                "description": "glm: its standard error"
               }
-            }
+            },
+            "description": "predLower and predUpper (the interval for one new run) are given for least-squares and mixed models, not for counts and proportions (kind glm)."
           }
         },
         "level": {

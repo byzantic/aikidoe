@@ -81,6 +81,163 @@ The result is a suggestion: every step is shown, and any term can be kept (`--ke
 run — wider, as it includes the run-to-run noise). Before acting on a prediction, confirm it:
 [confirmation runs](designs-sequential.md#confirmation-runs).
 
+## Counts and proportions
+
+Many results are not measurements with constant noise but **counts** (colonies, cells, plaques,
+defects) or **proportions** (germinated seeds out of those sown, positive cells out of those
+counted, a run that passes or fails). Their variance depends on their mean — a count of 400 varies
+more than a count of 4 — and a proportion cannot go below 0 % or above 100 %. Least squares on the
+raw values gives wrong intervals and can predict impossible values; a log or logit transform helps
+only partly, and breaks down at zero counts and at 0 % or 100 %. The right tool is a **generalised
+linear model** (GLM): a linear model for the log of the mean count, or the log-odds of the
+proportion, with the noise the data actually have.
+
+Set the response's **kind** on the Define step (or `distribution` in the study file; `doe init …
+--response count@poisson`):
+
+| kind | distribution | link (default first) | the data |
+|---|---|---|---|
+| count | `poisson` | log, identity, sqrt | a whole number ≥ 0 per run; optionally an **exposure** |
+| count, overdispersed | `negbin`, `quasipoisson` | log, identity, sqrt | as above, more variable than Poisson |
+| successes out of n | `binomial`, `quasibinomial` | logit, probit, cloglog | successes and **trials** per run |
+| pass / fail | `bernoulli` | logit, probit, cloglog | 0 or 1 per run |
+
+The **exposure** is what the count is out of — the volume plated, the area scanned, the cells
+examined — and enters as an offset (the log of it), so the model is for the **rate** per unit
+exposure. The **trials** are fixed for the response (`trials` in the study file, n on the Define
+step) or given per run (a `germ.trials` column). The run sheet has columns for both.
+
+```console
+$ doe init counts.aikidoe.json --factor A:-1:1 --factor B:-1:1 --factor C:-1:1 --response colonies@poisson --response germ@binomial --seed 3
+created counts.aikidoe.json: 3 factors, 2 responses, seed 3
+$ doe design counts.aikidoe.json --full --replicates 2
+counts.aikidoe.json: full-factorial, 16 runs, randomisation complete, seed 3
+```
+
+```file counts.csv
+run,colonies,colonies.exposure,germ,germ.trials
+1,5,0.5,14,20
+2,16,1,18,25
+3,1,2,6,20
+4,16,1,13,25
+5,2,0.5,4,20
+6,16,1,22,25
+7,1,2,4,20
+8,8,1,16,25
+9,2,0.5,15,20
+10,12,1,23,25
+11,1,2,6,20
+12,10,1,12,25
+13,7,0.5,6,20
+14,13,1,22,25
+15,10,2,1,20
+16,13,1,17,25
+```
+
+```console
+$ doe import counts.aikidoe.json counts.csv
+32 value(s) read (wide format)
+counts.aikidoe.json: 32 observation(s)
+$ doe fit counts.aikidoe.json "colonies ~ (A + B + C)^2"
+colonies ~ A + B + C + A:B + A:C + B:C
+Poisson counts, log link
+16 observations, 7 estimable coefficients, 9 residual df; exposure as an offset (rates per unit exposure)
+
+term         estimate  std. error       z         p       rate ratio  95% profile interval
+-----------  --------  ----------  ------  --------  ---  ----------  --------------------
+(Intercept)     1.882      0.1123   16.76   <0.0001  ***       6.566  5.195 … 8.088
+A              0.6777      0.1123   6.036   <0.0001  ***       1.969  1.596 … 2.487
+B             -0.4491      0.1067   -4.21   <0.0001  ***      0.6382  0.516 … 0.7862
+C              0.1818      0.1121   1.622     0.105            1.199  0.9685 … 1.509
+A:B            0.3531      0.1072   3.295  0.000984  ***       1.424  1.154 … 1.762
+A:C            -0.219      0.1117   -1.96      0.05  *        0.8034  0.6388 … 0.994
+B:C           0.01376      0.0886  0.1553     0.877            1.014  0.852 … 1.207
+coded units: each continuous factor runs from −1 (low) to +1 (high); a rate ratio is the factor of change per coded unit (squared for low → high)
+
+deviance = 19.5 on 9 df (null 105.6 on 15 df; 81.5% explained)   AIC = 91.3
+Pearson χ²/df = 2.171 (p = 0.0209)
+warning: overdispersion: Pearson χ²/df = 2.17 (p = 0.0209); a quasi-Poisson or negative binomial model gives honest standard errors
+
+analysis of deviance (type I, sequential; likelihood-ratio χ² tests)
+source     df  deviance       χ²         p
+---------  --  --------  -------  --------
+A           1     63.27    63.27   <0.0001
+B           1     7.492    7.492    0.0062
+C           1    0.3686   0.3686     0.544
+A:B         1     10.88    10.88  0.000971
+A:C         1     4.064    4.064    0.0438
+B:C         1   0.02412  0.02412     0.877
+Residuals   9      19.5
+```
+
+The colony counts vary about twice as much as the Poisson allows (the warning). The
+quasi-Poisson estimates by how much (the dispersion) and widens the standard errors to match:
+
+```console
+$ doe fit counts.aikidoe.json "colonies ~ A + B + C + A:B + A:C" --distribution quasipoisson
+colonies ~ A + B + C + A:B + A:C
+quasi-Poisson counts (overdispersed), log link
+16 observations, 6 estimable coefficients, 10 residual df; exposure as an offset (rates per unit exposure)
+
+term         estimate  std. error       t        p       rate ratio  95% profile interval
+-----------  --------  ----------  ------  -------  ---  ----------  --------------------
+(Intercept)     1.882      0.1573   11.96  <0.0001  ***       6.568  4.687 … 8.746
+A              0.6774      0.1573   4.306  0.00155  **        1.969  1.474 … 2.754
+B             -0.4467       0.148  -3.019   0.0129  *        0.6397  0.4749 … 0.8551
+C              0.1804      0.1566   1.152    0.276            1.198  0.8902 … 1.664
+A:B            0.3503       0.148   2.367   0.0395  *         1.419  1.061 … 1.911
+A:C           -0.2189      0.1566  -1.398    0.192           0.8034  0.5781 … 1.081
+coded units: each continuous factor runs from −1 (low) to +1 (high); a rate ratio is the factor of change per coded unit (squared for low → high)
+
+deviance = 19.53 on 10 df (null 105.6 on 15 df; 81.5% explained)   dispersion = 1.966
+
+analysis of deviance (type I, sequential; F tests with the estimated dispersion)
+source     df  deviance       F         p
+---------  --  --------  ------  --------
+A           1     63.27   32.19  0.000206
+B           1     7.492   3.812    0.0794
+C           1    0.3686  0.1875     0.674
+A:B         1     10.88   5.537    0.0404
+A:C         1     4.064   2.068     0.181
+Residuals  10     19.53
+```
+
+(`--distribution` tries another kind than the response's; set it on the Define step, or in the
+study file, to keep it.)
+
+What the fit gives:
+
+- **Coefficients** on the link scale, with z tests (t tests when the dispersion is estimated).
+  With the log link, e^b is a **rate ratio**: the factor by which the mean count changes per coded
+  unit (square it for a factor's low → high); with the logit link, an **odds ratio**. Their
+  intervals come from the **profile likelihood** (as R's `confint`), which is better than ±1.96
+  standard errors when counts are small.
+- The **deviance** (how far the model is from fitting every run exactly), the null deviance
+  (the intercept-only model) and the share explained; the **AIC**.
+- The **analysis of deviance**: the deviance each term explains, a likelihood-ratio χ² on its df
+  (sequential, type I, as R's `anova`; or type II and III, as `car::Anova`). Model reduction
+  uses the same tests, or AICc.
+- **Residuals**: standardised deviance residuals for the diagnostic plots.
+- Predictions (the Optimise step, `doe predict`) on the response scale — a rate, a proportion —
+  with confidence intervals transformed from the link scale, so they never leave the possible
+  range.
+
+Two checks come with every fit:
+
+- **Overdispersion.** Real counts often vary more than the Poisson allows (clumped cells,
+  plate-to-plate variation); then its standard errors are too small. The fit reports Pearson
+  χ²/df and flags it when clearly above 1. The remedy: the **negative binomial** (variance
+  μ + μ²/θ, θ estimated by maximum likelihood, as `MASS::glm.nb`) or the **quasi-Poisson**
+  (variance φμ, φ estimated; F tests). For proportions, the quasi-binomial.
+- **Separation.** When a factor setting gives only passes (or only failures), the odds there are
+  estimated as infinite: the estimate runs off and its standard error is meaningless. The fit
+  flags it; **Firth's penalised likelihood** (`doe fit … --firth`; the Analyse step's button)
+  gives finite estimates with Wald tests and intervals (as `brglm2` and `logistf`).
+
+Not yet: random effects for counts (split-plot designs and nested readings are fitted as if every
+run were independent, with a warning), prediction intervals for a single new count, and power for
+counts and proportions ([issue #64](https://github.com/byzantic/aikidoe/issues/64)).
+
 ## Mixed models
 
 When readings are nested — several sites on a wafer, wafers in a run, runs in a whole plot — the

@@ -13,7 +13,8 @@
 //                        on the response scale, intervals at o.level
 //   tests(fit, type)     the table of tests for the model's terms (ANOVA for normal noise):
 //                        [{ term, df, …, p }] ending with the residual row
-//   residuals(fit)       { response, standardised, studentised }
+//   prepare(rows)        the response table's rows → { y, weights, offset } for fit
+//   residuals(fit)       { response, standardised, studentised } (and pearson, deviance)
 //   compare(big, small)  test of dropping terms: small is big without them → { df, F, p }
 //                        (for normal noise the partial F test, as R's drop1(test = "F"))
 //   loglik(fit)          { loglik, k }: the maximised log-likelihood and the number of
@@ -23,8 +24,11 @@
 //   capabilities         what the classical normal-theory tools that are not part of the
 //                        interface may be used with: lackOfFit, boxCox, lenth, mixed
 //
-// Only the normal model exists yet; a response's distribution will select another (phase 1).
+// A response's distribution selects the model: normal (least squares, ols.js), or a generalised
+// linear model (glm.js) for counts (poisson, quasipoisson, negbin) and proportions (binomial,
+// quasibinomial, bernoulli), with the response's link.
 import { fitOLS, olsPredict, olsAnova } from './ols.js';
+import { fitGLM, glmPredict, glmTests, glmCompare, glmWeights, LINKS, canonicalLink, DISTRIBUTIONS } from './glm.js';
 import { fDist } from '../dist.js';
 
 const identity = { name: 'identity', fun: (m) => m, inv: (e) => e, deriv: () => 1 };
@@ -34,6 +38,7 @@ export const normal = Object.freeze({
   id: 'normal',
   label: 'normal, constant variance (least squares)',
   link: identity,
+  prepare: (rows) => ({ y: rows.map(r => r.y) }),
   fit: (mm, y, opts) => fitOLS(mm, y, opts),
   predict: (fit, X, opts) => olsPredict(fit, X, opts),
   tests: (fit, type = 1) => olsAnova(fit, type),
@@ -49,20 +54,56 @@ export const normal = Object.freeze({
   capabilities: Object.freeze({ lackOfFit: true, boxCox: true, lenth: true, mixed: true }),
 });
 
-export const NOISE_MODELS = Object.freeze({ normal });
+const LABELS = {
+  poisson: 'Poisson counts', quasipoisson: 'quasi-Poisson counts (overdispersed)', negbin: 'negative binomial counts (overdispersed)',
+  binomial: 'binomial proportions (successes out of trials)', quasibinomial: 'quasi-binomial proportions (overdispersed)', bernoulli: 'pass/fail (Bernoulli)',
+};
 
-/** The noise model with this id (default normal). */
-export function noiseModel(id = 'normal') {
-  const m = NOISE_MODELS[id];
-  if (!m) throw new Error(`unknown noise model "${id}" (known: ${Object.keys(NOISE_MODELS).join(', ')})`);
-  return m;
+/**
+ * A generalised linear model (glm.js) for a distribution and link. Rows of the response table
+ * carry trials (binomial) and exposure (counts: the log of it is the offset); y is the count of
+ * successes, fitted as a proportion of the trials.
+ */
+function glmNoise(id, link) {
+  const distribution = id === 'bernoulli' ? 'binomial' : id;
+  const lk = link ?? canonicalLink(distribution);
+  const binom = !DISTRIBUTIONS[distribution].counts;
+  return Object.freeze({
+    id, label: LABELS[id], link: { ...LINKS[lk] }, distribution,
+    prepare(rows) {
+      if (binom) {
+        const trials = rows.map(r => (id === 'bernoulli' ? 1 : r.trials));
+        if (trials.some(t => !(t >= 1))) throw new Error('a binomial response needs the number of trials for every run');
+        return { y: rows.map((r, i) => r.y / trials[i]), weights: trials };
+      }
+      const offset = rows.map(r => Math.log(r.exposure ?? 1));
+      return { y: rows.map(r => r.y), ...(offset.some(v => v !== 0) ? { offset } : {}) };
+    },
+    fit: (mm, y, opts = {}) => fitGLM(mm, y, { distribution, link: lk, weights: opts.weights, offset: opts.offset, firth: opts.firth, theta: opts.theta }),
+    predict: (fit, X, opts) => glmPredict(fit, X, opts),
+    tests: (fit, type = 1) => glmTests(fit, type),
+    residuals: (fit) => ({ response: fit.residuals, standardised: fit.rstandard, studentised: fit.rstudent, pearson: fit.pearson, deviance: fit.devianceResiduals }),
+    compare: (big, small) => glmCompare(big, small),
+    loglik: (fit) => ({ loglik: fit.loglik, k: fit.k }),
+    weights: (X, { mean, trials, theta } = {}) => (mean ? glmWeights(distribution, lk, mean, { trials, theta }) : null),
+    capabilities: Object.freeze({ lackOfFit: false, boxCox: false, lenth: false, mixed: false }),
+  });
 }
 
-/** The noise model of a study's response: its distribution, normal unless it says otherwise. */
+export const NOISE_MODELS = Object.freeze({ normal, ...Object.fromEntries(['poisson', 'quasipoisson', 'negbin', 'binomial', 'quasibinomial', 'bernoulli'].map(id => [id, glmNoise(id)])) });
+
+/** The noise model with this id (default normal), with a link other than the canonical one. */
+export function noiseModel(id = 'normal', { link } = {}) {
+  const m = NOISE_MODELS[id];
+  if (!m) throw new Error(`unknown noise model "${id}" (known: ${Object.keys(NOISE_MODELS).join(', ')})`);
+  return id === 'normal' || !link || link === m.link.name ? m : glmNoise(id, link);
+}
+
+/** The noise model of a study's response: its distribution and link, normal unless it says otherwise. */
 export function noiseModelOf(study, responseId) {
   const r = study.responses.find(x => x.id === responseId);
-  return noiseModel(r?.distribution ?? 'normal');
+  return noiseModel(r?.distribution ?? 'normal', { link: r?.link });
 }
 
 /** The noise model a fit was made with (fits made before the interface are normal). */
-export const noiseOf = (fit) => noiseModel(fit?.noise ?? 'normal');
+export const noiseOf = (fit) => noiseModel(fit?.noise ?? 'normal', { link: fit?.link });

@@ -10,8 +10,10 @@ Books for learning and reference, and the papers behind specific methods in aiki
   (1978), p. 379.)
 - Cornell, J. A. (2002). *Experiments with Mixtures: Designs, Models, and the Analysis of Mixture
   Data*, 3rd ed. Wiley. (The yarn data of the [mixture analysis](designs-mixture.md#analysis).)
+- Agresti, A. (2013). *Categorical Data Analysis*, 3rd ed. Wiley.
 - Finney, D. J. (1978). *Statistical Method in Biological Assay*, 3rd ed. Griffin. (Relative
   potency and parallel-line assays; see [dose–response](dose-response.md#relative-potency).)
+- McCullagh, P. & Nelder, J. A. (1989). *Generalized Linear Models*, 2nd ed. Chapman & Hall.
 - Montgomery, D. C. (2017). *Design and Analysis of Experiments*, 9th ed. Wiley. (The
   filtration-rate data of the [robust-design example](optimisation.md#an-example) are its
   example 6.2.)
@@ -22,6 +24,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Atkinson, A. C., Donev, A. N. & Tobias, R. D. (2007). *Optimum Experimental Designs, with SAS*.
   Oxford University Press.
 - Goos, P. & Jones, B. (2011). *Optimal Design of Experiments: A Case Study Approach*. Wiley.
+- Venables, W. N. & Ripley, B. D. (2002). *Modern Applied Statistics with S*, 4th ed. Springer.
+  (The negative binomial fit of `MASS::glm.nb`, and profile intervals.)
 - Santner, T. J., Williams, B. J. & Notz, W. I. (2018). *The Design and Analysis of Computer
   Experiments*, 2nd ed. Springer.
 - Cano, E. L., Moguerza, J. M. & Redchuk, A. (2012). *Six Sigma with R*. Springer. (The R package
@@ -43,9 +47,12 @@ Books for learning and reference, and the papers behind specific methods in aiki
   155–159.
 - Derringer, G. & Suich, R. (1980). Simultaneous optimization of several response variables.
   *Journal of Quality Technology* 12, 214–219.
+- Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika* 80, 27–38.
 - Fries, A. & Hunter, W. G. (1980). Minimum aberration 2^(k−p) designs. *Technometrics* 22, 601–608.
 - Goos, P. & Vandebroek, M. (2003). D-optimal split-plot designs with given numbers and sizes of
   whole plots. *Technometrics* 45, 235–245.
+- Heinze, G. & Schemper, M. (2002). A solution to the problem of separation in logistic regression.
+  *Statistics in Medicine* 21, 2409–2419.
 - Jansen, M. J. W. (1999). Analysis of variance designs for model output. *Computer Physics
   Communications* 117, 35–43.
 - Jones, B. & Nachtsheim, C. J. (2009). Split-plot designs: what, why, and how. *Journal of Quality
@@ -56,6 +63,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   categorical factors. *Journal of Quality Technology* 45, 121–129.
 - Kenward, M. G. & Roger, J. H. (1997). Small sample inference for fixed effects from restricted
   maximum likelihood. *Biometrics* 53, 983–997.
+- Kosmidis, I. & Firth, D. (2021). Jeffreys-prior penalty, finiteness and shrinkage in
+  binomial-response generalized linear models. *Biometrika* 108, 71–82. (brglm2, which aikidoe's
+  Firth estimates are checked against.)
 - Lenth, R. V. (1989). Quick and easy analysis of unreplicated factorials. *Technometrics* 31,
   469–473.
 - Lin, D. K. J. & Tu, W. (1995). Dual response surface optimization. *Journal of Quality
@@ -72,6 +82,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   optimal experimental designs. *Technometrics* 37, 60–69.
 - Morris, M. D. & Mitchell, T. J. (1995). Exploratory designs for computational experiments.
   *Journal of Statistical Planning and Inference* 43, 381–402.
+- Nelder, J. A. & Wedderburn, R. W. M. (1972). Generalized linear models. *Journal of the Royal
+  Statistical Society A* 135, 370–384.
 - Piepel, G. F. (1982). Measuring component effects in constrained mixture experiments.
   *Technometrics* 24, 29–39.
 - Plackett, R. L. & Burman, J. P. (1946). The design of optimum multifactorial experiments.

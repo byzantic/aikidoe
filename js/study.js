@@ -33,17 +33,23 @@ const ID = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const RUN_KINDS = ['factorial', 'fraction', 'axial', 'centre', 'confirm', 'augment', 'optimal', 'space-filling', 'other'];
 const GOALS = ['none', 'maximize', 'minimize', 'target', 'range'];
 const LEVELS = ['lot', 'run', 'wholePlot', 'wafer', 'site'];
+// a response's distribution (issue #64) and the links each takes (the first is the default)
+export const DISTRIBUTIONS = {
+  normal: ['identity'], poisson: ['log', 'identity', 'sqrt'], quasipoisson: ['log', 'identity', 'sqrt'], negbin: ['log', 'identity', 'sqrt'],
+  binomial: ['logit', 'probit', 'cloglog'], quasibinomial: ['logit', 'probit', 'cloglog'], bernoulli: ['logit', 'probit', 'cloglog'],
+};
+const COUNTS = ['poisson', 'quasipoisson', 'negbin'], PROPORTIONS = ['binomial', 'quasibinomial'];
 const TRANSFORMS = ['none', 'log'];
 
 const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
-  response: ['id', 'name', 'units', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
+  response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
   design: ['kind', 'params', 'randomisation', 'runs'],
   run: ['run', 'order', 'wholePlot', 'block', 'kind', 'settings'],
-  observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'operator', 'repeat', 'note'],
+  observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'trials', 'exposure', 'operator', 'repeat', 'note'],
   sites: ['scheme', 'diameter', 'positions'],
   position: ['id', 'x', 'y'],
   stage: ['stage', 'runs', 'date', 'note', 'params'],
@@ -290,6 +296,26 @@ function normResponse(r, i, errors) {
   if (typeof r.id !== 'string' || !ID.test(r.id)) errors.push(`${path}.id: must be an identifier, got ${JSON.stringify(r.id)}`);
   const out = { id: r.id, name: r.name ?? r.id };
   if (r.units !== undefined) out.units = String(r.units);
+  // the noise model (issue #64): normal unless counts or proportions say otherwise
+  if (r.distribution !== undefined && r.distribution !== 'normal') {
+    if (!DISTRIBUTIONS[r.distribution]) errors.push(`${path}.distribution: must be one of ${Object.keys(DISTRIBUTIONS).join(', ')}`);
+    else {
+      out.distribution = r.distribution;
+      if (r.link !== undefined) {
+        if (!DISTRIBUTIONS[r.distribution].includes(r.link)) errors.push(`${path}.link: the ${r.distribution} distribution takes ${DISTRIBUTIONS[r.distribution].join(', ')}`);
+        else if (r.link !== DISTRIBUTIONS[r.distribution][0]) out.link = r.link;
+      }
+      if (r.trials !== undefined) {
+        if (!PROPORTIONS.includes(r.distribution)) errors.push(`${path}.trials: only for a binomial response (successes out of trials)`);
+        else if (!(Number.isInteger(r.trials) && r.trials >= 1)) errors.push(`${path}.trials: must be a whole number ≥ 1`);
+        else out.trials = r.trials;
+      }
+      if (r.derived !== undefined || (r.levels !== undefined && (r.levels.length !== 1 || r.levels[0] !== 'run'))) errors.push(`${path}: a ${r.distribution} response is one count or proportion per run (no derived values or readings within runs)`);
+    }
+  } else {
+    if (r.link !== undefined && r.link !== 'identity') errors.push(`${path}.link: a normal response has the identity link; set a distribution for another`);
+    if (r.trials !== undefined) errors.push(`${path}.trials: only for a binomial response (set distribution: "binomial")`);
+  }
   out.goal = r.goal ?? 'none';
   if (!GOALS.includes(out.goal)) errors.push(`${path}.goal: must be one of ${GOALS.join(', ')}`);
   for (const k of ['target', 'lower', 'upper']) if (r[k] !== undefined) { if (!isNum(r[k])) errors.push(`${path}.${k}: must be a number`); out[k] = r[k]; }
@@ -444,6 +470,18 @@ function normObservations(obs, design, responses, errors) {
     if (!(o.value === null || isNum(o.value))) errors.push(`${path}.value: must be a number or null (missing)`);
     for (const k of ['lot', 'wafer', 'site', 'slot', 'operator']) if (o[k] !== undefined && !isLabel(o[k])) errors.push(`${path}.${k}: must be a number or string`);
     if (o.repeat !== undefined && !Number.isInteger(o.repeat)) errors.push(`${path}.repeat: must be an integer`);
+    // counts and proportions (issue #64)
+    const r = responses.find(x => x.id === o.response), dist = r?.distribution ?? 'normal';
+    if (o.trials !== undefined && !(PROPORTIONS.includes(dist) && Number.isInteger(o.trials) && o.trials >= 1)) errors.push(`${path}.trials: a whole number ≥ 1, for a binomial response only`);
+    if (o.exposure !== undefined && !(COUNTS.includes(dist) && isNum(o.exposure) && o.exposure > 0 && (r.link ?? 'log') === 'log')) errors.push(`${path}.exposure: a positive number, for a count response with the log link only`);
+    if (isNum(o.value) && dist !== 'normal') {
+      const n = o.trials ?? r.trials;
+      if (dist === 'poisson' || dist === 'negbin') { if (!(Number.isInteger(o.value) && o.value >= 0)) errors.push(`${path}.value: a ${dist} response is a count (a whole number ≥ 0)`); }
+      else if (dist === 'quasipoisson') { if (!(o.value >= 0)) errors.push(`${path}.value: must be ≥ 0`); }
+      else if (dist === 'bernoulli') { if (o.value !== 0 && o.value !== 1) errors.push(`${path}.value: a pass/fail (bernoulli) response is 0 or 1`); }
+      else if (n === undefined) errors.push(`${path}: a binomial response needs the number of trials (the response's trials, or the observation's)`);
+      else if (!(Number.isInteger(o.value) && o.value >= 0 && o.value <= n)) errors.push(`${path}.value: successes must be a whole number from 0 to the ${n} trials`);
+    }
     const out = {};
     for (const k of KEYS.observation) if (o[k] !== undefined) out[k] = o[k];
     return out;

@@ -55,6 +55,11 @@ process factors crossed with the blends; Scheffé models in pseudo-components wi
 ANOVA, ternary plots, Cox traces and blend optimisation ([manual](docs/manual/designs-mixture.md);
 `doe init --mixture`, `doe design --mixture`).
 
+Counts and proportions — colonies, cells, defects; germination, viability, pass/fail: Poisson,
+negative binomial and binomial generalised linear models, with exposure and trials, rate and odds
+ratios, analysis of deviance, and checks for overdispersion and separation (Firth's method)
+([manual](docs/manual/analysis.md#counts-and-proportions); `doe init --response count@poisson`).
+
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,
 hard-to-change ones, groups of runs, curvature, constraints, the effect that matters, budget — one
 question at a time with why it matters, then suggests a staged plan, ranks the designs that fit,

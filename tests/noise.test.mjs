@@ -19,7 +19,7 @@ section('the interface');
   check('every noise model has the methods, a link and capabilities', Object.values(NOISE_MODELS).every(m => need.every(k => typeof m[k] === 'function')
     && ['fun', 'inv', 'deriv'].every(k => typeof m.link[k] === 'function') && typeof m.capabilities === 'object'));
   check('normal: identity link', normal.link.name === 'identity' && normal.link.inv(3.5) === 3.5 && normal.link.deriv(1) === 1);
-  check('normal is the default, and an unknown noise model is refused', noiseModel() === normal && noiseOf({}) === normal && refuses(() => noiseModel('poisson')));
+  check('normal is the default, and an unknown noise model is refused', noiseModel() === normal && noiseOf({}) === normal && refuses(() => noiseModel('gamma')));
 }
 
 // a replicated 2³ with a known response
@@ -59,8 +59,8 @@ section('model comparison and AICc');
 
 section('normal-theory tools refuse other noise models');
 {
-  const fit = { ...fitModel(study, 'y ~ A*B*C'), noise: 'poisson' };
-  check('lack of fit, Box–Cox and Lenth effects name the assumption', [() => lackOfFit(fit), () => boxCox(fit), () => twoLevelEffects(fit)].every(f => {
+  const fit = { ...fitModel(study, 'y ~ A*B*C'), noise: 'gamma' };
+  check('lack of fit, Box–Cox and Lenth effects name the assumption (for any noise model but normal)', [() => lackOfFit(fit), () => boxCox(fit), () => twoLevelEffects(fit)].every(f => {
     try { f(); return false; } catch (e) { return /normal noise/.test(e.message); } }));
   check('and the façade refuses an unknown noise model', refuses(() => predict(fit, [{ A: 0, B: 0, C: 0 }])) && refuses(() => anova(fit)));
 }

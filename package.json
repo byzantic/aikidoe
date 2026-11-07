@@ -10,7 +10,7 @@
     "fixtures": "node tools/regen-fixtures.mjs",
     "fixtures:check": "node tools/regen-fixtures.mjs --out .fixtures-fresh && node tools/check-fixtures.mjs --fresh .fixtures-fresh",
     "ui": "node tools/serve.mjs",
-    "test:ui": "node tests/ui/smoke.mjs && node tests/ui/learn.mjs && node tests/ui/guide.mjs"
+    "test:ui": "node tests/ui/smoke.mjs && node tests/ui/learn.mjs && node tests/ui/guide.mjs && node tests/ui/counts.mjs"
   },
   "engines": {
     "node": ">=20"
