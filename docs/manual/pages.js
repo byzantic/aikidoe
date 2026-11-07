@@ -16,6 +16,7 @@ export const PAGES = [
   { id: 'optimisation', title: 'Optimisation and robust design', part: 'Analysis' },
   { id: 'process', title: 'Process topics: wafers, sites, gauges', part: 'Process' },
   { id: 'plates', title: 'Microplates', part: 'Process' },
+  { id: 'dose-response', title: 'Dose–response', part: 'Analysis' },
   { id: 'simulation', title: 'Simulation and yield', part: 'Simulation' },
   { id: 'exercises', title: 'Exercises and virtual processes', part: 'Learning' },
   { id: 'example-screening', title: 'Worked example: a 2⁵⁻¹ screening experiment', part: 'Worked examples' },

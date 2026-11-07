@@ -27,6 +27,17 @@ Commands
        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
        [--whole-plots W] [--eta η (optimal; σ²_wp/σ², default 1)] [--no-split-plot]
        [--sheet FILE.csv] [--html FILE.html]
+  design STUDY --dose [FACTOR] [--curve FACTOR] (--top T --dilution D --doses n | --at 0,0.1,1,…
+                | --optimal --guess "b=1,c=0,d=100,e=1" --range LO:HI --runs N [--criterion D|EC50] [--robust F])
+       [--zeros n] [--replicates r] [--seed S] [--stage]     dose–response doses for each curve level;
+       --stage adds the doses to an existing dose design (e.g. around the EC50 of a range-finding stage)
+  dose STUDY [RESPONSE] [--model LL.4|LL.3|LL.5|W1.4|W2.4] [--parallel | --separate b,c,d,e]
+       [--reference L --test L] [--ed 10,50,90] [--interval delta|log] [--var-power θ]
+       [--predict y1,y2,… [--readings m]] [--limits]
+       fit dose–response curves: parameters, effective doses, relative potency and parallelism,
+       doses for sample responses (standard curve), LOD/LOQ
+  dose STUDY --quality --guess "b=…,c=…,d=…,e=…" [--sigma s] [--power RATIO]   before results: how well
+       the design's doses estimate log EC50 at the guess, and the power for a potency ratio
   sheet STUDY  [--csv FILE] [--html FILE] [--delimiter ;]      (default: CSV to stdout)
   import STUDY RESULTS.csv  [--mode replace|append] [--dry-run] [--force]
        [--grid --plate N --response R]   a plate reader's grid export (rows A…, columns 1…) for one plate
@@ -86,6 +97,7 @@ Commands
   exercise run STUDY                     self-study: results for the runs of the design
   exercise run KEY SHEET.csv [--out RESULTS.csv]   class mode: results for a student's run sheet
   exercise answer STUDY [--active A,B] [--effect "A=est:lo:hi" …] [--best "A=…,B=…"] [--prediction v]
+       [--ec50 est:lo:hi] [--potency est:lo:hi]   (dose topic)
   exercise grade STUDY | exercise grade KEY STUDY   score, feedback, the model answer and the truth
        (without answers, the study's data are analysed the standard way and that is graded)
   exercise topics                        the topics, difficulties and scenarios
@@ -113,7 +125,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

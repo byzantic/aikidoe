@@ -8,6 +8,8 @@ import { splitPlotFull } from '../design/splitplot.js';
 import { ccd } from '../design/rsm.js';
 import { appendStage } from '../design/augment.js';
 import { layoutPlates } from '../design/plate-layout.js';
+import { doseDesign, addDoseStage, doseData } from '../design/dose-design.js';
+import { fitDose, effectiveDose, relativePotency, dilutionSeries, potencyPower, MODELS as DOSE } from '../model/dose.js';
 import { foldover } from '../design/augment.js';
 import { fitModel, predict } from '../model/ols.js';
 import { fitMixedModel } from '../model/mixed.js';
@@ -38,6 +40,9 @@ export const TOPICS = {
     nuisance: (sigma) => ({ reset: 0.8 * sigma }), questions: ['active', 'effects'] },
   // runs in the wells of a 96-well plate (issue #63): the outer ring and corners read low, a bow and
   // a gradient across the columns, and each row has its own offset (a multichannel pipette)
+  // dose–response (issue #65): two curves, a reference and a test; the EC50 of the test and its
+  // potency relative to the reference
+  dose: { title: 'Dose–response: EC50 and relative potency', lesson: 15, dose: true, k: () => 2, budget: 48, questions: ['ec50', 'potency'] },
   plate: { title: 'Plates: where a sample sits matters', lesson: 14, k: (d) => (d === 'easy' ? 3 : 4), budget: 48, active: (g) => 2 + g.int(2), interaction: 0.5,
     plate: true, nuisance: (sigma) => ({ plate: { edge: -2 * sigma, corner: -1 * sigma, col: 0.6 * sigma, colQuad: 1.2 * sigma, rowSd: 0.8 * sigma } }),
     questions: ['active', 'effects'] },
@@ -80,16 +85,17 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   const g0 = rng(seed ^ 0x5eed);
   // plate scenarios belong to the plate topic (and only they have plates), so the other topics'
   // choice of scenario — and their exercises for a given seed — are as before
-  const pool0 = Object.keys(SCENARIOS).filter(id => !!SCENARIOS[id].plate === !!T.plate);
+  const kindOf = (x) => (x.dose ? 'dose' : x.plate ? 'plate' : null);
+  const pool0 = Object.keys(SCENARIOS).filter(id => kindOf(SCENARIOS[id]) === kindOf(T));
   const scId = scenario ?? pool0[g0.int(pool0.length)];
   const sc = SCENARIOS[scId];
   if (!sc) throw new Error(`unknown scenario "${scId}"`);
-  if (!!sc.plate !== !!T.plate) throw new Error(T.plate ? `the ${topic} topic needs a plate scenario (${pool0.join(', ')})` : `scenario "${scId}" is a plate assay: use it with the plate topic`);
+  if (kindOf(sc) !== kindOf(T)) throw new Error(kindOf(T) ? `the ${topic} topic needs a ${kindOf(T)} scenario (${pool0.join(', ')})` : `scenario "${scId}" belongs to the ${kindOf(sc)} topic`);
   const k = T.k(difficulty);
   // factors: the hard-to-change one when the topic needs it; continuous for response surfaces
   let pool = sc.factors.filter(f => !f.levels && !f.htc);
-  if (topic !== 'rsm' && topic !== 'split-plot' && g0.random() < 0.5) pool = [...pool, sc.factors.find(f => f.levels)];
-  let chosen = pick(g0, pool, k - (T.htc ? 1 : 0));
+  if (topic !== 'rsm' && topic !== 'split-plot' && !T.dose && g0.random() < 0.5) pool = [...pool, sc.factors.find(f => f.levels)];
+  let chosen = T.dose ? sc.factors : pick(g0, pool, k - (T.htc ? 1 : 0));
   if (T.htc) chosen = [sc.factors.find(f => f.htc), ...chosen];
   const factors = createStudy({ name: 'x', factors: chosen.map(f => ({ ...f, htc: !!(T.htc && f.htc) })) }).factors;
   const response = { ...sc.response };
@@ -100,10 +106,11 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   let last = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const g = rng((seed * 2654435761 + attempt * 97 + 13) >>> 0);
-    const truth = makeTruth(topic, difficulty, g, factors, response);
-    const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, sigma: response.sigma, truth, decimals: response.decimals }],
+    const truth = T.dose ? { intercept: 0, terms: {} } : makeTruth(topic, difficulty, g, factors, response);
+    const curve = T.dose ? doseTruth(sc.dose, factors, g, difficulty) : null;
+    const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, sigma: response.sigma, truth, decimals: response.decimals, ...(curve ? { curve } : {}) }],
       nuisance: T.nuisance ? T.nuisance(response.sigma) : {}, ...(sc.plate ? { controls: sc.plate.truth } : {}) };
-    const questions = makeQuestions(T, factors, response, g);
+    const questions = makeQuestions(T.dose ? { ...T, refLabel: factors[1].levels[0], testLabel: factors[1].levels[1] } : T, factors, response, g);
     const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt });
     const ref = referenceStrategy(ex, ex.truth);
     const grade = gradeAnswers(ex, ex.truth, ref.answers, { runs: ref.study.design.runs.length });
@@ -117,11 +124,24 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   throw new Error(`could not generate a solvable ${topic} exercise for seed ${seed} (last: score ${last.grade.score}, power ${last.power.toFixed(2)})`);
 }
 
+/** The true curves of a dose exercise: reference EC50 and slope drawn from the scenario's ranges, the
+ * test's potency 1.5–3.5 × (more or less potent; harder: closer to 1). */
+function doseTruth(D, factors, g, difficulty) {
+  const lu = ([a, b]) => Math.exp(Math.log(a) + g.random() * (Math.log(b) - Math.log(a)));
+  const levels = factors.find(f => f.id === D.curve).levels;
+  const lo = { easy: 2, medium: 1.6, hard: 1.35 }[difficulty] ?? 1.6;
+  const ratio = lu([lo, 3.5]) ** (g.random() < 0.5 ? 1 : -1);
+  const e = lu(D.ec50), b = D.slope[0] + g.random() * (D.slope[1] - D.slope[0]);
+  return { model: 'LL.4', dose: D.factor, by: D.curve, params: { b, c: D.c, d: D.d, e }, levels: { [levels[0]]: { e }, [levels[1]]: { e: e / ratio } } };
+}
+
 function makeQuestions(T, factors, response, g) {
   const goal = response.goal === 'minimize' ? 'minimise' : 'maximise';
   const qs = [];
   for (const q of T.questions) {
     if (q === 'active') qs.push({ id: 'active', kind: 'active', text: `Which factors affect ${response.name.toLowerCase()} (alone or through an interaction)?` });
+    if (q === 'ec50') qs.push({ id: 'ec50', kind: 'ec50', text: `What is the EC50 of the ${T.testLabel ?? 'test'} (the dose giving half the full effect), with a 95 % interval?` });
+    if (q === 'potency') qs.push({ id: 'potency', kind: 'potency', text: `How potent is the ${T.testLabel ?? 'test'} relative to the ${T.refLabel ?? 'reference'} (EC50 of the ${T.refLabel ?? 'reference'} ÷ EC50 of the ${T.testLabel ?? 'test'}), with a 95 % interval?` });
     if (q === 'effects') qs.push({ id: 'effects', kind: 'effects', text: `For each factor that matters, estimate its effect (low → high) on ${response.name.toLowerCase()}, with a 95 % interval.` });
     if (q === 'best') qs.push({ id: 'best', kind: 'best', goal: response.goal, text: `Which settings ${goal} ${response.name.toLowerCase()}, within the ranges?` });
     if (q === 'prediction') {
@@ -209,6 +229,7 @@ const MAX = 'maximize';
 /** Answers from a study's data by the standard analysis for the topic. */
 export function deriveAnswers(ex, study, { alpha = 0.05 } = {}) {
   const T = TOPICS[ex.topic], r = study.responses[0].id;
+  if (T.dose) return doseAnswers(ex, study);
   const formula = T.curvature ? `${r} ~ quadratic` : (ex.topic === 'screening' || ex.topic === 'fraction') ? `${r} ~ main` : `${r} ~ 2fi`;
   const mixed = study.design.runs.some(x => x.wholePlot !== undefined);
   const fit = mixed ? fitMixedModel(study, formula) : fitModel(study, formula);
@@ -271,6 +292,7 @@ export function referenceStrategy(ex, truth = truthOf(ex)) {
       break;
     }
     case 'rsm': st = make(ccd(k), `rotatable central composite design (${ccd(k).X.length} runs); fit the full quadratic; maximise within the ranges`); break;
+    case 'dose': return doseReference(ex, truth);
     case 'plate': {
       const reps = ex.budget / 2 ** k;
       st = make(fullFactorial(levels, { replicates: reps, continuous: cont }), `2^${k} full factorial, ${reps} replicates (${ex.budget} runs)`);
@@ -319,6 +341,58 @@ export function ofatStrategy(ex, truth = truthOf(ex)) {
   return { strategy: 'one factor at a time', steps: [`baseline at the low settings and each factor raised alone, ${reps} times (${runs.length} runs, in order)`], study: st, answers: ans };
 }
 
+// ---------------------------------------------------------------- dose–response exercises
+
+const doseRolesOf = (ex) => { const fs = ex.study.factors; return { dose: fs.find(f => f.type === 'continuous'), curve: fs.find(f => f.type === 'categorical') }; };
+
+/** The standard dose–response analysis: parallel LL.4 curves, EC50 of the test and its potency (log-scale intervals). */
+export function doseAnswers(ex, study) {
+  const { curve } = doseRolesOf(ex), [ref, test] = curve.levels.map(String);
+  const data = doseData(study, { dose: doseRolesOf(ex).dose.id, curve: curve.id });
+  const fit = fitDose(data, { separate: 'parallel' });
+  const e = effectiveDose(fit, 50, { curve: test, interval: 'log' }), p = relativePotency(fit, { test, reference: ref, interval: 'log' });
+  return { active: [], effects: {}, ec50: { estimate: e.estimate, lower: e.lower, upper: e.upper }, potency: { estimate: p.estimate, lower: p.lower, upper: p.upper }, runs: study.design.runs.length, formula: 'parallel LL.4' };
+}
+
+/**
+ * The reference path for a dose exercise: a range-finding stage (zero and six doses a decade apart
+ * from the top, once per curve), then eight log-spaced doses over 2.5 decades around the EC50s it
+ * found, twice per curve; parallel LL.4 curves.
+ */
+function doseReference(ex, truth) {
+  const { dose, curve } = doseRolesOf(ex), top = dose.high;
+  let st = createStudy({ ...ex.study, design: doseDesign(ex.study, { dose: dose.id, curve: curve.id, doses: dilutionSeries({ top, dilution: 10, doses: 6, zeros: 1 }), replicates: 1, seed: ex.seed, params: { method: 'range-finding' } }) });
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  let centre = top / 100;
+  try { const f = fitDose(doseData(st, { dose: dose.id, curve: curve.id }), { separate: 'parallel' }); const es = f.P.map(P => P.e); const m = Math.exp(es.reduce((a, v) => a + Math.log(v), 0) / es.length); if (m > 0 && Number.isFinite(m)) centre = m; } catch { /* keep the middle */ }
+  const ds = Array.from({ length: 8 }, (_, i) => +Math.min(top, centre * 10 ** (-1.25 + 2.5 * i / 7)).toPrecision(4));
+  st = addDoseStage(st, { doses: [...new Set(ds)], replicates: 2, seed: ex.seed, params: { method: 'around the EC50' } });
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  const steps = [`range-finding: zero and 6 doses a decade apart from ${top} ${dose.units ?? ''}, once per ${curve.id} (14 runs)`.replace(/ +/g, ' '),
+    `8 doses log-spaced over 2.5 decades around the EC50s found (${ds[0].toPrecision(2)} … ${ds.at(-1).toPrecision(2)}), twice per ${curve.id} (32 runs)`,
+    'parallel four-parameter log-logistic curves (only the EC50 differs); EC50 and relative potency with intervals on the log scale'];
+  return { strategy: 'reference', steps, study: st, answers: doseAnswers(ex, st) };
+}
+
+/** Doses spaced evenly on a linear scale, 0 … top, 8 doses × 3 per curve: the slope is usually missed. */
+export function linearDoseStrategy(ex, truth = truthOf(ex)) {
+  const { dose, curve } = doseRolesOf(ex);
+  const ds = Array.from({ length: 8 }, (_, i) => +(dose.high * i / 7).toPrecision(6));
+  let st = createStudy({ ...ex.study, design: doseDesign(ex.study, { dose: dose.id, curve: curve.id, doses: ds, replicates: 3, seed: ex.seed, params: { method: 'linear spacing' } }) });
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  let answers;
+  try { answers = doseAnswers(ex, st); } catch { answers = { active: [], effects: {}, runs: st.design.runs.length }; }
+  return { strategy: 'evenly spaced doses', steps: ['8 doses evenly spaced from 0 to the top dose, 3 per curve (48 runs)'], study: st, answers };
+}
+
+/** The strategy a lesson compares with: one factor at a time, the tidy plate layout, or evenly spaced doses. */
+export function comparisonStrategy(ex, truth = truthOf(ex)) {
+  const T = TOPICS[ex.topic];
+  if (T.dose) return linearDoseStrategy(ex, truth);
+  if (T.plate) return tidyPlateStrategy(ex, truth);
+  return ofatStrategy(ex, truth);
+}
+
 /**
  * The tidy plate layout (plate topic): the reference design, but laid out the way plates are often
  * filled by hand — conditions in standard order, replicates side by side, row by row — and
@@ -333,6 +407,13 @@ export function tidyPlateStrategy(ex, truth = truthOf(ex)) {
 }
 
 function referencePower(ex, truth, study) {
+  if (TOPICS[ex.topic].dose) {
+    // the potency question: the power of the reference's last stage for the true ratio
+    const resp = truth.process.responses[0], c = resp.curve, [ref, test] = Object.keys(c.levels);
+    const D = study.factors.find(f => f.id === c.dose), lv = study.factors.find(f => f.id === c.by).levels[0];
+    const doses = study.design.runs.filter(x => String(x.settings[c.by]) === String(lv)).map(x => x.settings[D.id]);
+    try { return potencyPower(doses, { guess: { ...c.params, e: c.levels[ref].e }, sigma: resp.sigma, ratio: c.levels[ref].e / c.levels[test].e }).power; } catch { return 0; }
+  }
   // each true term the questions are about, at its own size against the run-to-run σ, in the
   // reference design and model: the smallest power. Response surfaces: the curvature terms (the
   // optimum's location rests on them); otherwise the main effects and interactions.
@@ -358,6 +439,10 @@ function referencePower(ex, truth, study) {
 /** The true active factors, effects (low → high) and optimum of an exercise. */
 export function trueFacts(ex, truth = truthOf(ex)) {
   const resp = truth.process.responses[0], proc = { ...truth.process, factors: ex.study.factors };
+  if (resp.curve) {
+    const [ref, test] = Object.keys(resp.curve.levels);
+    return { active: [], effects: {}, sigma: resp.sigma, ec50: resp.curve.levels[test].e, potency: resp.curve.levels[ref].e / resp.curve.levels[test].e, reference: ref, test };
+  }
   const active = [...new Set(Object.keys(resp.truth.terms).flatMap(t => t.replace(/I\((\w+)\^2\)/g, '$1').split(':')))];
   const effects = Object.fromEntries(ex.study.factors.filter(f => resp.truth.terms[f.id] !== undefined).map(f => [f.id, 2 * resp.truth.terms[f.id]]));
   const mu = (s) => trueMean(proc, resp.id, s);
@@ -374,7 +459,7 @@ export function trueFacts(ex, truth = truthOf(ex)) {
  */
 export function gradeAnswers(ex, truth, answers, { runs } = {}) {
   const F = trueFacts(ex, truth), parts = [];
-  const W = { active: 40, effects: 25, best: 25, prediction: 10 };
+  const W = { active: 40, effects: 25, best: 25, prediction: 10, ec50: 50, potency: 50 };
   const qs = ex.questions.filter(q => W[q.kind]);
   const total = qs.reduce((a, q) => a + W[q.kind], 0);
   for (const q of qs) {
@@ -402,6 +487,13 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
       const regret = Math.abs(F.bestValue - v) / span;
       const sc = regret <= 0.05 ? 1 : regret >= 0.5 ? 0 : 1 - (regret - 0.05) / 0.45;
       parts.push({ id: 'best', max, score: max * sc, note: `true value there ${v.toPrecision(4)}, true optimum ${F.bestValue.toPrecision(4)} (regret ${(100 * regret).toFixed(1)} % of the range)` });
+    } else if (q.kind === 'ec50' || q.kind === 'potency') {
+      // half for an interval covering the truth, half for accuracy: within ×/÷ 1.25 full, ×/÷ 2 none
+      const t = F[q.kind], a = answers[q.kind];
+      if (!a || !Number.isFinite(a.estimate)) { parts.push({ id: q.kind, max, score: 0, note: 'no estimate given' }); continue; }
+      const inside = a.lower <= t && t <= a.upper, err = Math.abs(Math.log(a.estimate / t));
+      const acc = err <= Math.log(1.25) ? 1 : err >= Math.log(2) ? 0 : 1 - (err - Math.log(1.25)) / (Math.log(2) - Math.log(1.25));
+      parts.push({ id: q.kind, max, score: max * (0.5 * (inside ? 1 : 0) + 0.5 * acc), note: `true ${q.kind === 'ec50' ? 'EC50' : 'potency'} ${t.toPrecision(3)}, yours ${a.estimate.toPrecision(3)} [${(a.lower ?? NaN).toPrecision(3)}, ${(a.upper ?? NaN).toPrecision(3)}]${inside ? '' : ' — the interval misses it'}` });
     } else if (q.kind === 'prediction') {
       const t = F.mu(q.settings), a = answers.prediction?.value;
       if (!Number.isFinite(a)) { parts.push({ id: 'prediction', max, score: 0, note: 'no prediction given' }); continue; }
@@ -417,7 +509,7 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
     if (over) score -= 20;
   }
   score = Math.max(0, Math.round(score * 10) / 10);
-  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue } };
+  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue, ...(F.ec50 !== undefined ? { ec50: F.ec50, potency: F.potency } : {}) } };
 }
 
 /** Grade a study: its exercise answers if given, else answers derived by the standard analysis. */

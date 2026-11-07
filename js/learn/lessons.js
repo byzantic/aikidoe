@@ -50,11 +50,18 @@ Run a central composite design, fit the quadratic, find the best settings on the
 
 A **split-plot** design sets the hard-to-change factor once per group of runs (a whole plot) and varies the others within. Choose a split-plot design with enough whole plots (the budget allows six), run it, and look at the mixed model on the Analyse step: the hard-to-change factor is tested against the whole-plot variation.`,
     manual: [M('designs-split-plot', '', 'split-plot designs'), M('analysis', 'mixed-models', 'mixed models')] },
-  { id: 'plate', n: 14, title: 'Plates: where a sample sits matters', topic: 'plate', difficulty: 'medium',
+  { id: 'plate', n: 14, title: 'Plates: where a sample sits matters', topic: 'plate', difficulty: 'medium', compare: true,
     text: `In a 96-well plate not every well is the same. The outer ring evaporates and warms faster, so it reads differently; a multichannel pipette or the reader can leave each row or column a little off; plates differ from one another. Filling a plate the tidy way — each condition in its own row, replicates side by side, controls in the first column — puts those differences straight into the effects.
 
 The design here is the easy part (a replicated full factorial). Lay it out on the plate (Design step → plate layout) with the **balanced** layout: the controls are spread over the plate and the runs placed so that the effects are not entangled with the edge or the row and column gradients. Then run it, and fit on the Analyse step: the model includes the position terms (Edge, Row, Col), and the plate view shows the residuals well by well. Answer, then compare with what the tidy layout would have given.`,
     manual: [M('plates', '', 'microplates'), M('plates', 'layouts', 'plate layouts'), M('concepts', 'randomisation-and-blocking', 'randomisation and blocking')] },
+  { id: 'dose', n: 15, title: 'Dose–response: EC50 and relative potency', topic: 'dose', difficulty: 'medium', compare: true,
+    text: `How much of a compound does it take? A dose–response curve is S-shaped on a log-dose axis: nothing happens at low doses, then the response falls (or rises) over a decade or two, then levels off. The **EC50** — the dose giving half the full effect — sits in the middle of the slope, and only doses *on the slope* tell you where it is. Doses spaced evenly on a linear scale (0, 15, 30 … 100) mostly land on the flat top and miss it.
+
+Two compounds are compared by their **relative potency**: how many times less of the test gives the same effect as the reference, from curves fitted with the same shape (parallel).
+
+Plan the doses on the Design step (dose–response design): start with a wide range-finding series, look at the results, then add a second stage of doses around the EC50. The Analyse step fits the curves; answer with the EC50 of the test and its relative potency, each with an interval.`,
+    manual: [M('dose-response', '', 'dose–response'), M('dose-response', 'choosing-doses', 'choosing doses'), M('dose-response', 'relative-potency', 'relative potency')] },
   { id: 'gauge', n: 11, title: 'Measurement systems: gauge R&R', topic: null,
     text: 'Coming later: is the measurement good enough for the experiment? A gauge study on a virtual gauge.', manual: [M('process', 'gauge-rr', 'gauge R&R')] },
   { id: 'robust', n: 12, title: 'Robust design', topic: null,
@@ -68,7 +75,16 @@ export function hints(lesson, ex, study) {
   const out = [], d = study.design, budget = ex.budget, T = TOPICS[ex.topic];
   const results = d && study.observations.some(o => o.value !== null);
   if (!d) {
-    out.push(`Choose a design of at most ${budget} runs on the Design step${ex.topic === 'screening' ? ' — Recommend, with goal "screen" and the budget, ranks the options' : ''}.`);
+    out.push(T.dose ? `Plan the doses on the Design step (Dose–response design), at most ${budget} runs: a wide range-finding series first, a decade or so apart, leaves room for a second stage.`
+      : `Choose a design of at most ${budget} runs on the Design step${ex.topic === 'screening' ? ' — Recommend, with goal "screen" and the budget, ranks the options' : ''}.`);
+    return out;
+  }
+  if (T.dose) {
+    const n = d.runs.length, stages = d.params?.stages?.length ?? 1;
+    if (d.kind !== 'dose-response') out.push('Use the dose–response design (Design step): doses on a log scale, for each compound.');
+    if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
+    if (results && stages === 1 && n < budget) out.push(`Look at the curves on the Analyse step: are there several doses on the slope? If not, add doses around the EC50 as a second stage (${budget - n} runs left).`);
+    if (results && !out.length) out.push('Analyse the curves, then grade: by your own answers, or by the standard analysis (parallel curves) of your data.');
     return out;
   }
   const n = d.runs.length;

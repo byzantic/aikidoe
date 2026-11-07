@@ -122,4 +122,20 @@ export const SCENARIOS = {
       truth: { live: { mean: 62, sd: 2.5 }, dead: { mean: 3, sd: 0.4 } },
     },
   },
+  // dose–response (issue #65): used by the dose topic only. dose: the dose factor, the curve factor
+  // (reference first), the asymptotes, and the ranges the true slope and reference EC50 are drawn from
+  'compound-potency': {
+    title: 'Compound potency',
+    text: 'A cell-based assay measures how strongly compounds inhibit proliferation. A new analogue has been made, and the chemists want to know how potent it is compared with the reference compound.',
+    response: { id: 'growth', name: 'Growth', units: '% of control', sigma: 4, decimals: 1 },
+    factors: [{ id: 'conc', name: 'Concentration', units: 'µM', low: 0, high: 100 }, { id: 'compound', name: 'Compound', levels: ['reference', 'analogue'] }],
+    dose: { factor: 'conc', curve: 'compound', c: 3, d: 100, slope: [0.8, 2], ec50: [0.02, 2] },
+  },
+  'enzyme-inhibitor': {
+    title: 'Inhibitor batch potency',
+    text: 'An enzyme inhibitor is bought from a new supplier. Before it is used, its potency has to be compared with the qualified batch in the activity assay.',
+    response: { id: 'activity', name: 'Activity', units: '% of uninhibited', sigma: 3, decimals: 1 },
+    factors: [{ id: 'conc', name: 'Inhibitor', units: 'µM', low: 0, high: 10 }, { id: 'batch', name: 'Batch', levels: ['qualified', 'new'] }],
+    dose: { factor: 'conc', curve: 'batch', c: 2, d: 100, slope: [0.8, 1.8], ec50: [0.005, 0.3] },
+  },
 };

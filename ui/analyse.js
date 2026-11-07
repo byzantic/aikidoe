@@ -13,6 +13,7 @@ import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixe
 import { observationsOf, availablePositionTerms, sitePositions } from '../js/model/sites.js';
 import { waferPlot } from './wafer.js';
 import { plateAnalysisPanel } from './plates.js';
+import { doseAnalysis } from './dose.js';
 
 /** A sensible first model for the study's design. */
 
@@ -44,6 +45,9 @@ export function render(ctx) {
   const resp = withData.find(r => r.id === ui.response) ?? withData[0];
   const formula = ui.formulas?.[resp.id] ?? defaultFormula(study, resp.id);
   const set = (patch) => setUI({ analyse: { ...ui, ...patch } });
+  // a dose–response design: the curve fit is the analysis (the linear model on request)
+  if (study.design?.kind === 'dose-response' && !ui.linear) return h('div', {}, doseAnalysis(ctx));
+  const backToDose = study.design?.kind === 'dose-response' ? h('div', { class: 'msg' }, 'A linear model of a dose–response design treats the dose as a straight-line effect. ', h('button', { class: 'btn small', id: 'dose-analysis-back', onclick: () => set({ linear: false }) }, 'back to the dose–response fit')) : null;
   const setFormula = (f) => set({ formulas: { ...(ui.formulas ?? {}), [resp.id]: f } });
   const rhs = formula.includes('~') ? formula.slice(formula.indexOf('~') + 1).trim() : formula;
 
@@ -93,7 +97,7 @@ export function render(ctx) {
   }
   const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
     h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;
-  if (fitErr) return h('div', {}, controls, olsNote, h('div', { class: 'msg error' }, fitErr.message));
+  if (fitErr) return h('div', {}, backToDose, controls, olsNote, h('div', { class: 'msg error' }, fitErr.message));
 
   const notes = [];
   if (fit.rows.some(r => r.n > 1)) notes.push('Repeated observations of a run (wafers, sites, repeats) are averaged: this least-squares fit uses run means. Mixed models for nested measurements come in a later version.');
@@ -170,7 +174,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, controls, olsNote, summary, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  return h('div', {}, backToDose, controls, olsNote, summary, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

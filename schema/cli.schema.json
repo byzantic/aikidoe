@@ -141,6 +141,25 @@
             "const": true
           },
           "command": {
+            "const": "dose"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/dose"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
             "const": "import"
           }
         },
@@ -871,6 +890,254 @@
             }
           },
           "description": "Z′ per plate from the positive and negative controls"
+        }
+      }
+    },
+    "dose": {
+      "type": "object",
+      "anyOf": [
+        {
+          "required": [
+            "model",
+            "parameters",
+            "effectiveDoses"
+          ]
+        },
+        {
+          "required": [
+            "seLogEC50"
+          ]
+        }
+      ],
+      "properties": {
+        "model": {
+          "enum": [
+            "LL.4",
+            "LL.3",
+            "LL.5",
+            "W1.4",
+            "W2.4"
+          ]
+        },
+        "response": {
+          "type": "string"
+        },
+        "dose": {
+          "type": "string"
+        },
+        "curve": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "curves": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "n": {
+          "type": "integer"
+        },
+        "df": {
+          "type": "integer"
+        },
+        "sigma": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rss": {
+          "type": "number"
+        },
+        "converged": {
+          "type": "boolean"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "param",
+              "estimate",
+              "se"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "param": {
+                "type": "string"
+              },
+              "curve": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "estimate": {
+                "type": "number"
+              },
+              "se": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "t": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "p": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "effectiveDoses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "p",
+              "estimate"
+            ],
+            "properties": {
+              "estimate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "se": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lower": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "upper": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "potency": {
+          "type": "object",
+          "required": [
+            "estimate"
+          ],
+          "properties": {
+            "estimate": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "se": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "lower": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "upper": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "description": "ED50 reference ÷ ED50 test from the parallel fit"
+        },
+        "parallelism": {
+          "type": "object",
+          "properties": {
+            "F": {
+              "type": "object"
+            },
+            "slopeRatio": {
+              "type": [
+                "object",
+                "null"
+              ]
+            }
+          }
+        },
+        "inverse": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "y0",
+              "estimate"
+            ]
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "lod": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "loq": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "blank": {
+              "type": "number"
+            },
+            "sigma": {
+              "type": "number"
+            }
+          }
+        },
+        "seLogEC50": {
+          "type": "number",
+          "description": "--quality: se of log EC50 at the guess"
+        },
+        "logdet": {
+          "type": "number"
+        },
+        "power": {
+          "type": "object",
+          "properties": {
+            "power": {
+              "type": "number"
+            },
+            "seLogRatio": {
+              "type": "number"
+            },
+            "detectable": {
+              "type": "number"
+            }
+          }
         }
       }
     },

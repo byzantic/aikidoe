@@ -8,6 +8,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Innovation, and Discovery*, 2nd ed. Wiley. (The reactor data of the
   [screening example](example-screening.md) are from the first edition: Box, Hunter & Hunter
   (1978), p. 379.)
+- Finney, D. J. (1978). *Statistical Method in Biological Assay*, 3rd ed. Griffin. (Relative
+  potency and parallel-line assays; see [dose–response](dose-response.md#relative-potency).)
 - Montgomery, D. C. (2017). *Design and Analysis of Experiments*, 9th ed. Wiley. (The
   filtration-rate data of the [robust-design example](optimisation.md#an-example) are its
   example 6.2.)
@@ -63,11 +65,17 @@ Books for learning and reference, and the papers behind specific methods in aiki
   *Journal of Statistical Planning and Inference* 43, 381–402.
 - Plackett, R. L. & Burman, J. P. (1946). The design of optimum multifactorial experiments.
   *Biometrika* 33, 305–325.
+- Ritz, C., Baty, F., Streibig, J. C. & Gerhard, D. (2015). Dose-response analysis using R.
+  *PLoS ONE* 10, e0146021. (The drc package: the models and parameterisation of
+  [dose–response](dose-response.md), and the reference for its tests.)
 - Saltelli, A., Annoni, P., Azzini, I., Campolongo, F., Ratto, M. & Tarantola, S. (2010). Variance
   based sensitivity analysis of model output: design and estimator for the total sensitivity
   index. *Computer Physics Communications* 181, 259–270.
 - Sobol', I. M. (2001). Global sensitivity indices for nonlinear mathematical models and their
   Monte Carlo estimates. *Mathematics and Computers in Simulation* 55, 271–280.
+- United States Pharmacopeia. General chapters ⟨1032⟩ Design and development of biological
+  assays and ⟨1034⟩ Analysis of biological assays. (Equivalence testing of parallelism; see
+  [relative potency](dose-response.md#relative-potency).)
 - Vining, G. G. & Myers, R. H. (1990). Combining Taguchi and response surface philosophies: a dual
   response approach. *Journal of Quality Technology* 22, 38–45.
 - Zhang, J.-H., Chung, T. D. Y. & Oldenburg, K. R. (1999). A simple statistical parameter for use in
@@ -76,6 +84,7 @@ Books for learning and reference, and the papers behind specific methods in aiki
 
 ## Software used as references in the tests
 
-R (`lm`, `anova`, `car::Anova`, `MASS::boxcox`), lme4 and pbkrtest (mixed models), FrF2
+R (`lm`, `anova`, `car::Anova`, `MASS::boxcox`, `nls`), lme4 and pbkrtest (mixed models), drc and
+numDeriv (dose–response), FrF2
 (fractions and split-plot fractions), rsm, AlgDesign, skpr (power), SixSigma (gauge R&R),
 desirability, BsMD (Lenth); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.

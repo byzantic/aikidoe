@@ -60,6 +60,12 @@ section('advice for typical cases');
   check('budget below the first experiment: warned', r.warnings.some(w => /below what this plan/.test(w)));
   r = A({ aim: 'optimise', factors: 3, types: 'multi', categorical: 1 });
   check('three-level choices: an optimal design', r.family === 'optimal' && r.optimal);
+  r = advise({ aim: 'dose', measurement: 'good', curves: 2, groups: 'no', plates: 'yes', budget: 30, stages: 'yes' });
+  check('dose: range-finding, then doses around the EC50, then parallel curves; plates and budget noted', r.family === 'dose' && r.plan.map(p => p.title).join() === 'Range-finding,Around the EC50,Fit'
+    && /relative potency|parallel/.test(r.plan[2].text) && r.notes.some(n => /balanced layout/.test(n)) && r.warnings.some(w => /below the 46/.test(w)) && r.lessons.includes('dose'));
+  const ds = guideStudy({ aim: 'dose', curves: 2 });
+  check('… its study: a dose factor and a sample factor (reference, test)', ds.factors.map(f => f.id).join() === 'dose,sample' && ds.factors[1].levels.join() === 'reference,test');
+  check('dose: no questions about factors, types, curvature or effect size', !asked({ aim: 'dose' }).some(q => ['factors', 'types', 'htc', 'curvature', 'constraints', 'effect'].includes(q.id)));
   r = advise({ aim: 'measure', operators: 'several' });
   check('measure: gauge R&R 10 × 3 × 2', r.family === 'gauge' && r.runs === 60);
   r = advise({ aim: 'simulate', factors: 4 });

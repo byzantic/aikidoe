@@ -24,6 +24,8 @@ split-plot designs for hard-to-change factors, sequential augmentation (fold-ove
 optimal augmentation, confirmation runs); least squares with ANOVA, Lenth's method, diagnostics,
 Box–Cox, model reduction; mixed models (REML, Kenward–Roger) for whole plots, wafers and sites;
 microplate layouts (runs in wells, controls, Z′, edge and row/column position terms);
+dose–response curves (log-logistic and Weibull fits, EC50s, relative potency and parallelism,
+standard curves, dilution-series and optimal dose designs: `doe design --dose`, `doe dose`);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.
 

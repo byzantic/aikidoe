@@ -103,6 +103,31 @@ function logInfo(F, N) { try { return cholLogdet(chol(infoMatrix(F, N)).L); } ca
 /** Factor columns for the runs: the design's model (default formula), centred, full rank. */
 function factorColumns(study, runs, formula) {
   const resp = study.responses[0]?.id ?? 'y';
+  if (!formula && study.design?.kind === 'dose-response') {
+    // a dose–response design: protect the shape of every curve — a cubic in log dose for each
+    // level of the curve factor (zero doses a decade below the smallest dose). Cell means would be
+    // too strict: a later stage's new doses are on new plates, and only a curve links them.
+    const dose = study.design.params?.dose, curve = study.design.params?.curve;
+    const pos = runs.map(r => r.settings[dose]).filter(v => v > 0);
+    const lo = pos.length ? Math.log10(Math.min(...pos)) - 1 : 0;
+    const zs = runs.map(r => (r.settings[dose] > 0 ? Math.log10(r.settings[dose]) : lo));
+    const zm = zs.reduce((a, v) => a + v, 0) / zs.length, zsd = Math.sqrt(zs.reduce((a, v) => a + (v - zm) ** 2, 0) / zs.length) || 1;
+    const levels = curve ? [...new Set(runs.map(r => String(r.settings[curve])))] : ['all'];
+    const names = [], X = runs.map((r, i) => {
+      const z = (zs[i] - zm) / zsd, row = [];
+      levels.forEach((l, k) => {
+        const on = !curve || String(r.settings[curve]) === l ? 1 : 0;
+        if (k > 0) row.push(on);
+        row.push(on * z, on * z * z, on * z * z * z);
+      });
+      return row;
+    });
+    levels.forEach((l, k) => { if (k > 0) names.push(`${curve}[${l}]`); names.push(...['', '²', '³'].map(p => `${curve ? `${l}:` : ''}log ${dose}${p}`)); });
+    const Xc = centre(X);
+    const { rank, perm } = qr(Xc);
+    const keep = perm.slice(0, rank).sort((a, b) => a - b);
+    return { cols: Xc.map(r => keep.map(j => r[j])), names: keep.map(j => names[j]), formula: 'curves' };
+  }
   const f = formula ?? defaultFormula({ ...study, design: study.design }, resp).replace(/^[^~]*~/, `${resp} ~`);
   const model = parseFormula(f, study.factors);
   const { X, columns } = modelMatrix({ ...model, intercept: false }, study.factors, runs.map(r => r.settings));
