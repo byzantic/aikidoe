@@ -14,6 +14,11 @@
 //
 // In result cells, blank means "not measured" (no observation); NA, -, null etc. record an
 // explicit missing value (an observation whose value is null).
+//
+// Counts and proportions (issue #64): a binomial response without a fixed number of trials gets a
+// column "<id>.trials" (the trials of each run), a count response with the log link a column
+// "<id>.exposure" (volume plated, cells counted, area …; blank for 1). In long format: columns
+// trials and exposure.
 import { parseCSV, writeCSV, parseNumber, guessDecimal, records, detectDelimiter } from './csv.js';
 import { createStudy } from '../study.js';
 import { parseWell, wellId, excludedSet, plateNumbers, rowLabel } from '../plate.js';
@@ -26,12 +31,20 @@ const siteIds = (study) => (study.sites?.positions ?? []).map(p => String(p.id))
 const usesSites = (study, r) => r.levels.includes('site') && siteIds(study).length > 0;
 const wellOf = (study) => new Map((study.plates?.wells ?? []).filter(w => w.run !== undefined).map(w => [w.run, w]));
 
-/** Result columns: [{ header, response, site }] */
+const COUNT = ['poisson', 'quasipoisson', 'negbin'], PROP = ['binomial', 'quasibinomial'];
+/** The extra columns a response needs: 'trials' (binomial, trials not fixed), 'exposure' (counts, log link). */
+export const auxFields = (r) => [
+  ...(PROP.includes(r.distribution) && r.trials === undefined ? ['trials'] : []),
+  ...(COUNT.includes(r.distribution) && (r.link ?? 'log') === 'log' ? ['exposure'] : []),
+];
+
+/** Result columns: [{ header, response, site, aux? }] (aux: 'trials' or 'exposure' of the response). */
 function resultColumns(study) {
   const out = [];
   for (const r of study.responses.filter(x => !x.derived)) {
     if (usesSites(study, r)) for (const s of study.sites.positions) out.push({ header: `${r.id}@${s.id}`, response: r.id, site: s.id });
     else out.push({ header: r.id, response: r.id });
+    for (const a of auxFields(r)) out.push({ header: `${r.id}.${a}`, response: r.id, aux: a });
   }
   return out;
 }
@@ -66,6 +79,7 @@ export function runSheet(study) {
       const cells = res.map(c => {
         const hit = list.filter(o => o.response === c.response && (c.site === undefined ? o.site === undefined : String(o.site) === String(c.site)));
         if (hit.length > 1) throw new Error(`run ${run.run}: several values for ${c.header} with the same ${meta.join('/') || 'run'}; export the observations in long format instead`);
+        if (c.aux) return hit.length ? hit[0][c.aux] ?? '' : '';
         return hit.length ? (hit[0].value === null ? 'NA' : hit[0].value) : '';
       });
       const notes = [...new Set(list.map(o => o.note).filter(Boolean))].join('; ');
@@ -99,6 +113,8 @@ export function runSheetHTML(study, { title, date } = {}) {
   const label = (h) => {
     const f = study.factors.find(x => x.id === h);
     if (f) return `${esc(f.name)}${f.units ? ` <span class="u">(${esc(f.units)})</span>` : ''}`;
+    const ax = /^(.*)\.(trials|exposure)$/.exec(h), ar = ax && study.responses.find(x => x.id === ax[1]);
+    if (ar) return `${esc(ar.name)} <span class="u">(${ax[2]})</span>`;
     const r = study.responses.find(x => x.id === h.split('@')[0]);
     if (r) { const site = h.includes('@') ? ` @ ${esc(h.split('@')[1])}` : ''; return `${esc(r.name)}${site}${r.units ? ` <span class="u">(${esc(r.units)})</span>` : ''}`; }
     return esc({ order: 'Order', run: 'Run', plate: 'Plate', well: 'Well', wholePlot: 'Whole plot', block: 'Block', kind: 'Type', note: 'Notes',
@@ -141,7 +157,7 @@ ${body}</tbody></table></div>
 
 /** All observations as a long-format CSV. */
 export function observationsCSV(study, { delimiter = ',' } = {}) {
-  const opt = ['lot', 'wafer', 'site', 'slot', 'operator', 'repeat', 'note'].filter(k => study.observations.some(o => o[k] !== undefined));
+  const opt = ['trials', 'exposure', 'lot', 'wafer', 'site', 'slot', 'operator', 'repeat', 'note'].filter(k => study.observations.some(o => o[k] !== undefined));
   const header = ['run', 'response', 'value', ...opt];
   const rows = study.observations.map(o => [o.run, o.response, o.value === null ? 'NA' : o.value, ...opt.map(k => o[k] ?? '')]);
   return writeCSV(header, rows, { delimiter });
@@ -178,6 +194,8 @@ function mapColumns(study, header, given = {}) {
     else if (['response', 'value', 'site'].includes(k)) mapping[h] = k;
     else if (['note', 'notes', 'comment', 'comments'].includes(k)) mapping[h] = 'note';
     else if (META.includes(k)) mapping[h] = k;
+    else if (k === 'trials' || k === 'exposure') mapping[h] = k;
+    else if (/\.(trials|exposure)$/.test(h.trim()) && resp.has(h.trim().replace(/\.(trials|exposure)$/, ''))) mapping[h] = { aux: { response: resp.get(h.trim().replace(/\.(trials|exposure)$/, '')).id, key: /trials$/.test(h.trim()) ? 'trials' : 'exposure' } };
     else if (h.includes('@') && resp.has(h.slice(0, h.indexOf('@')))) mapping[h] = { result: { response: resp.get(h.slice(0, h.indexOf('@'))).id, site: label(h.slice(h.indexOf('@') + 1)) } };
     else if (resp.has(h)) mapping[h] = { result: { response: resp.get(h).id } };
     else if (fac.has(h)) mapping[h] = { factor: fac.get(h).id };
@@ -265,6 +283,14 @@ export function importResults(study, text, opts = {}) {
         out.site = pos ? pos.id : o.site;
       }
       if (note) out.note = note;
+      // trials and exposure: the response's own column, or a shared one (long format)
+      for (const key of ['trials', 'exposure']) {
+        const ja = roles.findIndex(x => x?.aux && x.aux.response === o.response && x.aux.key === key), jj = ja >= 0 ? ja : col(key);
+        if (jj < 0 || r[jj].trim() === '') continue;
+        const a = num(r[jj], jj);
+        if (Number.isNaN(a) || a === undefined) { err(line, header[jj], `"${r[jj]}" is not a number`); continue; }
+        if (ja >= 0 || auxFields(study.responses.find(x => x.id === o.response)).includes(key) || (key === 'trials' && study.responses.find(x => x.id === o.response)?.distribution?.includes('binomial'))) out[key] = a;
+      }
       obs.push({ o: out, line, column: header[j] });
     };
     if (long) {

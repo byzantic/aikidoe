@@ -64,17 +64,29 @@ export function render(ctx) {
   const label = (key) => {
     const f = study.factors.find(x => x.id === key); if (f) return [f.name, f.units ? h('span', { class: 'muted' }, ` (${f.units})`) : null];
     const c = sheet.resultColumns.find(x => x.header === key);
+    if (c?.aux) { const r = study.responses.find(x => x.id === c.response); return [r.name, h('span', { class: 'muted' }, ` (${c.aux}${c.aux === 'exposure' ? ', blank = 1' : ''})`)]; }
     if (c) { const r = study.responses.find(x => x.id === c.response); return [r.name, c.site !== undefined ? ` @ ${c.site}` : '', r.units ? h('span', { class: 'muted' }, ` (${r.units})`) : null]; }
     return { order: 'order', run: 'run', wholePlot: 'whole plot', block: 'block', kind: 'type', note: 'notes' }[key] ?? key;
   };
   const setCell = (row, col, text) => update(d => {
     const run = row[iRun], meta = Object.fromEntries(sheet.metaColumns.map((m, j) => [m, row[metaIdx[j]] === '' ? undefined : row[metaIdx[j]]]));
     const same = (o) => o.run === run && o.response === col.response && String(o.site ?? '') === String(col.site ?? '') && sheet.metaColumns.every(m => String(o[m] ?? '') === String(meta[m] ?? ''));
-    d.observations = (d.observations ?? []).filter(o => !same(o));
+    const old = (d.observations ?? []).find(same);
     const v = parseNumber(text);
-    if (v === undefined) return;
     if (Number.isNaN(v)) { toast(`"${text}" is not a number`); return; }
-    const o = { run, response: col.response, value: v };
+    if (col.aux) {
+      // trials or exposure of the run's result (a result not entered yet is held as missing)
+      if (old) { if (v === undefined) delete old[col.aux]; else old[col.aux] = v; return; }
+      if (v === undefined) return;
+      const o = { run, response: col.response, value: null, [col.aux]: v };
+      for (const m of sheet.metaColumns) if (meta[m] !== undefined) o[m] = meta[m];
+      d.observations.push(o);
+      return;
+    }
+    d.observations = (d.observations ?? []).filter(o => !same(o));
+    const keep = Object.fromEntries(['trials', 'exposure'].filter(k => old?.[k] !== undefined).map(k => [k, old[k]]));
+    if (v === undefined) { if (Object.keys(keep).length) d.observations.push({ run, response: col.response, value: null, ...keep }); return; }
+    const o = { run, response: col.response, value: v, ...keep };
     if (col.site !== undefined) o.site = col.site;
     for (const m of sheet.metaColumns) if (meta[m] !== undefined) o[m] = meta[m];
     d.observations.push(o);

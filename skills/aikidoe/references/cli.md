@@ -19,7 +19,8 @@ Commands
   init STUDY  --factor SPEC … --response SPEC … [--name N] [--seed S]
        SPEC for a factor: id:low:high[:units][:log]  or  id=level1,level2,…  (categorical)
                           append ! to mark it hard to change, e.g. T:900:1000:°C!
-       SPEC for a response: id[:units]
+       SPEC for a response: id[:units][@distribution[,trials][,link]]   counts and proportions:
+                          count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
   design STUDY --mixture lattice|centroid|vertices|optimal [--degree m] [--axial] [--centre n]
        [--runs N --model mixquadratic|… --criterion D|I] [--replicates r] [--seed S]   a mixture design
@@ -52,6 +53,10 @@ Commands
        negative, blank, standard, other); runs already in wells keep them. Without layout options:
        the layout, its efficiency and the controls' Z′ per plate
   fit STUDY "y ~ formula"  [--anova 1|2|3] [--lenth] [--boxcox] [--aggregate mean|none]
+       counts and proportions (a response's distribution): a generalised linear model with rate or
+       odds ratios and profile intervals [--wald], analysis of deviance, overdispersion and
+       separation checks [--firth]; [--distribution poisson|negbin|quasipoisson|binomial|… --link L]
+       to try another than the response's
        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]

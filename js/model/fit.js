@@ -16,14 +16,21 @@ const sum = (a) => a.reduce((s, v) => s + v, 0);
 
 /**
  * Per-run response table: [{ run, settings, y, n }] for runs with at least one observation.
+ * A count or proportion response (a distribution other than normal) has one row per observation,
+ * with trials and exposure.
  * aggregate 'mean' (default) averages multiple observations of a run (sites, wafers, repeats);
  * 'none' keeps one row per observation (only appropriate when observations are true replicates).
  */
-export function responseTable(study, responseId, { aggregate = 'mean' } = {}) {
-  if (!study.responses.some(r => r.id === responseId)) throw new Error(`no response "${responseId}" in the study`);
+export function responseTable(study, responseId, { aggregate = 'mean', perObservation = false } = {}) {
+  const resp = study.responses.find(r => r.id === responseId);
+  if (!resp) throw new Error(`no response "${responseId}" in the study`);
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
   const obs = observationsOf(study, responseId).filter(o => o.value !== null);
   const meta = (r) => ({ order: r.order, kind: r.kind, ...(r.block !== undefined ? { block: r.block } : {}) });
+  // counts and proportions (issue #64): one row per observation, never averaged, with its trials
+  // (binomial) and exposure (counts)
+  if (resp.distribution || perObservation) return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1,
+    ...(o.trials ?? resp.trials ? { trials: o.trials ?? resp.trials } : {}), ...(o.exposure !== undefined ? { exposure: o.exposure } : {}), ...meta(runs.get(o.run)) }));
   if (aggregate === 'none') return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1, ...meta(runs.get(o.run)) }));
   const by = new Map();
   for (const o of obs) { if (!by.has(o.run)) by.set(o.run, []); by.get(o.run).push(o.value); }
@@ -32,7 +39,8 @@ export function responseTable(study, responseId, { aggregate = 'mean' } = {}) {
 
 /**
  * Fit a formula to a study's data. opts: response (default: the formula's left side), aggregate,
- * rows, blocks ('auto' | false), includeConfirm, noise (a noise model id; default: the response's).
+ * rows, blocks ('auto' | false), includeConfirm, noise (a noise model id; default: the response's
+ * distribution), link, firth (Firth's penalised likelihood, for separated binomial data).
  *
  * Blocks: when the runs used fall in more than one block (blocked designs, or stages added by
  * augmentation), a categorical Block term is added first in the model (effect coded, so
@@ -49,13 +57,14 @@ export function fitModel(study, formula, opts = {}) {
   }
   const response = opts.response ?? parsed.response;
   if (!response) throw new Error('name the response: "y ~ …" or { response }');
-  let rows = opts.rows ?? responseTable(study, response, opts);
+  const noise = opts.noise ? noiseModel(opts.noise, { link: opts.link }) : noiseModelOf(study, response);
+  let rows = opts.rows ?? responseTable(study, response, { ...opts, perObservation: noise.id !== 'normal' });
   if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
   if (!rows.length) throw new Error(`no results for ${response} yet`);
   const b = withBlockTerm(study, parsed, rows, opts);
   const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
-  const noise = opts.noise ? noiseModel(opts.noise) : noiseModelOf(study, response);
-  const fit = noise.fit(mm, b.rows.map(r => r.y));
+  const data = noise.prepare(b.rows);
+  const fit = noise.fit(mm, data.y, { ...data, firth: opts.firth });
   return { ...fit, noise: noise.id, response, rows: b.rows, factors: b.factors };
 }
 

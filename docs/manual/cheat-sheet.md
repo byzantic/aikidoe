@@ -71,6 +71,10 @@ before acting.
 
 - Look at the data first: a plot of the response against run order shows drift and outliers.
 - Fit the model the design was chosen for; then simplify it, keeping hierarchy.
+- Counts (colonies, cells, defects) and percentages (germinated, viable, pass/fail) are not
+  measurements: set the response's kind so it is fitted as counts or proportions
+  ([counts and proportions](analysis.md#counts-and-proportions)), and check for overdispersion
+  and separation.
 - Check the residuals: against fitted values, run order, and a normal plot.
 - State aliasing with every conclusion from a fraction.
 - Report effects with confidence intervals, not only p-values; choosing the model from the same data

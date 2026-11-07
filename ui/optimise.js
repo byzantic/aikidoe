@@ -194,5 +194,5 @@ export function render(ctx) {
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
       svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region.`));
   }
-  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, study.mixture ? null : robustPanel(ctx, at, set, ui), study.mixture ? null : yieldPanel(ctx, at, set, ui));
+  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, ...(study.mixture || study.responses.some(r => r.distribution) ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));   // (robustness and yield assume normal noise: not yet for counts and proportions)
 }

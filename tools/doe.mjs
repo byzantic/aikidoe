@@ -7,7 +7,8 @@
 //   init STUDY  --factor SPEC … --response SPEC … [--name N] [--seed S]
 //        SPEC for a factor: id:low:high[:units][:log]  or  id=level1,level2,…  (categorical)
 //                           append ! to mark it hard to change, e.g. T:900:1000:°C!
-//        SPEC for a response: id[:units]
+//        SPEC for a response: id[:units][@distribution[,trials][,link]]   counts and proportions:
+//                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //   design STUDY --mixture lattice|centroid|vertices|optimal [--degree m] [--axial] [--centre n]
 //        [--runs N --model mixquadratic|… --criterion D|I] [--replicates r] [--seed S]   a mixture design
@@ -40,6 +41,10 @@
 //        negative, blank, standard, other); runs already in wells keep them. Without layout options:
 //        the layout, its efficiency and the controls' Z′ per plate
 //   fit STUDY "y ~ formula"  [--anova 1|2|3] [--lenth] [--boxcox] [--aggregate mean|none]
+//        counts and proportions (a response's distribution): a generalised linear model with rate or
+//        odds ratios and profile intervals [--wald], analysis of deviance, overdispersion and
+//        separation checks [--firth]; [--distribution poisson|negbin|quasipoisson|binomial|… --link L]
+//        to try another than the response's
 //        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
 //        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
 //        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
@@ -121,6 +126,8 @@ import { fitDose, effectiveDose, relativePotency, parallelism, inversePredict, d
 import { pipettingCSV, plateMapHTML, plateMapText } from '../js/io/platemap.js';
 import { controlSummary, plateNumbers, runCapacity, ROLES, platesWithoutWells } from '../js/plate.js';
 import { fitModel, anova, predict } from '../js/model/fit.js';
+import { noiseOf } from '../js/model/noise.js';
+import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { hierarchyViolations } from '../js/model/formula.js';
@@ -197,7 +204,17 @@ function cmdInit({ pos, opt }) {
     return f;
   });
   if (!factors.length) fail('init: give at least one --factor');
-  const responses = list(opt.response).map(spec => { const [id, units] = String(spec).split(':'); return units ? { id, units } : { id }; });
+  const responses = list(opt.response).map(spec => {
+    const [main, dist] = String(spec).split('@'), [id, units] = main.split(':');
+    const r = units ? { id, units } : { id };
+    if (dist) {
+      const [distribution, trials, link] = dist.split(',').map(x => x.trim());
+      r.distribution = distribution;
+      if (trials) r.trials = int(trials, 'trials');
+      if (link) r.link = link;
+    }
+    return r;
+  });
   const mixture = opt.mixture ? { components: String(opt.mixture).split(',').map(x => x.trim()), ...(opt.total !== undefined ? { total: Number(opt.total) } : {}) } : undefined;
   const study = createStudy({ name: opt.name ?? file.replace(/\.aikidoe\.json$|\.json$/, ''), ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), factors, ...(mixture ? { mixture } : {}), responses });
   save(file, study);
@@ -486,12 +503,49 @@ function cmdImport({ pos, opt }) {
   out(`${file}: ${next.observations.length} observation(s)`);
 }
 
+/** A generalised linear model (counts, proportions): coefficients with ratios, deviance, tests, checks. */
+function printGLM(study, fit, opt) {
+  const nm = noiseOf(fit), ratioName = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;
+  out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
+  out(`${nm.label}, ${fit.link} link${fit.firth ? ', Firth’s penalised likelihood' : ''}${fit.distribution === 'negbin' ? `, θ = ${num(fit.theta, 4)} (s.e. ${num(fit.thetaSE, 3)})` : ''}`);
+  out(`${fit.n} observations, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.offset.some(v => v !== 0) ? '; exposure as an offset (rates per unit exposure)' : ''}`);
+  if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this fit treats all runs as independent, so the tests of whole-plot effects are too optimistic (random effects for counts are not supported yet)');
+  for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
+  if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  out('');
+  const ci = glmConfint(fit, { method: opt.wald || fit.firth ? 'wald' : 'profile' });
+  const big = Math.max(...fit.coef.filter(Number.isFinite).map(Math.abs), 1e-300), tidy = (v) => (Number.isFinite(v) && Math.abs(v) < 1e-10 * big ? 0 : v);
+  const rows = fit.columns.map((c, j) => ({ term: c, est: tidy(fit.coef[j]), se: fit.se[j], t: tidy(fit.t[j]), p: fit.p[j], ci: ci.find(x => x.name === c) })).filter(r => !Number.isNaN(r.est));
+  out(table([
+    { key: 'term', label: 'term', align: 'left' }, { key: 'est', label: 'estimate' }, { key: 'se', label: 'std. error' }, { key: 't', label: fit.statistic }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars },
+    ...(ratioName ? [{ key: 'ratio', label: ratioName }, { key: 'rci', label: `95% ${ci[0]?.method ?? ''} interval`, align: 'left' }] : []),
+  ], rows.map(r => ({ ...r, ratio: r.ci?.ratio.estimate, rci: r.ci ? `${num(r.ci.ratio.lower, 4)} … ${num(r.ci.ratio.upper, 4)}` : '' }))));
+  out(`coded units: each continuous factor runs from −1 (low) to +1 (high)${ratioName ? `; ${ratioName === 'odds ratio' ? 'an' : 'a'} ${ratioName} is the factor of change per coded unit (squared for low → high)` : ''}`);
+  out(`\ndeviance = ${num(fit.deviance)} on ${fit.dfRes} df (null ${num(fit.nullDeviance)} on ${fit.dfNull} df; ${num(100 * fit.devExplained, 3)}% explained)${Number.isFinite(fit.aic) ? `   AIC = ${num(fit.aic)}` : ''}${fit.dispersionEstimated ? `   dispersion = ${num(fit.dispersion)}` : ''}`);
+  if (fit.overdispersion) out(`Pearson χ²/df = ${num(fit.overdispersion.ratio, 4)} (p = ${pval(fit.overdispersion.p)})`);
+  for (const w of fit.warnings) out(`warning: ${w}`);
+  const type = opt.anova ? int(opt.anova, 'anova') : 1;
+  const tests = anova(fit, type);
+  out(`\n${fit.firth ? 'Wald tests' : `analysis of deviance (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'}; ${fit.dispersionEstimated ? 'F tests with the estimated dispersion' : 'likelihood-ratio χ² tests'})`}`);
+  const F = tests.some(r => r.F !== undefined);
+  out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, ...(fit.firth ? [] : [{ key: 'deviance', label: 'deviance' }]), { key: F ? 'F' : 'chi2', label: F ? 'F' : 'χ²' }, { key: 'p', label: 'p', fmt: pval }], tests));
+  put({ kind: 'glm', response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`, distribution: fit.noise, link: fit.link, firth: fit.firth,
+    n: fit.n, rank: fit.rank, dfRes: fit.dfRes, aliased: fit.aliased, units: 'coded',
+    coefficients: rows.map(r => ({ term: r.term, estimate: r.est, se: r.se, [fit.statistic]: r.t, p: r.p, ...(r.ci ? { lower: r.ci.lower, upper: r.ci.upper, ...(ratioName ? { ratio: r.ci.ratio } : {}) } : {}) })),
+    deviance: fit.deviance, nullDeviance: fit.nullDeviance, dfNull: fit.dfNull, aic: fit.aic, dispersion: fit.dispersion, ...(fit.theta !== undefined ? { theta: fit.theta, thetaSE: fit.thetaSE } : {}),
+    overdispersion: fit.overdispersion, separation: fit.separation, warnings: fit.warnings, tests: { type: fit.firth ? 'wald' : type, rows: tests } });
+}
+
 function cmdFit({ pos, opt }) {
   const [file, formula] = pos;
   const study = load(file);
   if (!formula) fail('fit: give a formula, e.g. "y ~ (A+B+C)^2"');
-  if (!opt.ols) {
-    const resp = (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : '') || study.responses[0]?.id;
+  const respId = (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : '') || study.responses[0]?.id;
+  const glmResp = opt.distribution && opt.distribution !== 'normal' ? String(opt.distribution) : study.responses.find(r => r.id === respId)?.distribution;
+  if (opt.firth && !glmResp) fail('--firth is for a pass/fail or binomial response (set the response\'s distribution)');
+  if (glmResp && (opt.lenth || opt.boxcox)) fail(`--lenth and --boxcox assume normal noise; ${respId} is ${glmResp}`);
+  if (!opt.ols && !glmResp) {
+    const resp = respId;
     const requested = opt.random ? String(opt.random).split(',').map(x => x.trim()).filter(Boolean) : 'auto';
     let rand = [];
     try { rand = randomEffects(observationTable(study, resp), requested); } catch (e) { if (requested !== 'auto') throw e; }
@@ -511,17 +565,20 @@ function cmdFit({ pos, opt }) {
       return printMixed(study, f, requested, opt);
     }
   }
-  let fit = fitModel(study, formula, { aggregate: opt.aggregate ?? 'mean', ...(opt['no-position'] ? { position: false } : {}) });
+  const fo = { aggregate: opt.aggregate ?? 'mean', ...(opt['no-position'] ? { position: false } : {}), ...(opt.firth ? { firth: true } : {}),
+    ...(opt.distribution ? { noise: String(opt.distribution) } : {}), ...(opt.link ? { link: String(opt.link) } : {}) };
+  let fit = fitModel(study, formula, fo);
   if (opt.reduce) {
-    const r = reduceModel(study, formula, { method: opt.reduce === true ? 'p' : String(opt.reduce), aggregate: opt.aggregate ?? 'mean',
+    const r = reduceModel(study, formula, { method: opt.reduce === true ? 'p' : String(opt.reduce), ...fo,
       ...(opt['alpha-out'] !== undefined ? { alphaOut: Number(opt['alpha-out']) } : {}), keep: list(opt.keep).flatMap(k => String(k).split(',')).filter(Boolean) });
     out(`model reduction (${r.method === 'p' ? `backward, p > ${opt['alpha-out'] ?? 0.1}` : 'backward, AICc'}; hierarchy kept), from ${r.start.formula}:`);
     if (!r.steps.length) out('  nothing to remove');
-    for (const st of r.steps) out(`  drop ${st.drop.padEnd(10)} ${r.method === 'p' ? `F = ${num(st.F, 4)}, p = ${pval(st.p)}` : ''}  AICc → ${num(st.aicc, 6)}`);
+    for (const st of r.steps) out(`  drop ${st.drop.padEnd(10)} ${r.method === 'p' ? (st.chi2 !== undefined ? `χ² = ${num(st.chi2, 4)} on ${st.df} df, p = ${pval(st.p)}` : `F = ${num(st.F, 4)}, p = ${pval(st.p)}`) : ''}${Number.isFinite(st.aicc) ? `  AICc → ${num(st.aicc, 6)}` : ''}`);
     out(`reduced model: ${r.formula}   (a suggestion: put a term back by editing the formula)\n`);
-    put({ reduction: { method: r.method, from: r.start.formula, formula: r.formula, steps: r.steps.map(st => ({ drop: st.drop, F: st.F, p: st.p, aicc: st.aicc })) } });
+    put({ reduction: { method: r.method, from: r.start.formula, formula: r.formula, steps: r.steps.map(st => ({ drop: st.drop, F: st.F, ...(st.chi2 !== undefined ? { chi2: st.chi2 } : {}), p: st.p, aicc: st.aicc })) } });
     fit = r.fit;
   }
+  if (fit.distribution) return printGLM(study, fit, opt);
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
   out(`${fit.n} runs, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.rows.some(r => r.n > 1) ? '; per-run means of repeated observations' : ''}`);
   if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this least-squares fit treats all runs as independent, so the standard errors and tests of whole-plot effects are too optimistic (drop --ols for the mixed model)');
@@ -669,8 +726,18 @@ function cmdPredict({ pos, opt }) {
     out(`mixed model: the prediction interval includes ${mixed.random.map(r => r.name.toLowerCase()).join(', ')} and residual variation (Satterthwaite df)${mixed.positionTerms.length ? '; position terms averaged over the sites' : ''}`);
     return;
   }
-  const fit = fitModel(study, formula);
+  const resp = study.responses.find(r => r.id === (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : ''));
+  const fit = fitModel(study, formula, opt.firth && resp?.distribution ? { firth: true } : {});
   const p = predict(fit, at);
+  if (fit.distribution) {
+    // counts and proportions: the mean (a rate per unit exposure, or a proportion) with an interval
+    // from the link scale
+    put({ kind: 'glm', response: fit.response, predictions: at.map((s, i) => ({ settings: s, fit: p[i].fit, lower: p[i].lower, upper: p[i].upper, link: p[i].link, seLink: p[i].seLink })), level: 0.95 });
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: fit.distribution.includes('binomial') || fit.distribution === 'bernoulli' || fit.noise === 'bernoulli' ? 'proportion' : fit.offset.some(v => v !== 0) ? 'rate (per unit exposure)' : 'mean count' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }],
+      at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}` }))));
+    out(`${noiseOf(fit).label}: the interval is computed on the ${fit.link} scale and transformed back (prediction intervals for a single new count or proportion are not given yet)`);
+    return;
+  }
   put({ kind: 'ols', response: fit.response, predictions: at.map((s, i) => ({ settings: s, fit: p[i].fit, lower: p[i].lower, upper: p[i].upper, predLower: p[i].predLower, predUpper: p[i].predUpper })), level: 0.95 });
   out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: '95% PI (one run)', align: 'left' }],
     at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)}` }))));

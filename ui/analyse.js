@@ -16,6 +16,7 @@ import { waferPlot } from './wafer.js';
 import { plateAnalysisPanel } from './plates.js';
 import { doseAnalysis } from './dose.js';
 import { mixtureAnalysis } from './mixture.js';
+import { glmAnalysis } from './glm.js';
 
 /** A sensible first model for the study's design. */
 
@@ -74,16 +75,21 @@ export function render(ctx) {
               });
               return;
             }
-            const r = reduceModel(study, formula, { method: m }); ui.reduce = { response: resp.id, method: m, start: formula, steps: r.steps }; setFormula(r.formula); }
+            const r = reduceModel(study, formula, { method: m, ...(ui.firth && resp.distribution ? { firth: true } : {}) }); ui.reduce = { response: resp.id, method: m, start: formula, steps: r.steps }; setFormula(r.formula); }
           catch (e) { set({ reduce: { response: resp.id, error: e.message } }); }
         } }, m === 'p' ? 'reduce (p)' : 'reduce (AICc)')),
-      h('label', { class: 'inline' }, 'ANOVA', select([{ value: 1, label: 'type I (sequential)' }, { value: 2, label: 'type II' }, { value: 3, label: 'type III' }], ui.anovaType ?? 1, (v) => set({ anovaType: Number(v) }), { 'aria-label': 'ANOVA type' }))),
+      h('label', { class: 'inline' }, resp.distribution ? 'tests' : 'ANOVA', select([{ value: 1, label: 'type I (sequential)' }, { value: 2, label: 'type II' }, { value: 3, label: 'type III' }], ui.anovaType ?? 1, (v) => set({ anovaType: Number(v) }), { 'aria-label': 'ANOVA type' }))),
     fIn,
     reduction(ui.reduce, resp.id, (f) => set({ formulas: { ...(ui.formulas ?? {}), [resp.id]: f }, reduce: null }), () => set({ reduce: null })),
     h('p', { class: 'muted small' }, 'R-style formula over factor ids: ', h('span', { class: 'mono' }, 'A*B'), ' = A + B + A:B, ', h('span', { class: 'mono' }, '(A+B+C)^2'), ', ', h('span', { class: 'mono' }, 'I(T^2)'), ', ', h('span', { class: 'mono' }, '- A:B'), study.mixture ? '. Mixture components: mixquadratic, mixspecial, mixcubic, mixlinear (Scheffé models, no intercept), e.g. mixquadratic + mixlinear:(T); coefficients are in L-pseudo-components (0 … 1).' : '. Coefficients are in coded units (−1 … +1).'));
 
   let fit = null, fitErr = null;
-  try { fit = fitModel(study, formula, ui.noPosition ? { position: false } : {}); } catch (e) { fitErr = e; }
+  try { fit = fitModel(study, formula, { ...(ui.noPosition ? { position: false } : {}), ...(ui.firth && resp.distribution ? { firth: true } : {}) }); } catch (e) { fitErr = e; }
+  // counts and proportions: a generalised linear model (no mixed models yet)
+  if (resp.distribution) {
+    if (fitErr) return h('div', {}, controls, h('div', { class: 'msg error' }, fitErr.message));
+    return h('div', {}, controls, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }));
+  }
 
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)
   let rand = [];

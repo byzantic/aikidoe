@@ -22,6 +22,7 @@ import { noiseOf } from './noise.js';
 export function aicc(fit) {
   const n = fit.n, { loglik, k } = noiseOf(fit).loglik(fit);
   if (loglik === Infinity) return -Infinity;
+  if (Number.isNaN(loglik)) return NaN;           // quasi-likelihood: no AIC
   const aic = -2 * loglik + 2 * k;
   return n - k - 1 > 0 ? aic + 2 * k * (k + 1) / (n - k - 1) : Infinity;
 }
@@ -38,7 +39,8 @@ export function reduceModel(study, formula, { method = 'p', alphaOut = 0.10, kee
   let fit = fitModel(study, formula, fitOpts);
   const response = fit.response;
   const own = (f) => f.model.terms.filter(t => !t.block);
-  if (method === 'p' && fit.dfRes < 1) throw new Error('the model leaves no residual degrees of freedom, so there are no p-values: start from a smaller model, or judge the effects with Lenth’s method');
+  if (method === 'p' && fit.dfRes < 1 && !(fit.distribution && !fit.dispersionEstimated)) throw new Error('the model leaves no residual degrees of freedom, so there are no p-values: start from a smaller model, or judge the effects with Lenth’s method');
+  if (method === 'aicc' && Number.isNaN(aicc(fit))) throw new Error(`a ${noiseOf(fit).label} model has a quasi-likelihood, with no AIC: reduce it by p-values`);
   const start = { formula: formulaOf(response, fit.model, own(fit).map(t => t.label)), aicc: aicc(fit) };
   const steps = [];
   for (;;) {
@@ -64,7 +66,7 @@ export function reduceModel(study, formula, { method = 'p', alphaOut = 0.10, kee
       if (!(pick.aicc < aicc(fit))) break;
     }
     fit = pick.fit;
-    steps.push({ drop: pick.drop, df: pick.df, F: pick.F, p: pick.p, aicc: pick.aicc, formula: formulaOf(response, fit.model, own(fit).map(t => t.label)) });
+    steps.push({ drop: pick.drop, df: pick.df, F: pick.F, ...(Number.isFinite(pick.chi2) ? { chi2: pick.chi2 } : {}), p: pick.p, aicc: pick.aicc, formula: formulaOf(response, fit.model, own(fit).map(t => t.label)) });
   }
   return { method, start, steps, formula: formulaOf(response, fit.model, own(fit).map(t => t.label)), fit };
 }

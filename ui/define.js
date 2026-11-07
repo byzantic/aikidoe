@@ -4,6 +4,7 @@ import { siteScheme, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugePanel } from './gauge.js';
 import { num } from '../js/format.js';
 import { combOverChoice, combOverEditor } from './combover.js';
+import { DISTRIBUTIONS } from '../js/study.js';
 
 const MEASURED = [
   { value: 'run', label: 'once per run', levels: ['run'] },
@@ -76,6 +77,7 @@ export function render(ctx) {
       }) })),
       h('td', {}, h('input', { type: 'text', value: r.name ?? '', 'aria-label': 'name', onchange: (e) => set(o => { o.name = e.target.value; }) })),
       h('td', {}, h('input', { class: 'short', value: r.units ?? '', 'aria-label': 'units', onchange: (e) => set(o => { if (e.target.value) o.units = e.target.value; else delete o.units; }) })),
+      h('td', { class: 'nowrap' }, kindCell(r, set)),
       h('td', {}, select(['none', 'maximize', 'minimize', 'target', 'range'], goal, (v) => set(o => { o.goal = v; }), { 'aria-label': 'goal' })),
       ['lower', 'target', 'upper'].map(k => h('td', {}, h('input', { class: 'num', value: r[k] ?? '', 'aria-label': k, disabled: goal === 'none' || (k === 'target' && goal !== 'target'),
         onchange: (e) => set(o => numOrDelete(o, k, e.target.value)) }))),
@@ -87,7 +89,7 @@ export function render(ctx) {
   });
   const responses = h('section', { class: 'panel' }, h('h2', {}, 'Responses', help('concepts','responses-and-measurement')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'goal', 'lower', 'target', 'upper', 'measured', 'measurement system', ''].map(t => h('th', {}, t)))), h('tbody', {}, rRows))),
+      h('thead', {}, h('tr', {}, ['id', 'name', 'units', ['kind', help('analysis', 'counts-and-proportions')], 'goal', 'lower', 'target', 'upper', 'measured', 'measurement system', ''].map(t => h('th', {}, t)))), h('tbody', {}, rRows))),
     h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn', onclick: () => update(x => { x.responses ??= []; x.responses.push({ id: nextId(x.responses.map(r => r.id), 'y'), name: 'Response' }); }) }, '+ response'),
       siteResponses(d, update),
       h('span', { class: 'muted small' }, 'Responses measured per wafer or site are analysed reading by reading with a mixed model (whole plots, runs and wafers as random effects).')));
@@ -121,6 +123,26 @@ export const SIMULATOR_EDITORS = {
       h('input', { type: 'text', class: 'formula', style: 'width:32em', value: d.simulator.responses?.[r.id] ?? '', placeholder: '—', 'aria-label': `simulator ${r.id}`,
         onchange: (e) => update(x => { x.simulator.responses ??= {}; if (e.target.value.trim()) x.simulator.responses[r.id] = e.target.value.trim(); else delete x.simulator.responses[r.id]; }) }))))),
 };
+// what kind of value a response is (issue #64): a measurement, a count or a proportion
+const KINDS = [
+  { value: 'normal', label: 'measurement' },
+  { value: 'poisson', label: 'count (Poisson)' },
+  { value: 'negbin', label: 'count, overdispersed (negative binomial)' },
+  { value: 'quasipoisson', label: 'count, overdispersed (quasi-Poisson)' },
+  { value: 'binomial', label: 'successes out of n trials (binomial)' },
+  { value: 'quasibinomial', label: 'successes out of n, overdispersed (quasi-binomial)' },
+  { value: 'bernoulli', label: 'pass / fail (0 or 1)' },
+];
+function kindCell(r, set) {
+  const dist = r.distribution ?? 'normal', links = DISTRIBUTIONS[dist];
+  return [
+    select(KINDS, dist, (v) => set(o => { if (v === 'normal') delete o.distribution; else o.distribution = v; delete o.link; if (!v.includes('binomial') || v === 'bernoulli') delete o.trials; }), { 'aria-label': 'response kind' }),
+    links.length > 1 ? select(links.map((l, k) => ({ value: l, label: k ? `${l} link` : `${l} link (default)` })), r.link ?? links[0], (v) => set(o => { if (v === links[0]) delete o.link; else o.link = v; }), { 'aria-label': 'link' }) : null,
+    dist === 'binomial' || dist === 'quasibinomial' ? h('label', { class: 'inline small', title: 'trials per run; leave blank to enter them per run on the Run step' }, 'n =',
+      h('input', { class: 'num short', value: r.trials ?? '', placeholder: 'per run', 'aria-label': 'trials', onchange: (e) => set(o => { const v = Number(e.target.value); if (e.target.value.trim() && Number.isInteger(v) && v >= 1) o.trials = v; else delete o.trials; }) })) : null,
+  ];
+}
+
 export const SIMULATOR_CHOICES = [{ value: 'expression', label: 'formulas', make: () => ({ adapter: 'expression', responses: {} }) }, combOverChoice];
 SIMULATOR_EDITORS['comb-over'] = combOverEditor;
 

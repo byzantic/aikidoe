@@ -3,7 +3,7 @@
   "$id": "https://byzantic.github.io/aikidoe/schema/study.schema.json",
   "title": "aikidoe study",
   "description": "An aikidoe study file (*.aikidoe.json), format version 1: factors, responses, constraints, the design and its run order, observations, drop-in sites, the stage history and an optional simulator. Comments and trailing commas are allowed in the file (JSON with comments); this schema describes the JSON value.",
-  "$comment": "Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; mixture components are continuous factors (not log, not hard to change) with low ≥ 0, their lows add up to less than the total and their highs to at least it, and every run's components add up to the total; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.",
+  "$comment": "Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; mixture components are continuous factors (not log, not hard to change) with low ≥ 0, their lows add up to less than the total and their highs to at least it, and every run's components add up to the total; a count response's values are whole numbers ≥ 0, a binomial response's successes lie between 0 and the trials (the response's or the observation's), a bernoulli response's are 0 or 1, and exposure is only for counts with the log link; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.",
   "type": "object",
   "required": [
     "aikidoe",
@@ -357,6 +357,35 @@
         "units": {
           "type": "string"
         },
+        "distribution": {
+          "enum": [
+            "normal",
+            "poisson",
+            "quasipoisson",
+            "negbin",
+            "binomial",
+            "quasibinomial",
+            "bernoulli"
+          ],
+          "default": "normal",
+          "description": "the kind of value and its noise (issue #64): a measurement (normal), a count (poisson; negbin or quasipoisson when overdispersed), successes out of trials (binomial, quasibinomial), or pass/fail (bernoulli, 0 or 1). Anything but normal is fitted by a generalised linear model, one observation per run"
+        },
+        "link": {
+          "enum": [
+            "identity",
+            "log",
+            "sqrt",
+            "logit",
+            "probit",
+            "cloglog"
+          ],
+          "description": "the scale the model is linear on: log (default), identity or sqrt for counts; logit (default), probit or cloglog for proportions"
+        },
+        "trials": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "binomial: the number of trials in every run (otherwise each observation gives its own)"
+        },
         "goal": {
           "enum": [
             "none",
@@ -642,6 +671,16 @@
             "null"
           ],
           "description": "null: missing (measured but failed)"
+        },
+        "trials": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "binomial response: the trials of this run (value is the number of successes)"
+        },
+        "exposure": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "count response with the log link: what the count is out of (volume plated, area, cells examined); its log is an offset, so the model is for the rate (default 1)"
         },
         "lot": {
           "$ref": "#/$defs/label",
