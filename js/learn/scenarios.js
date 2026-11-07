@@ -183,7 +183,7 @@ export const SCENARIOS = {
     counts: true,
     title: 'Seed germination',
     text: 'Seeds of a wild-flower species germinate poorly, which holds up a restoration project. The seed bank sows what each lot can spare — 10, 20, 30 or 50 seeds to a Petri dish — counts the germinated seeds after 14 days, and wants to know which pre-treatments and conditions raise the germination rate. The number sown is recorded with each dish.',
-    response: { id: 'germinated', name: 'Germinated seeds', units: 'seeds', distribution: 'binomial', trials: [10, 20, 30, 50], base: 0.45 },
+    response: { id: 'germinated', name: 'Germinated seeds', units: 'seeds', distribution: 'binomial', trials: [10, 20, 30, 50], base: 0.45, oddsOf: 'germination', percentOf: 'the seeds sown germinate' },
     factors: [
       { id: 'GA3', name: 'Gibberellic acid', units: 'mg/L', low: 10, high: 500, transform: 'log' },
       { id: 'temp', name: 'Temperature', units: '°C', low: 15, high: 25 },

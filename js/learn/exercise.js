@@ -133,6 +133,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
     const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, ...(counted ?? { sigma: response.sigma }), truth, decimals: response.decimals, ...(curve ? { curve } : {}) }],
       nuisance: T.nuisance ? T.nuisance(response.sigma) : {}, ...(sc.plate ? { controls: sc.plate.truth } : {}) };
     const questions = makeQuestions(T.dose ? { ...T, refLabel: factors[1].levels[0], testLabel: factors[1].levels[1] } : T, factors, response, g, mixture);
+    if (T.counts && isProportion(response.distribution)) questions.push(percentQuestion(proc, factors, response));
     const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt, mixture });
     const ref = referenceStrategy(ex, ex.truth);
     const grade = gradeAnswers(ex, ex.truth, ref.answers, { runs: ref.study.design.runs.length });
@@ -161,6 +162,18 @@ function countsTruth(topic, difficulty, g, factors, response) {
   // a proportion's centre is drawn around the scenario's, so that some conditions come close to 0 or 100 %
   const intercept = isProportion(response.distribution) ? Math.log(response.base / (1 - response.base)) + (g.random() - 0.5) * 1.2 : Math.log(response.base);
   return { intercept, terms };
+}
+
+/**
+ * Proportions (counts topic): the germination at the corner of the design whose true proportion is
+ * nearest 0 or 100 % — where least squares on percentages predicts impossible values.
+ */
+function percentQuestion(proc, factors, response) {
+  const corners = factors.reduce((acc, f) => acc.flatMap(s => (f.type === 'categorical' ? f.levels : [f.low, f.high]).map(v => ({ ...s, [f.id]: v }))), [{}]);
+  const p = (s) => trueMean({ ...proc, factors }, response.id, s), edge = (s) => Math.min(p(s), 1 - p(s));
+  const at = corners.reduce((a, b) => (edge(b) < edge(a) ? b : a));
+  return { id: 'percent', kind: 'percent', settings: at,
+    text: `What percentage of ${response.percentOf ?? `the trials succeed`} at ${Object.entries(at).map(([k, v]) => `${k} = ${v}`).join(', ')}, on average? Give a 95 % interval.` };
 }
 
 /** The process's count or proportion noise for a counts exercise: distribution, θ or σ, trials, exposure. */
@@ -224,7 +237,7 @@ function makeQuestions(T, factors, response, g, mixture) {
     if (q === 'ratios') {
       const prop = isProportion(response.distribution), per = response.exposureUnits ? ` per ${response.exposureUnits.replace(/ plated$/, '')}` : '';
       qs.push({ id: 'ratios', kind: 'ratios', ratio: prop ? 'odds' : 'rate', text: prop
-        ? `For each factor that matters, estimate its odds ratio (the odds of ${response.name.toLowerCase()} at its high setting ÷ at its low setting), with a 95 % interval.`
+        ? `For each factor that matters, estimate its odds ratio (the odds of ${response.oddsOf ?? response.name.toLowerCase()} at its high setting ÷ at its low setting), with a 95 % interval.`
         : `For each factor that matters, estimate its rate ratio (the mean ${response.name.toLowerCase()}${per} at its high setting ÷ at its low setting), with a 95 % interval.` });
     }
     if (q === 'effects') qs.push({ id: 'effects', kind: 'effects', text: `For each factor that matters, estimate its effect (low → high) on ${response.name.toLowerCase()}, with a 95 % interval.` });
@@ -586,7 +599,14 @@ export function countAnswers(ex, study, { alpha = 0.05, leastSquares = false } =
       ratios[id] = { estimate: Math.exp(2 * c.estimate), lower: Math.exp(2 * c.lower), upper: Math.exp(2 * c.upper) };
     }
   }
-  return { active, ratios, runs: study.design.runs.length, formula, analysis, distribution: leastSquares ? 'normal' : fit.distribution };
+  const pq = ex.questions.find(q => q.kind === 'percent'), percent = {};
+  if (pq) {
+    // the mean percentage at the question's settings with its 95 % interval: from the GLM (on the logit
+    // scale, transformed back), or from least squares on the percentages (symmetric, unbounded)
+    const p = predict(fit, [pq.settings])[0], k = leastSquares ? 1 : 100;
+    Object.assign(percent, { estimate: k * p.fit, lower: k * p.lower, upper: k * p.upper });
+  }
+  return { active, ratios, ...(pq ? { percent } : {}), runs: study.design.runs.length, formula, analysis, distribution: leastSquares ? 'normal' : fit.distribution };
 }
 
 /**
@@ -675,7 +695,9 @@ export function trueFacts(ex, truth = truthOf(ex)) {
   if (resp.distribution) {
     // counts and proportions: the effects are ratios low → high, exp(2β) (rate or odds ratios)
     const ratios = Object.fromEntries(Object.entries(effects).map(([k, v]) => [k, Math.exp(v)]));
-    return { active, effects: {}, ratios, ratio: resp.distribution === 'binomial' ? 'odds' : 'rate', mu: (s) => trueMean(proc, resp.id, s), sigma: NaN };
+    const pq = ex.questions.find(q => q.kind === 'percent');
+    return { active, effects: {}, ratios, ratio: resp.distribution === 'binomial' ? 'odds' : 'rate', mu: (s) => trueMean(proc, resp.id, s), sigma: NaN,
+      ...(pq ? { percent: 100 * trueMean(proc, resp.id, pq.settings) } : {}) };
   }
   const mu = (s) => trueMean(proc, resp.id, s);
   const goal = ex.study.responses[0].goal ?? MAX;
@@ -693,7 +715,7 @@ export function trueFacts(ex, truth = truthOf(ex)) {
  */
 export function gradeAnswers(ex, truth, answers, { runs } = {}) {
   const F = trueFacts(ex, truth), parts = [];
-  const W = { active: 40, effects: 25, ratios: 25, best: 25, prediction: 10, ec50: 50, potency: 50 };
+  const W = { active: 40, effects: 25, ratios: 25, percent: 20, best: 25, prediction: 10, ec50: 50, potency: 50 };
   const qs = ex.questions.filter(q => W[q.kind]);
   const total = qs.reduce((a, q) => a + W[q.kind], 0);
   for (const q of qs) {
@@ -727,6 +749,14 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
         if (!signOk || !inside) notes.push(`${id}: true ${what} ${t.toPrecision(3)}, yours ${a.estimate.toPrecision(3)} [${(a.lower ?? NaN).toPrecision(3)}, ${(a.upper ?? NaN).toPrecision(3)}]`);
       }
       parts.push({ id: 'ratios', max, score: ids.length ? max * s / ids.length : max, note: notes.join('; ') || `every true ${what} is on the right side of 1 and inside your interval` });
+    } else if (q.kind === 'percent') {
+      // half for an interval that holds the true mean percentage, half for one that stays within 0–100 %
+      const a = answers.percent, t = F.percent;
+      if (!a || ![a.estimate, a.lower, a.upper].every(Number.isFinite)) { parts.push({ id: 'percent', max, score: 0, note: 'no percentage given' }); continue; }
+      const inside = a.lower <= t && t <= a.upper, possible = a.lower >= 0 && a.upper <= 100 && a.estimate >= 0 && a.estimate <= 100;
+      const why = [inside ? null : `the interval misses the true ${t.toPrecision(3)} %`, possible ? null : 'the estimate or interval goes outside 0–100 %'].filter(Boolean);
+      parts.push({ id: 'percent', max, score: max * ((inside ? 0.5 : 0) + (possible ? 0.5 : 0)),
+        note: why.length ? `yours ${a.estimate.toPrecision(3)} % [${a.lower.toPrecision(3)}, ${a.upper.toPrecision(3)}]: ${why.join('; ')}` : `true ${t.toPrecision(3)} %, inside your interval [${a.lower.toPrecision(3)}, ${a.upper.toPrecision(3)}]` });
     } else if (q.kind === 'best') {
       if (!answers.best) { parts.push({ id: 'best', max, score: 0, note: 'no settings given' }); continue; }
       const v = F.mu(answers.best), span = Math.abs(F.bestValue - F.worstValue) || 1;
@@ -755,7 +785,7 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
     if (over) score -= 20;
   }
   score = Math.max(0, Math.round(score * 10) / 10);
-  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue, ...(F.ec50 !== undefined ? { ec50: F.ec50, potency: F.potency } : {}), ...(F.ratios ? { ratios: F.ratios, ratio: F.ratio } : {}) } };
+  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue, ...(F.ec50 !== undefined ? { ec50: F.ec50, potency: F.potency } : {}), ...(F.ratios ? { ratios: F.ratios, ratio: F.ratio } : {}), ...(F.percent !== undefined ? { percent: F.percent } : {}) } };
 }
 
 /** Grade a study: its exercise answers if given, else answers derived by the standard analysis. */

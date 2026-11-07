@@ -141,6 +141,25 @@ try {
     check('a ratio the wrong way up loses its points', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) < 100 && /true (rate|odds) ratio/.test(await page.textContent('#grade-result')));
   }
 
+  section('counts: germination asks a percentage near 0 or 100 %');
+  {
+    await page.goto(`${url}#lesson=counts&difficulty=easy&seed=2`); await page.waitForSelector('#exercise'); await settle();
+    const ex = generateExercise({ topic: 'counts', difficulty: 'easy', seed: 2 }), ref = referenceStrategy(ex);
+    check('the germination scenario, with a percentage question', ex.scenario === 'germination' && /What percentage of the seeds sown germinate/.test(await page.textContent('#exercise')));
+    await DESIGN.counts(); await settle(); await page.click('#create-design'); await settle(); await page.click('#get-results'); await settle();
+    check('each dish has its seeds sown', (await st()).observations.every(o => [10, 20, 30, 50].includes(o.trials)));
+    await page.click('#toggle-grade'); await settle();
+    await page.click('#fill-answers'); await settle();
+    const a = (await st()).exercise.answers;
+    check('"fill in" gives the model answer\'s percentage, inside 0–100 %', Math.abs(a.percent.estimate - ref.answers.percent.estimate) < 1e-6 && a.percent.lower >= 0 && a.percent.upper <= 100 && await page.locator('#answer-percent input').count() === 3);
+    await page.click('#grade-answers'); await settle();
+    check('graded: 100', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) === 100);
+    check('the comparison: least squares on the percentages', /Least squares on the raw percentages would have scored/.test(await page.textContent('#ofat-score')));
+    await page.fill('input[aria-label="answer percent lower"]', '-5'); await page.keyboard.press('Tab'); await settle();
+    await page.click('#grade-answers'); await settle();
+    check('an interval below 0 % loses points', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) < 100 && /outside 0–100 %/.test(await page.textContent('#grade-result')));
+  }
+
   section('answers by hand, progress');
   await page.goto(`${url}#lesson=factorial&difficulty=medium&seed=5`); await page.waitForSelector('#exercise'); await settle();
   await DESIGN.factorial(); await settle(); await page.click('#create-design'); await settle(); await page.click('#get-results'); await settle();

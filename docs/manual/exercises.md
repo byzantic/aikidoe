@@ -17,7 +17,8 @@ the virtual process for the runs you designed; **Answer and grade** takes your a
 the standard analysis of your data — and shows the score, the truth and the model answer. Lesson 1
 also shows what one-factor-at-a-time would have scored on the same process; the plate, dose,
 mixture and counts lessons compare with the usual shortcut for their kind of experiment (a tidy
-plate layout, evenly spaced doses, one component at a time, least squares on the raw counts).
+plate layout, evenly spaced doses, one component at a time, least squares on the raw counts or
+on the percentages).
 
 Lessons whose exercises are not written yet (constraints, several responses, gauge studies,
 robust design, simulation) are listed but locked; the features themselves are in the app. Progress
@@ -40,7 +41,8 @@ A response can also be a **count** or a **proportion**. Its truth is then linear
 of the mean count per unit exposure, or on the logit scale of the proportion; each run's count is
 drawn from a Poisson or negative binomial distribution (with the exposure the process gave it, such
 as the volume plated, recorded with the result), or its successes from a binomial out of the
-response's trials, with optional extra variation on the logit scale. Block and day shifts act on
+response's trials (or a number of trials drawn per run from a list, recorded with the result),
+with optional extra variation on the logit scale. Block and day shifts act on
 the same scale, so they multiply a count.
 
 The app's simulated examples are virtual processes too.
@@ -57,7 +59,7 @@ The app's simulated examples are virtual processes too.
 | `split-plot` | hard-to-change factors | a factor that is costly to reset, and varies each time it is |
 | `dose` | dose–response | a reference and a test compound, 48 runs: the EC50 of the test and its relative potency ([dose–response](dose-response.md)) |
 | `mixture` | mixtures | three components adding up to 100, with limits, 14 runs: the best blend and a prediction ([mixture designs](designs-mixture.md)) |
-| `counts` | counts and percentages | colonies per plate (with the volume plated) or seeds germinated out of 50, 16 or 32 runs: the active factors and their rate or odds ratios ([counts and proportions](analysis.md#counts-and-proportions)) |
+| `counts` | counts and percentages | colonies per plate (with the volume plated) or seeds germinated per dish (10–50 sown, recorded with each dish), 16 or 32 runs: the active factors and their rate or odds ratios; for germination also the percentage at the corner nearest 0 or 100 % ([counts and proportions](analysis.md#counts-and-proportions)) |
 | `plate` | microplates | 48 runs in a 96-well plate whose edge, rows and columns differ: lay the runs out, then analyse ([microplates](plates.md)) |
 
 Each comes in three difficulties — *easy*, *medium*, *hard* — which set the smallest active effect
@@ -109,7 +111,7 @@ cvd.aikidoe.json: results for 16 runs (budget 16)
 
 Analyse as usual, then either record your answers (`doe exercise answer cvd.aikidoe.json
 --active … --effect "id=estimate:lower:upper" … --best "…" --prediction v`, and for counts
-`--ratio "id=estimate:lower:upper"`) or let the grader
+`--ratio "id=estimate:lower:upper"` and `--percent estimate:lower:upper`) or let the grader
 analyse your data the standard way:
 
 ```console
@@ -131,7 +133,8 @@ model answer:
 
 The grade has a part per question: the active factors by precision and recall; each true effect's
 sign and whether your interval contains it; each true rate or odds ratio the same way on the log
-scale (which side of 1 it is on, and whether your interval contains it); best settings by **regret** — how far the true response
+scale (which side of 1 it is on, and whether your interval contains it); a percentage half for an
+interval that contains the true mean and half for staying within 0–100 %; best settings by **regret** — how far the true response
 there falls short of the true optimum, as a share of the true range; a prediction by its error in
 σ; and 20 points off for exceeding the budget. Then the truth and the model answer.
 
