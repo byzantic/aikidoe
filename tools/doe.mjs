@@ -1429,8 +1429,8 @@ async function cmdExercise({ pos, opt }) {
       const csv = plates
         ? ['run,plate,well,response,value', ...st.observations.map(o => { const w = st.plates.wells.find(x => x.run === o.run); return `${o.run},${w.plate},${w.well},${o.response},${o.value}`; }),
           ...st.plates.readings.map(x => `,${x.plate},${x.well},${x.response},${x.value}`)].join('\n') + '\n'
-        : st.observations.some(o => o.exposure !== undefined)
-          ? ['run,response,value,exposure', ...st.observations.map(o => `${o.run},${o.response},${o.value},${o.exposure ?? ''}`)].join('\n') + '\n'
+        : st.observations.some(o => o.exposure !== undefined || o.trials !== undefined)
+          ? (() => { const k = st.observations.some(o => o.exposure !== undefined) ? 'exposure' : 'trials'; return [`run,response,value,${k}`, ...st.observations.map(o => `${o.run},${o.response},${o.value},${o[k] ?? ''}`)].join('\n') + '\n'; })()
           : ['run,response,value', ...st.observations.map(o => `${o.run},${o.response},${o.value}`)].join('\n') + '\n';
       const over = runs.length > key.budget;
       put({ runs: runs.length, budget: key.budget, overBudget: over, ...(opt.out ? { file: String(opt.out) } : { csv }) });

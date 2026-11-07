@@ -242,7 +242,7 @@ function makeQuestions(T, factors, response, g, mixture) {
 function assemble({ id, topic, difficulty, seed, scenario, sc, factors, response, budget, questions, process, attempt, mixture }) {
   const study = createStudy({ aikidoe: FORMAT_VERSION, name: `${sc.title} (${TOPICS[topic].title.toLowerCase()})`, seed, ...(mixture ? { mixture } : {}),
     description: `${sc.text} Budget: ${budget} runs.`,
-    factors, responses: [{ id: response.id, name: response.name, units: response.units, ...(response.distribution ? { distribution: response.distribution } : {}), ...(response.trials ? { trials: response.trials } : {}),
+    factors, responses: [{ id: response.id, name: response.name, units: response.units, ...(response.distribution ? { distribution: response.distribution } : {}), ...(Number.isInteger(response.trials) ? { trials: response.trials } : {}),
       ...(questions.some(q => q.kind === 'best') ? { goal: response.goal } : {}) }],
     // the plates, with their controls; the runs are laid out by the student
     ...(sc.plate ? { plates: { rows: 8, cols: 12, controls: sc.plate.controls, layout: 'balanced' } } : {}) });
@@ -550,7 +550,12 @@ export function tidyPlateStrategy(ex, truth = truthOf(ex)) {
 export function countAnswers(ex, study, { alpha = 0.05, leastSquares = false } = {}) {
   const resp = study.responses[0], r = resp.id, formula = `${r} ~ 2fi`, prop = isProportion(resp.distribution);
   let fit, analysis = 'as declared';
-  if (leastSquares) { fit = fitModel(study, formula, { noise: 'normal' }); analysis = `least squares on the raw ${prop ? 'numbers of successes' : 'counts'}`; }
+  if (leastSquares) {
+    // counts: the raw counts; proportions: the percentages (each dish the same weight, whatever was sown)
+    const st = prop ? { ...study, responses: study.responses.map(x => (x.id === r ? { id: r } : x)),
+      observations: study.observations.map(o => (o.response === r && o.value !== null ? { run: o.run, response: r, value: 100 * o.value / (o.trials ?? resp.trials) } : o)) } : study;
+    fit = fitModel(st, formula, { noise: 'normal' }); analysis = `least squares on the raw ${prop ? 'percentages' : 'counts'}`;
+  }
   else {
     fit = fitModel(study, formula);
     if (fit.separation) { fit = fitModel(study, formula, { firth: true }); analysis = 'the proportions are separated: Firth’s penalised likelihood'; }
@@ -567,7 +572,7 @@ export function countAnswers(ex, study, { alpha = 0.05, leastSquares = false } =
   const ratios = {};
   if (leastSquares) {
     // the fitted means at the high and low settings, the others at the centre
-    const b0 = fit.coef[fit.columns.indexOf('(Intercept)')], m = prop ? resp.trials : 1;
+    const b0 = fit.coef[fit.columns.indexOf('(Intercept)')], m = prop ? 100 : 1;
     const conv = (b) => { const hi = (b0 + b) / m, lo = (b0 - b) / m; if (!(hi > 0 && lo > 0) || (prop && !(hi < 1 && lo < 1))) return NaN; return prop ? (hi / (1 - hi)) / (lo / (1 - lo)) : hi / lo; };
     for (const id of active) {
       const j = fit.columns.indexOf(colOf(id)); if (j < 0) continue;
@@ -592,7 +597,7 @@ export function countAnswers(ex, study, { alpha = 0.05, leastSquares = false } =
 export function leastSquaresCountStrategy(ex, truth = truthOf(ex)) {
   const ref = referenceStrategy(ex, truth);
   const prop = isProportion(ex.study.responses[0].distribution);
-  return { strategy: `least squares on the raw ${prop ? 'numbers germinated' : 'counts'}`, steps: [`the same design, analysed by least squares on the raw ${prop ? 'numbers of successes' : 'counts'}; ratios of the fitted means`], study: ref.study, answers: countAnswers(ex, ref.study, { leastSquares: true }) };
+  return { strategy: `least squares on the raw ${prop ? 'percentages' : 'counts'}`, steps: [`the same design, analysed by least squares on the raw ${prop ? 'percentages germinated' : 'counts'}; ratios of the fitted means`], study: ref.study, answers: countAnswers(ex, ref.study, { leastSquares: true }) };
 }
 
 export function referencePower(ex, truth, study) {
@@ -640,7 +645,10 @@ function countPower(ex, truth, study) {
   const order = (t) => t.split(':').sort((a, b) => study.factors.findIndex(f => f.id === a) - study.factors.findIndex(f => f.id === b)).join(':');
   const terms = Object.entries(resp.truth.terms).map(([t, b]) => [order(t), b]);
   if (!terms.length) return 1;
-  const opts = prop ? { distribution: (resp.sigma ?? 0) > 0 ? 'quasibinomial' : 'binomial', trials: resp.trials, dispersion: 1 + resp.trials * centre * (1 - centre) * (resp.sigma ?? 0) ** 2 }
+  // trials: each run's (the seeds sown), or the process's fixed number
+  const trials = Array.isArray(resp.trials) ? runs.map(r => study.observations.find(o => o.run === r.run)?.trials ?? resp.trials[0]) : runs.map(() => resp.trials);
+  const nbar = trials.reduce((a, b) => a + b, 0) / trials.length;
+  const opts = prop ? { distribution: (resp.sigma ?? 0) > 0 ? 'quasibinomial' : 'binomial', trials, dispersion: 1 + nbar * centre * (1 - centre) * (resp.sigma ?? 0) ** 2 }
     : { distribution: resp.distribution, exposure, ...(resp.theta ? { theta: resp.theta } : {}) };
   let min = 1;
   try {

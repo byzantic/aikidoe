@@ -108,7 +108,7 @@ export function hints(lesson, ex, study) {
     if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
     if (results && d.runs.some(x => !study.observations.some(o => o.run === x.run && o.value !== null))) out.push('Some runs have no results yet: get them before analysing.');
     if (results && !out.length) out.push(prop
-      ? `Fit main effects and two-factor interactions on the Analyse step: the model is binomial, out of ${r.trials} per run. If it reports overdispersion, switch to the quasi-binomial; if it reports separation, to Firth’s method. The odds ratios with their intervals are the answer. Then grade.`
+      ? `Fit main effects and two-factor interactions on the Analyse step: the model is binomial, out of ${r.trials ? `${r.trials} per run` : 'the seeds sown in each dish'}. If it reports overdispersion, switch to the quasi-binomial; if it reports separation, to Firth’s method. The odds ratios with their intervals are the answer. Then grade.`
       : 'Fit main effects and two-factor interactions on the Analyse step: the model is Poisson, per µL plated. If it reports overdispersion, switch to the negative binomial. The rate ratios with their intervals are the answer. Then grade.');
     return out;
   }

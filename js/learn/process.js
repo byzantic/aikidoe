@@ -23,7 +23,8 @@
 // count per unit exposure, or the logit of the proportion — sigma (default 0) adds normal
 // run-to-run variation on that scale (extra-binomial variation), the nuisance shifts act on that
 // scale too, and exposure: [values] gives each run an exposure (the volume plated, say) drawn from
-// the list and recorded with its observation. Counts and successes are drawn by inverting their
+// the list and recorded with its observation; trials: [values] likewise gives each binomial run its
+// number of trials (the seeds sown in a dish), recorded with the observation. Counts and successes are drawn by inverting their
 // distribution function at a hashed uniform, so they are as reproducible as the normal draws.
 // Truth terms are labels over coded factor values (−1 … +1; log factors on the log scale):
 // 'A', 'A:B', 'I(A^2)', 'I(A*B)', a two-level categorical factor as −1 / +1 (first level −1),
@@ -154,10 +155,11 @@ export function observeRuns(process, study, { runs, all = false, offset = null }
         const m = trueMean(process, resp.id, r.settings), prop = PROPORTION.has(resp.distribution);
         const eta = (prop ? logit(m) : Math.log(m)) + shared;
         const exposure = resp.exposure?.length ? resp.exposure[Math.floor(hashUniform(seed, resp.id, 'exposure', key, rep) * resp.exposure.length)] : undefined;
-        const trials = sr.trials ?? resp.trials;
+        const perRun = Array.isArray(resp.trials);
+        const trials = perRun ? resp.trials[Math.floor(hashUniform(seed, resp.id, 'trials', key, rep) * resp.trials.length)] : sr.trials ?? resp.trials;
         const u = hashUniform(seed, resp.id, 'count', key, rep);
         const value = prop ? countQuantile('binomial', u, expit(eta), { trials }) : countQuantile(resp.distribution, u, Math.exp(eta) * (exposure ?? 1), { theta: resp.theta });
-        out.push({ run: r.run, response: resp.id, value, ...(exposure !== undefined ? { exposure } : {}) });
+        out.push({ run: r.run, response: resp.id, value, ...(exposure !== undefined ? { exposure } : {}), ...(perRun ? { trials } : {}) });
         continue;
       }
       const outlier = n.outliers && hashUniform(seed, resp.id, 'outlier', key, rep) < n.outliers.p ? (hashUniform(seed, resp.id, 'osign', key, rep) < 0.5 ? -1 : 1) * n.outliers.size * sigma : 0;
