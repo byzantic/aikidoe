@@ -50,6 +50,11 @@ Run a central composite design, fit the quadratic, find the best settings on the
 
 A **split-plot** design sets the hard-to-change factor once per group of runs (a whole plot) and varies the others within. Choose a split-plot design with enough whole plots (the budget allows six), run it, and look at the mixed model on the Analyse step: the hard-to-change factor is tested against the whole-plot variation.`,
     manual: [M('designs-split-plot', '', 'split-plot designs'), M('analysis', 'mixed-models', 'mixed models')] },
+  { id: 'plate', n: 14, title: 'Plates: where a sample sits matters', topic: 'plate', difficulty: 'medium',
+    text: `In a 96-well plate not every well is the same. The outer ring evaporates and warms faster, so it reads differently; a multichannel pipette or the reader can leave each row or column a little off; plates differ from one another. Filling a plate the tidy way — each condition in its own row, replicates side by side, controls in the first column — puts those differences straight into the effects.
+
+The design here is the easy part (a replicated full factorial). Lay it out on the plate (Design step → plate layout) with the **balanced** layout: the controls are spread over the plate and the runs placed so that the effects are not entangled with the edge or the row and column gradients. Then run it, and fit on the Analyse step: the model includes the position terms (Edge, Row, Col), and the plate view shows the residuals well by well. Answer, then compare with what the tidy layout would have given.`,
+    manual: [M('plates', '', 'microplates'), M('plates', 'layouts', 'plate layouts'), M('concepts', 'randomisation-and-blocking', 'randomisation and blocking')] },
   { id: 'gauge', n: 11, title: 'Measurement systems: gauge R&R', topic: null,
     text: 'Coming later: is the measurement good enough for the experiment? A gauge study on a virtual gauge.', manual: [M('process', 'gauge-rr', 'gauge R&R')] },
   { id: 'robust', n: 12, title: 'Robust design', topic: null,
@@ -69,6 +74,8 @@ export function hints(lesson, ex, study) {
   const n = d.runs.length;
   if (n > budget) out.push(`This design has ${n} runs and the budget is ${budget}: choose a smaller one (or fewer replicates).`);
   if (ex.topic === 'blocking' && !d.runs.some(r => r.block !== undefined)) out.push('The runs will take two days (8 a day), and days differ. Put the design in 2 blocks (Design step, blocks) so the day difference can be removed.');
+  if (T.plate && !(study.plates?.wells ?? []).some(w => w.run !== undefined)) out.push('Lay the runs out on the plate before running them (Design step → plate layout): where each run sits on the plate changes its result.');
+  else if (T.plate && study.plates.layout === 'ordered') out.push('The tidy layout lines the conditions up with the rows of the plate, so row-to-row differences end up in the effects. The balanced layout spreads them.');
   if (ex.topic === 'split-plot' && !d.runs.some(r => r.wholePlot !== undefined)) out.push(`${study.factors.find(f => f.htc)?.id} is hard to change, and varies each time it is reset. A split-plot design (several whole plots) lets the analysis separate that variation.`);
   if (T.curvature && !/ccd|box-behnken|optimal|central/i.test(d.kind)) out.push('To find an optimum inside the region the model needs curvature: a central composite design adds axial and centre points.');
   if (ex.topic === 'fraction' && results && d.params?.resolution === 3 && !(d.params?.stages?.length > 1)) out.push('In this 8-run fraction every main effect is aliased with two-factor interactions. A fold-over (Design → Next stage) separates them — can you tell which effects are real without it?');

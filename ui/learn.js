@@ -1,6 +1,7 @@
 // Learn mode (spec §16.2, issue #39): the lessons, an exercise banner over the four steps while an
 // exercise is open — task, budget, hints, results, answers and grading — and progress kept in this
 // browser.
+import { platesWithoutWells } from '../js/plate.js';
 import { h, select, dataTable } from './dom.js';
 import { render as md } from '../js/markdown.js';
 import { createStudy, decode } from '../js/study.js';
@@ -21,7 +22,7 @@ const mdLinks = (text) => md(text);                     // lesson text is truste
 const html = (s) => { const d = h('div', { class: 'lesson-text' }); d.innerHTML = mdLinks(s); for (const a of d.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener'; } return d; };
 
 /** The exercise of the open study, with its study (as the generator made it). */
-export const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [] }) });
+export const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [], ...platesWithoutWells(study) }) });
 
 /** Open a lesson's exercise as the current study. */
 export function startLesson({ setDoc, state }, lesson, { difficulty, seed } = {}) {

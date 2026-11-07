@@ -66,6 +66,10 @@ export const QUESTIONS = [
   { id: 'groupSize', type: 'number', min: 2, max: 1000, when: (a) => PHYSICAL(a) && a.groups === 'yes', text: 'How many runs fit in one group?',
     why: 'The block size: e.g. the number of runs one day or one batch allows.',
     help: ['concepts', 'randomisation-and-blocking'] },
+  { id: 'plates', type: 'choice', when: PHYSICAL, text: 'Are the runs wells on microplates (96-well, 384-well …)?',
+    why: 'Wells are not all alike: the outer ring evaporates and warms faster, pipettes and readers leave row and column differences, and plates differ. Filling a plate the tidy way (each condition in a row, controls in one column) puts those differences into the effects; a balanced layout spreads them, and the analysis takes out the plate, edge and gradients.',
+    help: ['plates', ''],
+    options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
   { id: 'curvature', type: 'choice', when: (a) => PHYSICAL(a) && a.aim !== 'optimise', text: 'Could the response peak, dip or level off inside the ranges you will use?',
     why: 'Two-level designs fit straight lines between the low and high settings and cannot see curvature. Centre points test for it cheaply; designs with three levels can estimate it.',
     help: ['designs-rsm', ''],
@@ -268,6 +272,11 @@ export function advise(a) {
     read(M('designs-sequential', 'confirmation-runs', 'confirmation runs'));
   }
 
+  // microplates
+  if (a.plates === 'yes') {
+    notes.push('Runs in wells: lay the design out on the plates with the balanced layout (Design step → plate layout, or `doe plate`), with positive and negative controls spread over every plate. Each plate is a block; the analysis adds the edge and row and column gradients, and the controls give Z′ for the assay window.');
+    lesson('plate'); read(M('plates', '', 'microplates'), M('plates', 'layouts', 'plate layouts'));
+  }
   // groups → blocks
   if (a.groups === 'yes') {
     const g = a.groupSize ?? 0;

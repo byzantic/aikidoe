@@ -110,7 +110,7 @@ export function confirmPanel({ state, setDoc, setUI }, fit) {
       h('span', { class: 'stat' }, `95% CI (mean${mixed ? ', KR' : ''}) `, h('b', {}, `${num(pred.lower)} … ${num(pred.upper)}`)),
       h('span', { class: 'stat' }, '95% PI (one run) ', h('b', {}, `${num(pred.predLower)} … ${num(pred.predUpper)}`)),
       predN ? h('span', { class: 'stat' }, `95% PI (mean of ${reps} runs) `, h('b', {}, `${num(predN.predLower)} … ${num(predN.predUpper)}`)) : null,
-      fit.model.terms[0]?.block ? h('span', { class: 'muted' }, '(average block)') : null),
+      fit.model.terms.some(t => t.block) ? h('span', { class: 'muted' }, fit.model.terms.some(t => t.position) ? '(average block, average well)' : '(average block)') : null),
     h('div', { class: 'row' }, h('button', { class: 'btn', id: 'add-confirm', onclick: () => {
       const next = appendStage(study, confirmationRuns(study, fit, [at], { replicates: reps, inOneWholePlot: !ui.separate }));
       state.step = 'run'; setDoc(structuredClone(next));

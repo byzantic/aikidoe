@@ -49,6 +49,9 @@ section('hand-written forms the library accepts');
     'design, observations with wafers and sites, history': { ...base(), design: { kind: 'custom', runs: [{ run: 1, settings: { T: 900, gas: 'N2' } }, { run: 2, order: 2, block: 1, settings: { T: 1000, gas: 'O2' } }] },
       observations: [{ run: 1, response: 'y', value: 3, wafer: 1, site: 'C' }, { run: 2, response: 'y', value: null }], history: [{ stage: 'screen', runs: [1, 2] }],
       sites: { scheme: 'custom', diameter: 200, positions: [{ id: 'C', x: 0, y: 0 }] } },
+    'microplates: wells, controls, readings': { ...base(), design: { kind: 'custom', runs: [{ run: 1, settings: { T: 900, gas: 'N2' } }, { run: 2, block: 1, settings: { T: 1000, gas: 'O2' } }] },
+      plates: { rows: 8, cols: 12, exclude: ['edge', 'B2'], controls: [{ id: 'pos', role: 'positive', perPlate: 1 }, { id: 'neg', name: 'blank', perPlate: 1 }], layout: 'random', seed: 3,
+        wells: [{ plate: 1, well: 'C03', run: 1 }, { plate: 1, well: 'D4', run: 2 }, { plate: 1, well: 'E05', control: 'pos' }], readings: [{ plate: 1, well: 'E05', response: 'y', value: 2.5 }] } },
     'tolerances, noise, spec, simulator': { ...base(), factors: [{ id: 'a', low: 0, high: 1, tolerance: { sd: 0.1, dist: 'uniform' } }, { id: 'b', low: 0, high: 1, tolerance: 0.05, noise: { sd: 1 } }],
       responses: [{ id: 'y', spec: { upper: 2 }, goal: 'target', lower: 0, target: 1, upper: 2, weight: [1, 2], importance: 3 }], simulator: { adapter: 'expression', responses: { y: 'a + b' } } },
   };
@@ -92,6 +95,10 @@ section('the study schema rejects what parseStudy rejects (structural rules)');
     'observation repeat not an integer': (d) => { d.design = { runs: [{ run: 1, settings: { T: 900, gas: 'N2' } }] }; d.observations = [{ run: 1, response: 'y', value: 3, repeat: 1.5 }]; },
     'site without coordinates': (d) => { d.sites = { positions: [{ id: 'C' }] }; },
     'site diameter zero': (d) => { d.sites = { diameter: 0, positions: [] }; },
+    'plate with no rows': (d) => { d.plates = { rows: 0, cols: 12 }; },
+    'plate well neither run nor control': (d) => { d.design = { runs: [{ run: 1, settings: { T: 900, gas: 'N2' } }] }; d.plates = { rows: 8, cols: 12, wells: [{ plate: 1, well: 'A01' }] }; },
+    'plate control role unknown': (d) => { d.plates = { rows: 8, cols: 12, controls: [{ id: 'p', role: 'great', perPlate: 2 }] }; },
+    'plate layout unknown': (d) => { d.plates = { rows: 8, cols: 12, layout: 'tidy' }; },
     'history stage unnamed': (d) => { d.history = [{ runs: [] }]; },
     'simulator without adapter': (d) => { d.simulator = { netlist: '' }; },
   };

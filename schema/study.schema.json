@@ -67,6 +67,10 @@
       "$ref": "#/$defs/sites",
       "description": "drop-in measurement sites on the wafer"
     },
+    "plates": {
+      "$ref": "#/$defs/plates",
+      "description": "microplate layout: each run in a well, controls on every plate"
+    },
     "history": {
       "type": "array",
       "items": {
@@ -736,6 +740,172 @@
         "params": {
           "type": "object",
           "description": "the stage's parameters"
+        }
+      }
+    },
+    "plates": {
+      "type": "object",
+      "required": [
+        "rows",
+        "cols"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "description": "rows of wells (8 for a 96-well plate)"
+        },
+        "cols": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 48,
+          "description": "columns of wells (12 for a 96-well plate)"
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "const": "edge"
+              },
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z]{1,2}0*[1-9][0-9]*$",
+                "description": "well id: row letter(s) and column, e.g. B07"
+              }
+            ]
+          },
+          "description": "wells left empty: \"edge\" (the outer ring) or well ids"
+        },
+        "controls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "perPlate"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "positive",
+                  "negative",
+                  "blank",
+                  "standard",
+                  "other"
+                ],
+                "description": "positive and negative controls give Z′"
+              },
+              "perPlate": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "wells per plate"
+              }
+            }
+          },
+          "description": "control wells on every plate"
+        },
+        "layout": {
+          "enum": [
+            "balanced",
+            "random",
+            "ordered"
+          ],
+          "description": "how the runs were placed (default balanced)"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "efficiency": {
+          "type": "number",
+          "description": "layout efficiency for the design's model (1 = position costs nothing)"
+        },
+        "wells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "plate",
+              "well"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "plate": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "well": {
+                "type": "string",
+                "pattern": "^[A-Za-z]{1,2}0*[1-9][0-9]*$",
+                "description": "well id: row letter(s) and column, e.g. B07"
+              },
+              "run": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "control": {
+                "$ref": "#/$defs/id"
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "run"
+                ]
+              },
+              {
+                "required": [
+                  "control"
+                ]
+              }
+            ]
+          },
+          "description": "each used well: a run of the design or a control"
+        },
+        "readings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "plate",
+              "well",
+              "response",
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "plate": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "well": {
+                "type": "string",
+                "pattern": "^[A-Za-z]{1,2}0*[1-9][0-9]*$",
+                "description": "well id: row letter(s) and column, e.g. B07"
+              },
+              "response": {
+                "$ref": "#/$defs/id"
+              },
+              "value": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "description": "results of the control wells"
         }
       }
     }

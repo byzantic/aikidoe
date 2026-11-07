@@ -5,8 +5,10 @@ import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults } from
 import { parseNumber } from '../js/io/csv.js';
 import { studyAdapter } from '../js/sim/adapters.js';
 import { runOnSimulator } from '../js/sim/adapter.js';
+import { plateRunPanel } from './plates.js';
 
-export function render({ state, update, setDoc, setUI, go }) {
+export function render(ctx) {
+  const { state, update, setDoc, setUI, go } = ctx;
   const study = state.study, ui = state.ui.run ??= {};
   const sheet = runSheet(study);
   const runs = study.design.runs, done = new Set(study.observations.filter(o => o.value !== null).map(o => o.run));
@@ -44,13 +46,13 @@ export function render({ state, update, setDoc, setUI, go }) {
     const { imp, name } = ui.pending;
     const errs = imp.problems.filter(p => p.severity === 'error'), warns = imp.problems.filter(p => p.severity === 'warning'), info = imp.problems.filter(p => p.severity === 'info');
     const fmt = (p) => `${p.line ? `line ${p.line}${p.column ? `, ${p.column}` : ''}: ` : ''}${p.message}`;
-    const apply = (mode, force = false) => { try { const next = applyResults(study, imp, { mode, force }); state.ui.run = { ...ui, pending: null }; setDoc(structuredClone(next)); toast(`${imp.observations.length} value(s) imported`); } catch (e) { toast(e.message); } };
+    const apply = (mode, force = false) => { try { const next = applyResults(study, imp, { mode, force }); state.ui.run = { ...ui, pending: null }; setDoc(structuredClone(next)); toast(`${imp.observations.length} value(s) imported${imp.readings?.length ? `, ${imp.readings.length} control reading(s)` : ''}`); } catch (e) { toast(e.message); } };
     pending = h('section', { class: 'panel', id: 'import-review' }, h('h2', {}, `Import ${name}`),
-      h('p', { class: 'small' }, `${imp.observations.length} value(s) read (${imp.format ?? '?'} format).`),
+      h('p', { class: 'small' }, `${imp.observations.length} value(s) read (${imp.format ?? '?'} format)${imp.readings?.length ? ` and ${imp.readings.length} control-well reading(s)` : ''}.`),
       messages(errs.map(fmt), 'error'), messages(warns.map(fmt), 'warning'), messages(info.map(fmt), 'ok'),
       h('div', { class: 'row' },
-        h('button', { class: 'btn primary', disabled: !!errs.length || !imp.observations.length, onclick: () => apply('replace') }, 'Import (replace)'),
-        h('button', { class: 'btn', disabled: !!errs.length || !imp.observations.length, onclick: () => apply('append') }, 'Import (add to existing)'),
+        h('button', { class: 'btn primary', disabled: !!errs.length || !(imp.observations.length || imp.readings?.length), onclick: () => apply('replace') }, 'Import (replace)'),
+        h('button', { class: 'btn', disabled: !!errs.length || !(imp.observations.length || imp.readings?.length), onclick: () => apply('append') }, 'Import (add to existing)'),
         errs.length && imp.observations.length ? h('button', { class: 'btn danger', onclick: () => apply('replace', true) }, `Import the ${imp.observations.length} valid values anyway`) : null,
         h('button', { class: 'btn', onclick: () => setUI({ run: { ...ui, pending: null } }) }, 'Cancel')));
   }
@@ -95,5 +97,5 @@ export function render({ state, update, setDoc, setUI, go }) {
   const table = h('section', { class: 'panel' }, h('div', { class: 'table-wrap' }, h('table', { class: 'data', id: 'run-sheet' },
     h('thead', {}, h('tr', {}, H.filter(k => k !== 'note').map(k => h('th', { class: resIdx.includes(H.indexOf(k)) ? 'n' : '' }, label(k))))),
     h('tbody', {}, rows))));
-  return h('div', {}, head, pending, table);
+  return h('div', {}, head, pending, plateRunPanel(ctx), table);
 }

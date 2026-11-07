@@ -7,6 +7,7 @@ import { fullFactorial, fractionalFactorial, toStudyDesign } from '../design/fac
 import { splitPlotFull } from '../design/splitplot.js';
 import { ccd } from '../design/rsm.js';
 import { appendStage } from '../design/augment.js';
+import { layoutPlates } from '../design/plate-layout.js';
 import { foldover } from '../design/augment.js';
 import { fitModel, predict } from '../model/ols.js';
 import { fitMixedModel } from '../model/mixed.js';
@@ -35,6 +36,11 @@ export const TOPICS = {
     questions: ['active', 'best', 'prediction'] },
   'split-plot': { title: 'A hard-to-change factor', lesson: 10, k: () => 3, budget: 24, active: () => 2, htc: true, interaction: 0.5,
     nuisance: (sigma) => ({ reset: 0.8 * sigma }), questions: ['active', 'effects'] },
+  // runs in the wells of a 96-well plate (issue #63): the outer ring and corners read low, a bow and
+  // a gradient across the columns, and each row has its own offset (a multichannel pipette)
+  plate: { title: 'Plates: where a sample sits matters', lesson: 14, k: (d) => (d === 'easy' ? 3 : 4), budget: 48, active: (g) => 2 + g.int(2), interaction: 0.5,
+    plate: true, nuisance: (sigma) => ({ plate: { edge: -2 * sigma, corner: -1 * sigma, col: 0.6 * sigma, colQuad: 1.2 * sigma, rowSd: 0.8 * sigma } }),
+    questions: ['active', 'effects'] },
 };
 
 // ---------------------------------------------------------------- generation
@@ -72,9 +78,13 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   if (!DIFFICULTIES[difficulty]) throw new Error(`difficulty must be ${Object.keys(DIFFICULTIES).join(', ')}`);
   seed = seed >>> 0;
   const g0 = rng(seed ^ 0x5eed);
-  const scId = scenario ?? Object.keys(SCENARIOS)[g0.int(Object.keys(SCENARIOS).length)];
+  // plate scenarios belong to the plate topic (and only they have plates), so the other topics'
+  // choice of scenario — and their exercises for a given seed — are as before
+  const pool0 = Object.keys(SCENARIOS).filter(id => !!SCENARIOS[id].plate === !!T.plate);
+  const scId = scenario ?? pool0[g0.int(pool0.length)];
   const sc = SCENARIOS[scId];
   if (!sc) throw new Error(`unknown scenario "${scId}"`);
+  if (!!sc.plate !== !!T.plate) throw new Error(T.plate ? `the ${topic} topic needs a plate scenario (${pool0.join(', ')})` : `scenario "${scId}" is a plate assay: use it with the plate topic`);
   const k = T.k(difficulty);
   // factors: the hard-to-change one when the topic needs it; continuous for response surfaces
   let pool = sc.factors.filter(f => !f.levels && !f.htc);
@@ -92,7 +102,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
     const g = rng((seed * 2654435761 + attempt * 97 + 13) >>> 0);
     const truth = makeTruth(topic, difficulty, g, factors, response);
     const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, sigma: response.sigma, truth, decimals: response.decimals }],
-      nuisance: T.nuisance ? T.nuisance(response.sigma) : {} };
+      nuisance: T.nuisance ? T.nuisance(response.sigma) : {}, ...(sc.plate ? { controls: sc.plate.truth } : {}) };
     const questions = makeQuestions(T, factors, response, g);
     const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt });
     const ref = referenceStrategy(ex, ex.truth);
@@ -126,7 +136,9 @@ function makeQuestions(T, factors, response, g) {
 function assemble({ id, topic, difficulty, seed, scenario, sc, factors, response, budget, questions, process, attempt }) {
   const study = createStudy({ aikidoe: FORMAT_VERSION, name: `${sc.title} (${TOPICS[topic].title.toLowerCase()})`, seed,
     description: `${sc.text} Budget: ${budget} runs.`,
-    factors, responses: [{ id: response.id, name: response.name, units: response.units, ...(questions.some(q => q.kind === 'best') ? { goal: response.goal } : {}) }] });
+    factors, responses: [{ id: response.id, name: response.name, units: response.units, ...(questions.some(q => q.kind === 'best') ? { goal: response.goal } : {}) }],
+    // the plates, with their controls; the runs are laid out by the student
+    ...(sc.plate ? { plates: { rows: 8, cols: 12, controls: sc.plate.controls, layout: 'balanced' } } : {}) });
   return { format: EXERCISE_FORMAT, id, topic, difficulty, seed, scenario, title: TOPICS[topic].title, text: sc.text, budget, questions,
     study, truth: { process, attempt } };
 }
@@ -159,6 +171,11 @@ export const studentOf = (ex) => { const { sealed, truth, ...rest } = ex; return
 /** The study with results for its runs, from the exercise's truth. */
 export function runExercise(ex, study, opts = {}) {
   const t = truthOf(ex);
+  if (t.process.nuisance?.plate) {
+    const inWell = new Set((study.plates?.wells ?? []).filter(w => w.run !== undefined).map(w => w.run));
+    const loose = (study.design?.runs ?? []).filter(r => !inWell.has(r.run));
+    if (loose.length) throw new Error(`lay the runs out on the plates first (Design step → plate layout, or doe plate): run${loose.length > 1 ? 's' : ''} ${loose.slice(0, 6).map(r => r.run).join(', ')}${loose.length > 6 ? ' …' : ''} ${loose.length > 1 ? 'are' : 'is'} not in a well`);
+  }
   const proc = { ...t.process, factors: study.factors };
   return createStudy(runVirtual(proc, study, { ...opts, offset: nuisanceOffsets(proc, study) }));
 }
@@ -254,6 +271,13 @@ export function referenceStrategy(ex, truth = truthOf(ex)) {
       break;
     }
     case 'rsm': st = make(ccd(k), `rotatable central composite design (${ccd(k).X.length} runs); fit the full quadratic; maximise within the ranges`); break;
+    case 'plate': {
+      const reps = ex.budget / 2 ** k;
+      st = make(fullFactorial(levels, { replicates: reps, continuous: cont }), `2^${k} full factorial, ${reps} replicates (${ex.budget} runs)`);
+      st = createStudy(layoutPlates(st, { layout: 'balanced', seed: ex.seed }).study);
+      steps.push('laid out on the plate with the balanced layout: controls spread over the plate, the runs placed so that the effects are not entangled with the edge or the row and column gradients; fit main effects and two-factor interactions with the position terms (Edge, Row, Col)');
+      break;
+    }
     case 'split-plot': st = make(splitPlotFull(levels, base.factors.map(f => !!f.htc), { replicates: 3 }), `split-plot full factorial, hard-to-change ${base.factors.find(f => f.htc).id} reset for 6 whole plots (3 per level); mixed model, Kenward–Roger tests`); break;
     default: throw new Error(`no reference strategy for ${ex.topic}`);
   }
@@ -273,6 +297,7 @@ export function ofatStrategy(ex, truth = truthOf(ex)) {
     runs.push({ run: runs.length + 1, order: runs.length + 1, kind: 'other', settings: s });
   }
   let st = createStudy({ ...base, design: { kind: 'custom', params: { strategy: 'one factor at a time' }, randomisation: 'none', runs } });
+  if (st.plates) st = createStudy(layoutPlates(st, { layout: 'ordered', seed: ex.seed }).study);
   st = createStudy(runExercise({ ...ex, truth }, st));
   const r = base.responses[0].id, y = (run) => st.observations.find(o => o.run === run && o.response === r).value;
   const groups = Array.from({ length: k + 1 }, (_, j) => runs.filter((_, i) => i % (k + 1) === j).map(x => y(x.run)));
@@ -292,6 +317,19 @@ export function ofatStrategy(ex, truth = truthOf(ex)) {
   const pq = ex.questions.find(q => q.kind === 'prediction');
   if (pq) ans.prediction = { value: additive(pq.settings) };
   return { strategy: 'one factor at a time', steps: [`baseline at the low settings and each factor raised alone, ${reps} times (${runs.length} runs, in order)`], study: st, answers: ans };
+}
+
+/**
+ * The tidy plate layout (plate topic): the reference design, but laid out the way plates are often
+ * filled by hand — conditions in standard order, replicates side by side, row by row — and
+ * analysed the same way. For comparison with the reference strategy.
+ */
+export function tidyPlateStrategy(ex, truth = truthOf(ex)) {
+  const ref = referenceStrategy(ex, truth);
+  let st = createStudy({ ...ref.study, observations: [], plates: { ...ref.study.plates, wells: [], readings: [] } });
+  st = createStudy(layoutPlates(st, { layout: 'ordered', relayout: true }).study);
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  return { strategy: 'tidy plate layout', steps: ['the same design, laid out by hand: conditions in standard order, replicates side by side, row by row'], study: st, answers: deriveAnswers(ex, st) };
 }
 
 function referencePower(ex, truth, study) {

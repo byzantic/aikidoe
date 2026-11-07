@@ -29,6 +29,7 @@ the library checks the rest when it reads a study:
 | `design` | [design](#design) | the runs, in standard order, with their randomised run order |
 | `observations` | list of [observation](#observation) | results: one per reading (run, response, and wafer / site / repeat when measured that way) |
 | `sites` | [sites](#sites) | drop-in measurement sites on the wafer |
+| `plates` | [plates](#plates) | microplate layout: each run in a well, controls on every plate |
 | `history` | list of [stage](#stage) | the stages of a sequential experiment |
 | `simulator` | object | the simulator that runs the design (computer experiments): { adapter, …its options } |
 | `exercise` | object | an exercise this study answers (made by the exercise generator): its id, topic, difficulty, budget, questions, the sealed truth for self-study, and the student's answers |
@@ -149,6 +150,20 @@ Without `type`, a factor whose levels include a string is categorical.
 | `date` | string | when |
 | `note` | string |  |
 | `params` | object | the stage's parameters |
+
+## plates
+
+| field | type | |
+|---|---|---|
+| `rows` (required) | integer (≥ 1, ≤ 32) | rows of wells (8 for a 96-well plate) |
+| `cols` (required) | integer (≥ 1, ≤ 48) | columns of wells (12 for a 96-well plate) |
+| `exclude` | list of `"edge"` or string (matching `^[A-Za-z]{1,2}0*[1-9][0-9]*$`) | wells left empty: "edge" (the outer ring) or well ids |
+| `controls` | list of object | control wells on every plate |
+| `layout` | `"balanced"` \| `"random"` \| `"ordered"` | how the runs were placed (default balanced) |
+| `seed` | integer (≥ 0, ≤ 4294967295) |  |
+| `efficiency` | number | layout efficiency for the design's model (1 = position costs nothing) |
+| `wells` | list of object or object | each used well: a run of the design or a control |
+| `readings` | list of object | results of the control wells |
 
 ## constraint
 

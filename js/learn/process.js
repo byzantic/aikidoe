@@ -5,7 +5,15 @@
 //   { seed, factors: [study factors],
 //     responses: [{ id, truth: { intercept, terms: { label: coef } }, sigma, transform?: 'log', decimals? }],
 //     nuisance: { wholePlot: sd, block: sd, drift: per run (in σ), outliers: { p, size (σ) },
-//                 gauge: { bias }, wafers: n, wafer: sd, site: sd, slot: coef per slot } }
+//                 gauge: { bias }, wafers: n, wafer: sd, site: sd, slot: coef per slot,
+//                 plate: { edge, corner, col, colQuad, rowSd, sd } },
+//     controls: { id: { mean, sd } } }
+// plate: position effects for runs laid out on microplates (study.plates), in the response's
+// units (log scale for a log response): edge = shift of the outer ring, corner = extra shift of
+// the four corners, col = linear gradient (column coded −1 … +1), colQuad = a bow across the
+// columns (coded col², centred), rowSd = a random offset per row and plate (a multichannel
+// pipette's channels), sd = plate-to-plate shift. Control wells read controls[id] (mean, sd) plus
+// the same position effects.
 // Truth terms are labels over coded factor values (−1 … +1; log factors on the log scale):
 // 'A', 'A:B', 'I(A^2)', 'I(A*B)', a two-level categorical factor as −1 / +1 (first level −1),
 // 'g.L' for an indicator of level L of a categorical factor, and the position terms 'radius2'
@@ -18,6 +26,7 @@
 // shift on (seed, its label). So an exercise is reproducible, and repeating a run gives a fresh
 // but repeatable draw.
 import { code } from '../study.js';
+import { runPositions, parseWell, ring } from '../plate.js';
 import { sitePositions } from '../model/sites.js';
 import { normal } from '../dist.js';
 
@@ -86,6 +95,7 @@ export function observeRuns(process, study, { runs, all = false, offset = null }
     const k = settingsKey(process.factors, r.settings); const i = seen.get(k) ?? 0; seen.set(k, i + 1); repOf.set(r.run, i);
   }
   const P = study.sites ? sitePositions(study) : null;
+  const wells = study.plates ? runPositions(study) : null;
   const slotNext = new Map(), out = [];
   for (const r of study.design.runs.slice().sort((a, b) => (a.order ?? a.run) - (b.order ?? b.run))) {
     if (!want.has(r.run)) continue;
@@ -98,7 +108,8 @@ export function observeRuns(process, study, { runs, all = false, offset = null }
         + (n.block && r.block !== undefined ? n.block * hashNormal(seed, resp.id, 'block', r.block) : 0)
         + (n.drift ? n.drift * sigma * (order - 1) : 0)
         + sigma * hashNormal(seed, resp.id, 'run', key, rep)
-        + (offset ? offset(r.run, resp.id) : 0);
+        + (offset ? offset(r.run, resp.id) : 0)
+        + (n.plate && wells?.has(r.run) ? plateEffect(process, study, resp.id, wells.get(r.run)) : 0);
       const outlier = n.outliers && hashUniform(seed, resp.id, 'outlier', key, rep) < n.outliers.p ? (hashUniform(seed, resp.id, 'osign', key, rep) < 0.5 ? -1 : 1) * n.outliers.size * sigma : 0;
       const bias = n.gauge?.bias ?? 0;
       const levels = sr.levels ?? ['run'];
@@ -127,9 +138,49 @@ export function observeRuns(process, study, { runs, all = false, offset = null }
   return out;
 }
 
+/** Position effect of a well on a plate (process.nuisance.plate), for one response. */
+export function plateEffect(process, study, response, pos) {
+  const q = process.nuisance?.plate ?? {}, seed = process.seed, P = study.plates;
+  const corner = (pos.r === 0 || pos.r === P.rows - 1) && (pos.c === 0 || pos.c === P.cols - 1);
+  return (q.edge && pos.ring === 0 ? q.edge : 0) + (q.corner && corner ? q.corner : 0)
+    + (q.col ? q.col * pos.col : 0) + (q.colQuad ? q.colQuad * (pos.col ** 2 - 1 / 3) : 0)
+    + (q.rowSd ? q.rowSd * hashNormal(seed, response, 'plate-row', pos.plate, pos.r) : 0)
+    + (q.sd ? q.sd * hashNormal(seed, response, 'plate', pos.plate) : 0);
+}
+
+/** Readings of the control wells (process.controls), for plates that hold the given runs. */
+export function observeControls(process, study, { plates } = {}) {
+  const P = study.plates;
+  if (!P || !process.controls) return [];
+  const want = plates ?? new Set(P.wells.map(w => w.plate));
+  const out = [];
+  for (const w of P.wells) if (w.control !== undefined && want.has(w.plate)) {
+    const q = parseWell(w.well), k = ring(q, P.rows, P.cols);
+    const pos = { plate: w.plate, r: q.r, c: q.c, ring: k, col: P.cols > 1 ? (2 * q.c) / (P.cols - 1) - 1 : 0 };
+    for (const resp of process.responses) {
+      const c = process.controls[w.control]?.[resp.id] ?? process.controls[w.control];
+      if (!c || !Number.isFinite(c.mean)) continue;
+      const e = (c.sd ?? 0) * hashNormal(process.seed, resp.id, 'control', w.plate, w.well);
+      const sh = process.nuisance?.plate ? plateEffect(process, study, resp.id, pos) : 0;
+      let v = resp.transform === 'log' ? Math.exp(Math.log(c.mean) + sh + e) : c.mean + sh + e;
+      if (resp.decimals !== undefined) v = +v.toFixed(resp.decimals);
+      out.push({ plate: w.plate, well: w.well, response: resp.id, value: v });
+    }
+  }
+  return out;
+}
+
 /** The study with the process's results filled in (runs without results; all: every run). */
 export function runVirtual(process, study, opts = {}) {
   const obs = observeRuns(process, study, opts);
   const done = new Set(obs.map(o => o.run));
-  return { ...study, observations: [...study.observations.filter(o => !done.has(o.run)), ...obs] };
+  const out = { ...study, observations: [...study.observations.filter(o => !done.has(o.run)), ...obs] };
+  if (study.plates && process.controls) {
+    // the controls of plates whose runs were just observed (and that have no readings yet)
+    const plateOf = new Map(study.plates.wells.filter(w => w.run !== undefined).map(w => [w.run, w.plate]));
+    const read = new Set(study.plates.readings.map(x => x.plate));
+    const plates = new Set([...done].map(r => plateOf.get(r)).filter(p => p !== undefined && !read.has(p)));
+    out.plates = { ...study.plates, readings: [...study.plates.readings, ...observeControls(process, study, { plates })] };
+  }
+  return out;
 }

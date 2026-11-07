@@ -46,10 +46,12 @@ The app's simulated examples are virtual processes too.
 | `blocking` | blocking and randomisation | runs spread over days that shift the response |
 | `rsm` | response surfaces | find an optimum inside the region; predict at given settings |
 | `split-plot` | hard-to-change factors | a factor that is costly to reset, and varies each time it is |
+| `plate` | microplates | 48 runs in a 96-well plate whose edge, rows and columns differ: lay the runs out, then analyse ([microplates](plates.md)) |
 
 Each comes in three difficulties — *easy*, *medium*, *hard* — which set the smallest active effect
 (4, 3 and 2.4 σ) and, for some topics, the number of factors. Scenarios (gate-oxide growth, plasma
-etch, CVD deposition, reactor yield, coupler tuning) give the factors names, units and ranges.
+etch, CVD deposition, reactor yield, coupler tuning; for the plate topic, an enzyme assay and a
+cell-viability assay) give the factors names, units and ranges.
 
 ## Solvable by construction
 

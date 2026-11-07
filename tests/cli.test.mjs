@@ -282,6 +282,8 @@ try {
   js('alias', 'jsp.aikidoe.json');
   o = js('augment', 'j.aikidoe.json', '--foldover');
   check('augment --json: the new stage', o.stage?.runs.length === 8 && o.totalRuns === 16);
+  o = js('plate', 'j.aikidoe.json', '--format', '24', '--control', 'pos:positive:2', '--control', 'neg:negative:2');
+  check('plate --json: the layout (two blocks → two plates), its efficiency and the wells', o.plates === 2 && o.capacity === 20 && o.efficiency > 0.9 && o.wells.filter(w => w.run).length === 16);
   js('sites', 'janneal.aikidoe.json');
   js('summary', 'janneal.aikidoe.json', 'Rs', '--stats', 'mean');
   o = js('gauge', 'gauge.csv', '--tolerance', '8');

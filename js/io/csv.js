@@ -8,7 +8,7 @@
 //   parseNumber(s, { decimal }) → number, null for an explicit missing value, undefined for blank
 
 /** Split CSV text into records of string fields. */
-function records(text, delim) {
+export function records(text, delim) {
   const out = [];
   let row = [], field = '', i = 0, quoted = false, sawQuote = false;
   const n = text.length;
@@ -32,7 +32,7 @@ function records(text, delim) {
 }
 
 /** Pick the delimiter that splits the first lines most consistently. */
-function detectDelimiter(text) {
+export function detectDelimiter(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 10);
   let best = ',', bestScore = -1;
   for (const d of [',', ';', '\t']) {

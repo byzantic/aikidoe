@@ -133,3 +133,19 @@ section.exercise { border-left: 3px solid var(--accent); }
 .guide-plan li, .guide-notes li { margin: 4px 0; line-height: 1.45; }
 .guide-answers ol { padding-left: 20px; } .guide-answers li { margin: 2px 0; }
 .guide-result table.data td:last-child { white-space: normal; }
+
+/* microplates */
+.plate-maps { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0; }
+.plate-maps figure { margin: 0; } .plate-maps figcaption { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+table.plate-grid { border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+table.plate-grid th { font-weight: 400; color: var(--muted); padding: 0 3px; font-size: 10px; }
+table.plate-grid td { border: 1px solid var(--line); width: 30px; height: 22px; text-align: center; padding: 0; }
+table.plate-grid.small td { width: 24px; height: 18px; font-size: 10px; }
+table.plate-grid td.x { background: repeating-linear-gradient(45deg, transparent, transparent 3px, var(--grid) 3px, var(--grid) 5px); }
+table.plate-grid td.e { background: var(--bg); }
+table.plate-grid td.ctl { font-weight: 600; font-size: 9px; }
+table.plate-grid td.pos { background: color-mix(in srgb, #2e9e4f 25%, transparent); }
+table.plate-grid td.neg { background: color-mix(in srgb, #c94040 25%, transparent); }
+table.plate-grid td.blank, table.plate-grid td.oth { background: color-mix(in srgb, var(--muted) 20%, transparent); }
+table.plate-grid td.std { background: color-mix(in srgb, #3b6fd6 25%, transparent); }
+.controls-table td { padding: 2px 6px 2px 0; border: 0; }

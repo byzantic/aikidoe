@@ -38,6 +38,12 @@ or optimal runs for a larger model, added as a new block that the fit adjusts fo
 downloads it as a `.aikidoe.json` file and **Link** puts it, compressed, in the URL. The
 examples include simulated results so every step can be tried at once.
 
+Runs in the wells of microplates: the Design step's **plate layout** lays the design out on 96-,
+384- or 1536-well plates (a balanced layout that keeps the effects clear of plate, edge and
+row/column differences; controls spread over every plate), with plate maps and a pipetting list;
+plate-reader grids import on the Run step; the Analyse step fits edge and gradient terms and shows
+Z′ and the residuals well by well ([manual](docs/manual/plates.md); `doe plate` on the command line).
+
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,
 hard-to-change ones, groups of runs, curvature, constraints, the effect that matters, budget — one
 question at a time with why it matters, then suggests a staged plan, ranks the designs that fit,

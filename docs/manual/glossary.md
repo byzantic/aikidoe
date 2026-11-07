@@ -21,6 +21,9 @@ fraction; it gives every alias.
 **Desirability** — a 0–1 score of how acceptable a response value is; the overall desirability
 combines several responses.
 
+**Edge effect** — wells on the outer ring of a microplate reading differently from the inner
+wells (evaporation, temperature). See [microplates](plates.md).
+
 **Effect** — the change in a response from a factor's low to its high setting (twice the coded
 coefficient).
 
@@ -44,6 +47,9 @@ effects themselves.
 
 **Mixed model** — a model with fixed effects (the factors) and random effects (whole plots, runs,
 wafers) for nested sources of variation.
+
+**Plate layout** — which run goes in which well of a microplate; a balanced layout keeps the
+effects clear of plate, edge and row and column differences. See [layouts](plates.md#layouts).
 
 **Power** — the probability that a test detects an effect of a given size.
 
@@ -74,3 +80,6 @@ others vary within it.
 **Whole plot** — a group of runs sharing the settings of the hard-to-change factors.
 
 **Yield** — the fraction of units meeting every specification.
+
+**Z′ factor** — the assay window from the positive and negative controls,
+1 − 3(σ₊ + σ₋)/|μ₊ − μ₋|; 0.5 or more is excellent. See [microplates](plates.md#controls).

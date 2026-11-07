@@ -15,6 +15,7 @@ import { qr, solveUpper } from '../linalg.js';
 import { studentT, fDist, chi2, normal } from '../dist.js';
 import { observationsOf } from './sites.js';
 import { parseFormula, modelMatrix, containedIn } from './formula.js';
+import { runPositions } from '../plate.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
 
@@ -90,7 +91,6 @@ export function responseTable(study, responseId, { aggregate = 'mean' } = {}) {
 }
 
 /** Id for the block pseudo-factor that does not clash with the study's ids. */
-const blockId = (study) => { let id = 'Block'; const taken = new Set([...study.factors, ...study.responses].map(x => x.id)); while (taken.has(id)) id += '_'; return id; };
 
 /**
  * Fit a formula to a study's data. opts: response (default: the formula's left side), aggregate,
@@ -121,17 +121,47 @@ export function fitModel(study, formula, opts = {}) {
 }
 
 /**
- * The model with a fixed Block term first when the rows fall in more than one block (unless
- * opts.blocks === false): { model, factors, rows } with the block label in each row's settings.
+ * The model with nuisance terms first: a fixed Block term when the rows fall in more than one
+ * block (unless opts.blocks === false), and for runs laid out on microplates (study.plates) the
+ * position terms Edge (outer ring vs inner wells) and Row and Col (linear gradients across the
+ * plate), each when it varies among the rows (unless opts.position === false). Returns
+ * { model, factors, rows } with the nuisance values in each row's settings; nuisance terms are
+ * flagged block: true (left out of effects, power and model reduction; predictions are for the
+ * average block, an average well).
  */
 export function withBlockTerm(study, parsed, rows, opts = {}) {
+  const taken = new Set([...study.factors, ...study.responses].map(x => x.id));
+  const free = (id) => { while (taken.has(id)) id += '_'; taken.add(id); return id; };
+  const factors = [...study.factors], terms = [], extra = rows.map(() => ({}));
   const labels = [...new Set(rows.map(r => (r.block === undefined ? '' : String(r.block))))].sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
-  if (opts.blocks === false || labels.length < 2) return { model: parsed, factors: study.factors, rows };
-  const id = blockId(study);
+  if (opts.blocks !== false && labels.length > 1) {
+    const id = free('Block');
+    factors.push({ id, name: 'Block', type: 'categorical', levels: labels, block: true });
+    terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true });
+    rows.forEach((r, i) => { extra[i][id] = r.block === undefined ? '' : String(r.block); });
+  }
+  if (study.plates && opts.position !== false) {
+    const pos = runPositions(study);
+    const at = rows.map(r => pos.get(r.run));
+    if (at.every(Boolean)) {
+      const add = (name, f, value) => {
+        const vals = at.map(value);
+        if (new Set(vals.map(String)).size < 2) return;
+        const id = free(name);
+        factors.push({ ...f, id, name: f.name, block: true, position: true });
+        terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true, position: true });
+        vals.forEach((v, i) => { extra[i][id] = v; });
+      };
+      add('Edge', { name: 'Plate edge', type: 'categorical', levels: ['inner', 'edge'] }, (p) => (p.edge ? 'edge' : 'inner'));
+      add('Row', { name: 'Row gradient', type: 'continuous', low: -1, high: 1, transform: 'none' }, (p) => p.row);
+      add('Col', { name: 'Column gradient', type: 'continuous', low: -1, high: 1, transform: 'none' }, (p) => p.col);
+    }
+  }
+  if (!terms.length) return { model: parsed, factors: study.factors, rows };
   return {
-    factors: [...study.factors, { id, name: 'Block', type: 'categorical', levels: labels, block: true }],
-    model: { ...parsed, terms: [{ label: id, comps: [{ f: id }], degree: 1, block: true }, ...parsed.terms] },
-    rows: rows.map(r => ({ ...r, settings: { ...r.settings, [id]: r.block === undefined ? '' : String(r.block) } })),
+    factors,
+    model: { ...parsed, terms: [...terms, ...parsed.terms] },
+    rows: rows.map((r, i) => ({ ...r, settings: { ...r.settings, ...extra[i] } })),
   };
 }
 

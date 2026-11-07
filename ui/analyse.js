@@ -12,6 +12,7 @@ import { reduceModel } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
 import { observationsOf, availablePositionTerms, sitePositions } from '../js/model/sites.js';
 import { waferPlot } from './wafer.js';
+import { plateAnalysisPanel } from './plates.js';
 
 /** A sensible first model for the study's design. */
 
@@ -76,7 +77,7 @@ export function render(ctx) {
     h('p', { class: 'muted small' }, 'R-style formula over factor ids: ', h('span', { class: 'mono' }, 'A*B'), ' = A + B + A:B, ', h('span', { class: 'mono' }, '(A+B+C)^2'), ', ', h('span', { class: 'mono' }, 'I(T^2)'), ', ', h('span', { class: 'mono' }, '- A:B'), '. Coefficients are in coded units (−1 … +1).'));
 
   let fit = null, fitErr = null;
-  try { fit = fitModel(study, formula); } catch (e) { fitErr = e; }
+  try { fit = fitModel(study, formula, ui.noPosition ? { position: false } : {}); } catch (e) { fitErr = e; }
 
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)
   let rand = [];
@@ -99,7 +100,8 @@ export function render(ctx) {
   for (const v of hierarchyViolations(fit.model)) notes.push(`${v.term} is in the model without ${v.missing.join(', ')}.`);
   if (fit.aliased.length) notes.push(`Not estimable (aliased with earlier terms): ${fit.aliased.join(', ')}.`);
   const missingRuns = study.design.runs.filter(r => r.kind !== 'confirm').length - fit.n;
-  if (fit.model.terms[0]?.block) notes.push(`The design has ${fit.factors.find(f => f.block).levels.length} blocks (stages); a block term is fitted first so shifts between them do not bias the effects.`);
+  const blockF = fit.factors.find(f => f.block && !f.position);
+  if (blockF) notes.push(`The design has ${blockF.levels.length} blocks (${study.plates?.wells.length ? 'plates' : 'stages'}); a block term is fitted first so shifts between them do not bias the effects.`);
   if (missingRuns) notes.push(`${missingRuns} run(s) have no result yet and are left out.`);
 
   // ---------------------------------------------------------------- summary and coefficients
@@ -168,7 +170,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, controls, olsNote, summary, anovaPanel, effectsPanel, diag, confirmPanel(ctx, fit));
+  return h('div', {}, controls, olsNote, summary, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

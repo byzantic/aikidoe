@@ -194,6 +194,8 @@ export function modelMatrix(model, factors, rows) {
         if (f.block && s[c.f] === undefined) return { vals: new Array(f.levels.length - 1).fill(0), names: f.levels.slice(1).map(l => `${c.f}[${l}]`) };
         return { vals: effectCode(f, s[c.f]), names: f.levels.slice(1).map(l => `${c.f}[${l}]`) };
       }
+      // a continuous nuisance term (a plate gradient) at an unspecified position: the plate's centre
+      if (f.block && s[c.f] === undefined) return { vals: [0], names: [c.f] };
       return { vals: [code(f, s[c.f])], names: [c.f] };
     }
     let v = 1;

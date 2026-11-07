@@ -78,4 +78,48 @@ export const SCENARIOS = {
       { id: 'finish', name: 'Surface finish', levels: ['ENIG', 'HASL'] },
     ],
   },
+  // microplate assays (issue #63): used by the plate topic only, so the other topics' exercises
+  // for a given seed are unchanged. plate: the controls on every plate, and their true readings
+  'enzyme-assay': {
+    plate: true,
+    title: 'Enzyme activity assay',
+    text: 'A kinetic assay measures the activity of a purified enzyme in 96-well plates. The assay window is too small to rank inhibitors reliably, and the team wants to know which buffer and reaction conditions raise the activity.',
+    response: { id: 'activity', name: 'Activity', units: 'RFU/min', base: 1200, sigma: 60, goal: 'maximize', decimals: 1 },
+    factors: [
+      { id: 'substrate', name: 'Substrate', units: 'mM', low: 0.5, high: 5, transform: 'log' },
+      { id: 'pH', name: 'pH', low: 6.5, high: 8.5 },
+      { id: 'Mg', name: 'MgCl₂', units: 'mM', low: 1, high: 10, transform: 'log' },
+      { id: 'time', name: 'Pre-incubation', units: 'min', low: 10, high: 60 },
+      { id: 'triton', name: 'Triton X-100', units: '%', low: 0, high: 0.1 },
+      { id: 'DTT', name: 'DTT', units: 'mM', low: 0, high: 5 },
+      { id: 'NaCl', name: 'NaCl', units: 'mM', low: 50, high: 250 },
+      { id: 'temp', name: 'Incubation temperature', units: '°C', low: 25, high: 37, htc: true },
+      { id: 'lot', name: 'Enzyme lot', levels: ['A', 'B'] },
+    ],
+    plate: {
+      controls: [{ id: 'pos', name: 'Reference enzyme', role: 'positive', perPlate: 4 }, { id: 'neg', name: 'No enzyme', role: 'negative', perPlate: 4 }],
+      truth: { pos: { mean: 1500, sd: 60 }, neg: { mean: 120, sd: 25 } },
+    },
+  },
+  'cell-viability': {
+    plate: true,
+    title: 'Cell viability assay',
+    text: 'A luminescent viability assay in 96-well plates is used to screen compounds for toxicity. Results vary from run to run, and before the screen the lab wants to know which culture and assay conditions set the viable-cell signal.',
+    response: { id: 'signal', name: 'Viable-cell signal', units: 'kRLU', base: 50, sigma: 2.5, goal: 'maximize', decimals: 2 },
+    factors: [
+      { id: 'density', name: 'Seeding density', units: 'cells/well', low: 2000, high: 10000, transform: 'log' },
+      { id: 'serum', name: 'Serum', units: '%', low: 2, high: 10 },
+      { id: 'hours', name: 'Culture time', units: 'h', low: 24, high: 72 },
+      { id: 'DMSO', name: 'DMSO', units: '%', low: 0.1, high: 0.5 },
+      { id: 'glucose', name: 'Glucose', units: 'g/L', low: 1, high: 4.5 },
+      { id: 'reagent', name: 'Reagent volume', units: 'µL', low: 25, high: 100 },
+      { id: 'shake', name: 'Shaking', units: 'min', low: 0, high: 10 },
+      { id: 'CO2', name: 'Incubator CO₂', units: '%', low: 4, high: 8, htc: true },
+      { id: 'medium', name: 'Medium', levels: ['DMEM', 'RPMI'] },
+    ],
+    plate: {
+      controls: [{ id: 'live', name: 'Untreated cells', role: 'positive', perPlate: 4 }, { id: 'dead', name: 'Lysed cells', role: 'negative', perPlate: 4 }],
+      truth: { live: { mean: 62, sd: 2.5 }, dead: { mean: 3, sd: 0.4 } },
+    },
+  },
 };

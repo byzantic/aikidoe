@@ -30,6 +30,7 @@ const DESIGN = {
   screening: async () => { await page.click('tr[data-design="frac-16"]'); },
   fraction: async () => { await page.click('tr[data-design="frac-8"]'); },
   rsm: async () => { await page.click('tr[data-design="ccd"]'); },
+  plate: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
   'split-plot': async () => { await page.click('tr[data-design="sp-full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
 };
 
@@ -54,7 +55,16 @@ try {
     check('opened from the shared link', (await st()).exercise.id === `${lesson.topic}-${lesson.difficulty}-${seed}`);
     await DESIGN[lesson.topic](); await settle();
     await page.click('#create-design'); await settle();
+    if (lesson.topic === 'plate') {
+      check('hint: lay the runs out on the plate first', /Lay the runs out on the plate/.test(await page.textContent('#exercise-hints')));
+      await page.click('[data-step="design"]'); await settle();
+      await page.click('#plates-layout'); await settle();
+    }
     await page.click('#get-results'); await settle();
+    if (lesson.topic === 'plate') {
+      const ex = generateExercise({ topic: 'plate', difficulty: lesson.difficulty, seed }), ref = referenceStrategy(ex), s = await st();
+      check('the plate layout is the reference layout', JSON.stringify(s.plates.wells) === JSON.stringify(ref.study.plates.wells));
+    }
     if (lesson.topic === 'fraction') {
       check('hint: the fraction aliases main effects with interactions', /fold-over/.test(await page.textContent('#exercise-hints')));
       await page.click('[data-step="design"]'); await settle();

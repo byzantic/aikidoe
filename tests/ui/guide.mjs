@@ -41,6 +41,7 @@ try {
   await type('htc', 0);
   await choose('yes');
   await type('groupSize', 8);
+  await choose('no');                       // plates
   await choose('no');                       // curvature
   await choose('none');                     // constraints
   await choose('medium');
@@ -59,7 +60,7 @@ try {
   check('answers are kept in this browser', await current() === 'aim');
   await choose('optimise'); await choose('good'); await type('factors', 3);
   await page.click('#guide-skip'); await settle();
-  await choose('continuous'); await type('htc', 0); await choose('no'); await choose('corners'); await choose('medium');
+  await choose('continuous'); await type('htc', 0); await choose('no'); await choose('no'); await choose('corners'); await choose('medium');
   await page.click('#guide-skip'); await settle();
   await choose('no');
   check('optimise 3 factors, extremes unsafe: Box–Behnken', /Box–Behnken design \(15 runs\)/.test(await page.textContent('.guide-headline')));
