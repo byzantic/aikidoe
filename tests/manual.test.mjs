@@ -9,7 +9,8 @@ import { PAGES } from '../docs/manual/pages.js';
 import { MANUAL, referenceCli, referenceStudyFormat, runPage, outputMatches, blocksOf } from '../tools/gen-manual.mjs';
 import { EXAMPLES } from '../ui/examples.js';
 import { serializeStudy } from '../js/study.js';
-import { fitModel, twoLevelEffects } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
+import { twoLevelEffects } from '../js/model/ols.js';
 import { gaugeRR } from '../js/model/msa.js';
 import { near } from './lib/check.mjs';
 

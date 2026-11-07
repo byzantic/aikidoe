@@ -15,7 +15,7 @@ import { functionAdapter, runOnSimulator } from '../js/sim/adapter.js';
 import { studyAdapter } from '../js/sim/adapters.js';
 import { compiledPredictor, lhsDesign, fitSurrogates, surrogateYield, surrogateSensitivity, directYieldCheck } from '../js/sim/surrogate.js';
 import { propagationOfError } from '../js/model/robust.js';
-import { fitModel, predict as olsPredict } from '../js/model/ols.js';
+import { fitModel, predict as olsPredict } from '../js/model/fit.js';
 
 section('maximin Latin hypercube');
 {

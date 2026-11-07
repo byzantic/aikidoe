@@ -4,7 +4,8 @@ import { section, check, near, throws, done } from './lib/check.mjs';
 import { loadFixture, listFixtures } from './lib/fixtures.mjs';
 import { createStudy } from '../js/study.js';
 import { parseFormula, modelMatrix, hierarchyViolations } from '../js/model/formula.js';
-import { fitOLS, fitModel, anova, lackOfFit, boxCox, lenth, halfNormal, twoLevelEffects } from '../js/model/ols.js';
+import { fitModel, anova } from '../js/model/fit.js';
+import { fitOLS, lackOfFit, boxCox, lenth, halfNormal, twoLevelEffects } from '../js/model/ols.js';
 
 const TOL = { rel: 1e-8, abs: 1e-10 };
 const nn = (v) => (Array.isArray(v) ? v.map(nn) : v === null ? NaN : v);

@@ -6,21 +6,23 @@
 // (A stays while A:B or I(A^2) is in the model; with hierarchy: false every term is a
 // candidate), excluding block terms and terms in `keep`. For each candidate the model is refitted
 // without it:
-//   p-value: the partial F test of the term (as R's drop1(test = "F")); the candidate with the
-//            largest p is dropped if p > alphaOut (default 0.10).
-//   AICc:    AIC = n log(2π) + n log(RSS/n) + n + 2k with k = rank + 1 (σ counts, as R's AIC);
+//   p-value: the test of dropping the term, from the fit's noise model (noise.js): for normal
+//            noise the partial F test (as R's drop1(test = "F")); the candidate with the largest p
+//            is dropped if p > alphaOut (default 0.10).
+//   AICc:    AIC = −2 log L + 2k, from the noise model's log-likelihood; for normal noise
+//            n log(2π) + n log(RSS/n) + n + 2k with k = rank + 1 (σ counts, as R's AIC);
 //            AICc = AIC + 2k(k+1)/(n − k − 1). The candidate giving the lowest AICc is dropped
 //            if that is lower than the current model's.
-import { fitModel } from './ols.js';
+import { fitModel } from './fit.js';
 import { fitMixedModel, fitMixedML } from './mixed.js';
 import { hierarchyViolations } from './formula.js';
-import { fDist } from '../dist.js';
+import { noiseOf } from './noise.js';
 
 /** AICc of a fit (Infinity when n − k − 1 ≤ 0). */
 export function aicc(fit) {
-  const n = fit.n, k = fit.rank + 1;
-  if (!(fit.rss > 0)) return -Infinity;
-  const aic = n * Math.log(2 * Math.PI) + n * Math.log(fit.rss / n) + n + 2 * k;
+  const n = fit.n, { loglik, k } = noiseOf(fit).loglik(fit);
+  if (loglik === Infinity) return -Infinity;
+  const aic = -2 * loglik + 2 * k;
   return n - k - 1 > 0 ? aic + 2 * k * (k + 1) / (n - k - 1) : Infinity;
 }
 
@@ -50,9 +52,7 @@ export function reduceModel(study, formula, { method = 'p', alphaOut = 0.10, kee
     if (!cands.length) break;
     const trials = cands.map(l => {
       const g = fitModel(study, formulaOf(response, fit.model, labels.filter(x => x !== l)), fitOpts);
-      const df = fit.rank - g.rank;
-      const F = df > 0 && fit.dfRes > 0 ? ((g.rss - fit.rss) / df) / (fit.rss / fit.dfRes) : NaN;
-      return { drop: l, fit: g, df, F, p: df > 0 && fit.dfRes > 0 ? fDist.sf(Math.max(F, 0), df, fit.dfRes) : df === 0 ? 1 : NaN, aicc: aicc(g) };
+      return { drop: l, fit: g, ...noiseOf(fit).compare(fit, g), aicc: aicc(g) };
     });
     let pick;
     if (method === 'p') {

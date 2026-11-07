@@ -5,7 +5,7 @@
 // optimisation is checked analytically and by search, not against a published optimum.
 import { section, check, near, throws, done } from './lib/check.mjs';
 import { createStudy } from '../js/study.js';
-import { fitModel } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
 import { propagationOfError, dualResponse, poeGrid } from '../js/model/robust.js';
 import { EXAMPLES } from '../ui/examples.js';
 

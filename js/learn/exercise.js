@@ -12,7 +12,7 @@ import { doseDesign, addDoseStage, doseData } from '../design/dose-design.js';
 import { mixtureDesign, optimiseMixture, randomBlend, coxBlend, coxRange, referenceBlend, mixtureCandidates } from '../design/mixture.js';
 import { fitDose, effectiveDose, relativePotency, dilutionSeries, potencyPower, MODELS as DOSE } from '../model/dose.js';
 import { foldover } from '../design/augment.js';
-import { fitModel, predict } from '../model/ols.js';
+import { fitModel, predict } from '../model/fit.js';
 import { fitMixedModel } from '../model/mixed.js';
 import { studentT } from '../dist.js';
 import { solve as solveLin } from '../linalg.js';

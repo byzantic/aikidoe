@@ -33,7 +33,7 @@ The aim is to make correct statistical practice the easy path: alias structure s
   | `js/linalg.js` | dense matrices: QR (Householder), Cholesky, symmetric eigen, solve, inverse, determinant (log) |
   | `js/dist.js` | t, F, χ², normal, studentised range: cdf/quantile |
   | `js/design/*.js` | design generators (§5) |
-  | `js/model/*.js` | model formula, model matrix, OLS, REML (§6, §7) |
+  | `js/model/*.js` | model formula, model matrix, noise models and fitting (`noise.js`, `fit.js`), OLS, REML (§6, §7) |
   | `js/study.js` | study data model and JSON (de)serialisation (§4) |
   | `js/io/*.js` | CSV run sheets and results import (§11) |
   | `js/adapters/*.js` | simulator adapters (§10) |
@@ -120,6 +120,8 @@ Study files are JSON; comments (`//`, `/* */`) and trailing commas are accepted 
 Formula language similar to R/Wilkinson notation in coded factor ids: `Rs ~ (T + t + amb + dose)^2 + I(T^2)`. Shortcuts: `main`, `2fi`, `quadratic`. Hierarchy is maintained by default when terms are removed.
 
 ### 6.2 Fixed-effects fit (OLS)
+
+Fitting goes through a **noise model** (`js/model/noise.js`, issue #64): what is assumed about the variation of a response around its mean. Each noise model fits a model matrix, tests the terms, predicts with intervals on the response scale, gives residuals, compares nested models and their log-likelihood (for model reduction and AICc), and weights the runs' information for power. `fit.js` (`fitModel`, `predict`, `anova`) picks the response's noise model; normal noise with constant variance, fitted by least squares (`ols.js`), is the default and so far the only one. Lack of fit, Box–Cox, Lenth and the mixed models (§7) are normal-theory tools and refuse fits from other noise models.
 
 - Coefficients, SE, t, p; ANOVA (sequential and partial / Type II–III for unbalanced data); R², adjusted and predicted R² (PRESS); lack-of-fit test when there are replicates.
 - **Unreplicated 2-level screening:** half-normal plot of effects, Lenth's pseudo-standard error with the t-like margin of error (ME) and simultaneous margin (SME).

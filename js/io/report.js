@@ -4,7 +4,8 @@
 // re-opened in aikidoe. No external resources: inline CSS and SVG only.
 import { num, pval, stars } from '../format.js';
 import { runSheet } from './runsheet.js';
-import { fitModel, anova, lackOfFit } from '../model/ols.js';
+import { fitModel, anova } from '../model/fit.js';
+import { lackOfFit } from '../model/ols.js';
 import { fitMixedModel, observationTable, randomEffects } from '../model/mixed.js';
 import { defaultFormula } from '../model/defaults.js';
 import { checkConfirmation } from '../design/augment.js';

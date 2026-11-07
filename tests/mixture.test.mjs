@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { section, check, near, done } from './lib/check.mjs';
 import { createStudy, validateStudy } from '../js/study.js';
 import { parseFormula } from '../js/model/formula.js';
-import { fitModel, predict } from '../js/model/ols.js';
+import { fitModel, predict } from '../js/model/fit.js';
 import { defaultFormula } from '../js/model/defaults.js';
 import { fittedModels, optimiseDesirability, profile } from '../js/model/desirability.js';
 import { simplexLattice, simplexCentroid, extremeVertices, mixtureCandidates, isSimplexRegion, optimalMixture, mixtureDesign, mixtureAnova,

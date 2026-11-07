@@ -1,0 +1,125 @@
+// Fitting a model to a study's data (spec §6.2, issues #6 and #64): the response table, the
+// nuisance terms (blocks, plate positions), and fitting, testing and prediction through the
+// response's noise model (noise.js; normal least squares in ols.js).
+//
+//   responseTable(study, id, o)   per-run responses
+//   fitModel(study, formula, o)   formula + study data → fit
+//   predict(fit, rows, o)         predictions with intervals at settings (natural units)
+//   anova(fit, type)              the tests of the model's terms (type 1, 2 or 3 for normal noise)
+//   withBlockTerm(study, m, rows) the model with the nuisance terms first
+import { observationsOf } from './sites.js';
+import { parseFormula, modelMatrix } from './formula.js';
+import { runPositions } from '../plate.js';
+import { noiseModel, noiseModelOf, noiseOf } from './noise.js';
+
+const sum = (a) => a.reduce((s, v) => s + v, 0);
+
+/**
+ * Per-run response table: [{ run, settings, y, n }] for runs with at least one observation.
+ * aggregate 'mean' (default) averages multiple observations of a run (sites, wafers, repeats);
+ * 'none' keeps one row per observation (only appropriate when observations are true replicates).
+ */
+export function responseTable(study, responseId, { aggregate = 'mean' } = {}) {
+  if (!study.responses.some(r => r.id === responseId)) throw new Error(`no response "${responseId}" in the study`);
+  const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
+  const obs = observationsOf(study, responseId).filter(o => o.value !== null);
+  const meta = (r) => ({ order: r.order, kind: r.kind, ...(r.block !== undefined ? { block: r.block } : {}) });
+  if (aggregate === 'none') return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1, ...meta(runs.get(o.run)) }));
+  const by = new Map();
+  for (const o of obs) { if (!by.has(o.run)) by.set(o.run, []); by.get(o.run).push(o.value); }
+  return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([run, v]) => ({ run, settings: runs.get(run).settings, y: sum(v) / v.length, n: v.length, ...meta(runs.get(run)) }));
+}
+
+/**
+ * Fit a formula to a study's data. opts: response (default: the formula's left side), aggregate,
+ * rows, blocks ('auto' | false), includeConfirm, noise (a noise model id; default: the response's).
+ *
+ * Blocks: when the runs used fall in more than one block (blocked designs, or stages added by
+ * augmentation), a categorical Block term is added first in the model (effect coded, so
+ * predictions are for the average block), unless blocks: false.
+ * Confirmation runs (kind 'confirm') are left out unless includeConfirm, so they can be
+ * checked against a model fitted without them.
+ */
+export function fitModel(study, formula, opts = {}) {
+  let parsed;
+  try { parsed = parseFormula(formula, study.factors); } catch (e) {
+    const m = /unknown factor "(radius2|edge|waferX|waferY|slot|slotZone)"/.exec(e.message);
+    if (m) throw new Error(`${m[1]} is a position term: it varies within runs, so it needs a model of the individual readings (the mixed model), not of run means`);
+    throw e;
+  }
+  const response = opts.response ?? parsed.response;
+  if (!response) throw new Error('name the response: "y ~ …" or { response }');
+  let rows = opts.rows ?? responseTable(study, response, opts);
+  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
+  if (!rows.length) throw new Error(`no results for ${response} yet`);
+  const b = withBlockTerm(study, parsed, rows, opts);
+  const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
+  const noise = opts.noise ? noiseModel(opts.noise) : noiseModelOf(study, response);
+  const fit = noise.fit(mm, b.rows.map(r => r.y));
+  return { ...fit, noise: noise.id, response, rows: b.rows, factors: b.factors };
+}
+
+/**
+ * The model with nuisance terms first: a fixed Block term when the rows fall in more than one
+ * block (unless opts.blocks === false), and for runs laid out on microplates (study.plates) the
+ * position terms Edge (outer ring vs inner wells) and Row and Col (linear gradients across the
+ * plate), each when it varies among the rows (unless opts.position === false). Returns
+ * { model, factors, rows } with the nuisance values in each row's settings; nuisance terms are
+ * flagged block: true (left out of effects, power and model reduction; predictions are for the
+ * average block, an average well).
+ */
+export function withBlockTerm(study, parsed, rows, opts = {}) {
+  const taken = new Set([...study.factors, ...study.responses].map(x => x.id));
+  const free = (id) => { while (taken.has(id)) id += '_'; taken.add(id); return id; };
+  const factors = [...study.factors], terms = [], extra = rows.map(() => ({}));
+  const labels = [...new Set(rows.map(r => (r.block === undefined ? '' : String(r.block))))].sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
+  if (opts.blocks !== false && labels.length > 1) {
+    const id = free('Block');
+    factors.push({ id, name: 'Block', type: 'categorical', levels: labels, block: true });
+    terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true });
+    rows.forEach((r, i) => { extra[i][id] = r.block === undefined ? '' : String(r.block); });
+  }
+  if (study.plates && opts.position !== false) {
+    const pos = runPositions(study);
+    const at = rows.map(r => pos.get(r.run));
+    if (at.every(Boolean)) {
+      const add = (name, f, value) => {
+        const vals = at.map(value);
+        if (new Set(vals.map(String)).size < 2) return;
+        const id = free(name);
+        factors.push({ ...f, id, name: f.name, block: true, position: true });
+        terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true, position: true });
+        vals.forEach((v, i) => { extra[i][id] = v; });
+      };
+      add('Edge', { name: 'Plate edge', type: 'categorical', levels: ['inner', 'edge'] }, (p) => (p.edge ? 'edge' : 'inner'));
+      add('Row', { name: 'Row gradient', type: 'continuous', low: -1, high: 1, transform: 'none' }, (p) => p.row);
+      add('Col', { name: 'Column gradient', type: 'continuous', low: -1, high: 1, transform: 'none' }, (p) => p.col);
+    }
+  }
+  if (!terms.length) return { model: parsed, factors: study.factors, rows };
+  return {
+    factors,
+    model: { ...parsed, terms: [...terms, ...parsed.terms] },
+    rows: rows.map((r, i) => ({ ...r, settings: { ...r.settings, ...extra[i] } })),
+  };
+}
+
+
+/**
+ * Predictions with intervals at new settings (natural units): [{ fit, se, lower, upper,
+ * predLower, predUpper }] — confidence interval for the mean and prediction interval for a
+ * single new observation, at the given level (default 0.95), on the response scale. With a Block
+ * term, predictions are for the average block.
+ */
+export function predict(fit, rows, opts = {}) {
+  const mm = modelMatrix(fit.model, fit.factors, rows);
+  return noiseOf(fit).predict(fit, mm.X, opts);
+}
+
+/**
+ * The tests of a fit's terms. For normal noise, the ANOVA table: type 1 sequential (R anova.lm),
+ * type 2 or 3 (car::Anova); rows { term, df, ss, ms, F, p } and then the residuals.
+ */
+export function anova(fit, type = 1) {
+  return noiseOf(fit).tests(fit, type);
+}

@@ -1,6 +1,6 @@
 // The model to start from for a response, given the study's design (used by the Analyse step,
 // the CLI and the optimiser when no formula is given).
-import { fitModel } from './ols.js';
+import { fitModel } from './fit.js';
 
 /** Default formula: what the design was built to estimate. */
 export function defaultFormula(study, response) {

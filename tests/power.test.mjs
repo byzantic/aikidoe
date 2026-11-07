@@ -5,7 +5,7 @@ import { loadFixture, listFixtures } from './lib/fixtures.mjs';
 import { createStudy } from '../js/study.js';
 import { designPower, studyPower, detectableEffect } from '../js/model/power.js';
 import { reduceModel, aicc } from '../js/model/reduce.js';
-import { fitModel } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
 
 const TOL = { rel: 1e-9, abs: 1e-12 };
 // R's pnbeta (behind pf with ncp) stops at an error of 1e-9, so power is compared to 1e-8

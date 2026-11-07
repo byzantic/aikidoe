@@ -3,7 +3,7 @@ import { section, check, near, throws, done } from './lib/check.mjs';
 import { createStudy, parseStudy, serializeStudy } from '../js/study.js';
 import { siteScheme, sitePositions, availablePositionTerms, observationsOf, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { fitMixedModel } from '../js/model/mixed.js';
-import { fitModel } from '../js/model/ols.js';
+import { fitModel } from '../js/model/fit.js';
 import { runSheet } from '../js/io/runsheet.js';
 import { EXAMPLES } from '../ui/examples.js';
 

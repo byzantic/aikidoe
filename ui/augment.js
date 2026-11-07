@@ -3,7 +3,7 @@
 import { h, select, dataTable, messages, help } from './dom.js';
 import { num } from '../js/format.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
-import { predict } from '../js/model/ols.js';
+import { predict } from '../js/model/fit.js';
 import { predictMixed, runMeanWeights } from '../js/model/mixed.js';
 import { decode } from '../js/study.js';
 

@@ -4,7 +4,7 @@
 // EC50). The analysis is model/dose.js on doseData().
 import { rng } from './rng.js';
 import { createStudy } from '../study.js';
-import { responseTable } from '../model/ols.js';
+import { responseTable } from '../model/fit.js';
 
 /** The dose and curve factors of a study's dose design (from its params, or given). */
 export function doseRoles(study, { dose, curve } = {}) {
