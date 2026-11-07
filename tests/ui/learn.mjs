@@ -154,7 +154,7 @@ try {
     check('"fill in" gives the model answer\'s percentage, inside 0–100 %', Math.abs(a.percent.estimate - ref.answers.percent.estimate) < 1e-6 && a.percent.lower >= 0 && a.percent.upper <= 100 && await page.locator('#answer-percent input').count() === 3);
     await page.click('#grade-answers'); await settle();
     check('graded: 100', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) === 100);
-    check('the comparison: least squares on the percentages', /Least squares on the raw percentages would have scored/.test(await page.textContent('#ofat-score')));
+    check('the comparison: least squares on the percentages', /Least squares on the raw percentages, on the same process and budget, would have scored/.test(await page.textContent("#ofat-score")));
     await page.fill('input[aria-label="answer percent lower"]', '-5'); await page.keyboard.press('Tab'); await settle();
     await page.click('#grade-answers'); await settle();
     check('an interval below 0 % loses points', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) < 100 && /outside 0–100 %/.test(await page.textContent('#grade-result')));
