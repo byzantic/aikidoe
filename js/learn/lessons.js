@@ -62,6 +62,13 @@ Two compounds are compared by their **relative potency**: how many times less of
 
 Plan the doses on the Design step (dose–response design): start with a wide range-finding series, look at the results, then add a second stage of doses around the EC50. The Analyse step fits the curves; answer with the EC50 of the test and its relative potency, each with an interval.`,
     manual: [M('dose-response', '', 'dose–response'), M('dose-response', 'choosing-doses', 'choosing doses'), M('dose-response', 'relative-potency', 'relative potency')] },
+  { id: 'mixture', n: 16, title: 'Mixtures: the best blend', topic: 'mixture', difficulty: 'medium', compare: true,
+    text: `In a recipe, a glaze or an alloy the ingredients are shares of a whole: they **add up to a fixed total**, so you cannot change one without changing another. A factorial design over each ingredient's range is impossible (most of its corners don't add up), and "the effect of glucose" means nothing until you say what it replaces.
+
+A **mixture design** spreads blends over the region the bounds leave — the corners (vertices), the middles of its edges and the centroid — and a **Scheffé model** describes the response: one coefficient per pure component, plus a **blending** term for each pair that is better (synergistic) or worse (antagonistic) together than their average. Changing one component at a time along its Cox direction, the others in proportion, shows each ingredient's effect but misses the blending.
+
+On the Design step choose a mixture design within the budget (an optimal design for the quadratic model fits a constrained region best). The Analyse step fits the Scheffé quadratic; the ternary plot shows where the best blend is. Answer with that blend and a prediction for the blend given.`,
+    manual: [M('designs-mixture', '', 'mixture designs'), M('designs-mixture', 'mixture-models', 'Scheffé models'), M('designs-mixture', 'constrained-regions', 'constrained regions')] },
   { id: 'gauge', n: 11, title: 'Measurement systems: gauge R&R', topic: null,
     text: 'Coming later: is the measurement good enough for the experiment? A gauge study on a virtual gauge.', manual: [M('process', 'gauge-rr', 'gauge R&R')] },
   { id: 'robust', n: 12, title: 'Robust design', topic: null,
@@ -75,7 +82,8 @@ export function hints(lesson, ex, study) {
   const out = [], d = study.design, budget = ex.budget, T = TOPICS[ex.topic];
   const results = d && study.observations.some(o => o.value !== null);
   if (!d) {
-    out.push(T.dose ? `Plan the doses on the Design step (Dose–response design), at most ${budget} runs: a wide range-finding series first, a decade or so apart, leaves room for a second stage.`
+    out.push(T.mixture ? `Choose a mixture design of at most ${budget} runs on the Design step: the components add up to ${study.mixture?.total}, so factorial designs do not apply.`
+      : T.dose ? `Plan the doses on the Design step (Dose–response design), at most ${budget} runs: a wide range-finding series first, a decade or so apart, leaves room for a second stage.`
       : `Choose a design of at most ${budget} runs on the Design step${ex.topic === 'screening' ? ' — Recommend, with goal "screen" and the budget, ranks the options' : ''}.`);
     return out;
   }
@@ -85,6 +93,14 @@ export function hints(lesson, ex, study) {
     if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
     if (results && stages === 1 && n < budget) out.push(`Look at the curves on the Analyse step: are there several doses on the slope? If not, add doses around the EC50 as a second stage (${budget - n} runs left).`);
     if (results && !out.length) out.push('Analyse the curves, then grade: by your own answers, or by the standard analysis (parallel curves) of your data.');
+    return out;
+  }
+  if (T.mixture) {
+    const n = d.runs.length;
+    if (d.kind !== 'mixture') out.push(`Use a mixture design (Design step): the components add up to ${study.mixture?.total}.`);
+    if (n > budget) out.push(`${n} runs; the budget is ${budget}: an optimal design lets you set the number of runs.`);
+    if (results && d.runs.some(r => !study.observations.some(o => o.run === r.run && o.value !== null))) out.push('Some runs have no results yet: get them before analysing.');
+    if (results && !out.length) out.push('Fit the Scheffé quadratic (mixquadratic) on the Analyse step and look at the ternary plot; the Optimise step finds the best blend. Then grade.');
     return out;
   }
   const n = d.runs.length;

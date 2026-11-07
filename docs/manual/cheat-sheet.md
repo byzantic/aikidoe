@@ -39,6 +39,7 @@ and ranks the designs that fit.
 | 3–7 factors, optimum, extremes unsafe | Box–Behnken | 15 (3), 27 (4), 43 (5) |
 | hard-to-change factors | split-plot factorial or optimal split-plot | enough whole plots |
 | impossible combinations, three-level choices | optimal design for the model you need | terms + 4–6 |
+| ingredients adding up to a total: a recipe, formulation, composition | simplex lattice or centroid (lower limits only); extreme vertices or an optimal mixture design (upper limits) — [mixture designs](designs-mixture.md) | quadratic: q(q+1)/2 + 4–6 |
 | a dose or concentration: EC50, potency, a standard curve | a log-spaced dilution series: range-finding, then doses around the EC50 ([dose–response](dose-response.md)) | 7, then about 16 per curve |
 | a simulator | Latin hypercube, then a surrogate | about 10 per factor |
 | is the measurement good enough? | gauge R&R | 10 parts × 3 operators × 2 |

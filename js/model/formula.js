@@ -7,6 +7,15 @@
 //   I(T^2), I(T*t)           a power or product of continuous factors as one variable
 //   - A:B, -1 (or + 0)       remove a term; remove the intercept
 //   main, 2fi, quadratic     all main effects; + all 2fis; + squares of continuous factors
+//   mixlinear, mixquadratic, mixspecial, mixcubic   Scheffé mixture models over the mixture's
+//                            components (issue #62): linear blending; + A:B for every pair; + A:B:C
+//                            for every triple (special cubic); + delta(A,B) = A·B·(A − B) (full cubic)
+//   delta(A, B)              the full-cubic term A·B·(A − B) of two mixture components
+//
+// Mixture components enter as L-pseudo-components (x − low) / (total − Σ lows), 0 … 1, adding up to
+// 1; when every component is in the model as a linear term the intercept is dropped (it is their
+// sum) and the model is marked implied: R² and the F test are then about the mean, as usual for
+// mixture models.
 //
 // Terms are ordered as R orders them: by degree (number of components; I(…) counts as one),
 // keeping the order of appearance within a degree. Sequential (Type I) sums of squares follow
@@ -21,7 +30,7 @@ import { code, effectCode } from '../study.js';
 
 // A component is a plain factor { f: 'A' } or a monomial { I: { T: 2, t: 1 } }; a term is a
 // sorted list of components. Keys make them comparable.
-const compKey = (c) => (c.f !== undefined ? c.f : `I(${Object.entries(c.I).map(([k, p]) => (p === 1 ? k : `${k}^${p}`)).join('*')})`);
+const compKey = (c) => (c.f !== undefined ? c.f : c.D ? `delta(${c.D[0]},${c.D[1]})` : `I(${Object.entries(c.I).map(([k, p]) => (p === 1 ? k : `${k}^${p}`)).join('*')})`);
 const termKey = (t) => t.map(compKey).join(':');
 const mergeTerms = (a, b) => {
   const m = new Map(a.concat(b).map(c => [compKey(c), c]));
@@ -30,7 +39,7 @@ const mergeTerms = (a, b) => {
 // order of components within a term follows factor order in the study when known
 let factorOrder = null;
 const orderComps = (t) => factorOrder ? t.slice().sort((x, y) => compRank(x) - compRank(y) || compKey(x).localeCompare(compKey(y))) : t;
-const compRank = (c) => { const id = c.f ?? Object.keys(c.I)[0]; const i = factorOrder.indexOf(id); return (i < 0 ? 1e6 : i) + (c.f !== undefined ? 0 : 0.5); };
+const compRank = (c) => { const id = c.f ?? (c.D ? c.D[0] : Object.keys(c.I)[0]); const i = factorOrder.indexOf(id); return (i < 0 ? 1e6 : i) + (c.f !== undefined ? 0 : 0.5); };
 
 /** Term label, e.g. 'A', 'A:B', 'I(T^2)', 'I(T^2):amb'. */
 export const termLabel = (t) => orderComps(t).map(compKey).join(':');
@@ -49,7 +58,7 @@ export function parseFormula(text, factors) {
     const tilde = src.indexOf('~');
     const response = tilde >= 0 ? src.slice(0, tilde).trim() || null : null;
     const rhs = tilde >= 0 ? src.slice(tilde + 1) : src;
-    const toks = rhs.match(/2fi|[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[~+\-:*^()]|\S/g) || [];
+    const toks = rhs.match(/2fi|[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[~+\-:*^(),]|\S/g) || [];
     let p = 0;
     const fail = (msg) => { throw new Error(`formula "${src.trim()}": ${msg}`); };
     const peek = () => toks[p];
@@ -61,6 +70,9 @@ export function parseFormula(text, factors) {
     const minus = (a, b) => { const m = new Map(a.terms); for (const k of b.terms.keys()) m.delete(k); return { terms: m, intercept: b.intercept === true ? false : b.intercept === false ? true : a.intercept }; };
     const colon = (a, b) => { const out = []; for (const s of a.terms.values()) for (const t of b.terms.values()) out.push(mergeTerms(s, t)); return set(out); };
     const contTerms = () => factors.filter(f => f.type !== 'categorical');
+    const mixIds = factors.filter(f => f.mix).map(f => f.id);
+    const needMix = (t) => { if (mixIds.length < 2) fail(`${t} needs a mixture (the study's mixture components)`); };
+    const pairs = (xs) => xs.flatMap((a, i) => xs.slice(i + 1).map(b => [a, b]));
 
     function sum() {
       let v = cross();
@@ -101,6 +113,20 @@ export function parseFormula(text, factors) {
       if (t === '0') return set([], false);
       if (t === '-') { const v = atom(); return minus(set([]), v); }
       if (t === 'I') { eat('('); const m = monomial(); eat(')'); return set([[{ I: m }]]); }
+      if (t === 'mixlinear' || t === 'mixquadratic' || t === 'mixspecial' || t === 'mixcubic') {
+        needMix(t);
+        const lin = mixIds.map(id => [{ f: id }]);
+        const quad = t === 'mixlinear' ? [] : pairs(mixIds).map(([a, b]) => [{ f: a }, { f: b }]);
+        const tri = t === 'mixspecial' || t === 'mixcubic' ? mixIds.flatMap((a, i) => pairs(mixIds.slice(i + 1)).map(([b, c]) => [{ f: a }, { f: b }, { f: c }])) : [];
+        const cub = t === 'mixcubic' ? pairs(mixIds).map(([a, b]) => [{ D: [a, b] }]) : [];
+        return set([...lin, ...quad, ...cub, ...tri]);
+      }
+      if (t === 'delta' && peek() === '(') {
+        eat('(');
+        const a = toks[p++]; eat(','); const b = toks[p++]; eat(')');
+        for (const x of [a, b]) if (!mixIds.includes(x)) fail(`delta(…) takes two mixture components, found "${x}"`);
+        return set([[{ D: [a, b] }]]);
+      }
       if (t === 'main') return set(ids.map(id => [{ f: id }]));
       if (t === '2fi') { const m = set(ids.map(id => [{ f: id }])); return union(m, colon(m, m)); }
       if (t === 'quadratic') {
@@ -137,8 +163,13 @@ export function parseFormula(text, factors) {
     for (const t of norm) { const k = termKey(t); if (!seen.has(k)) { seen.add(k); terms.push(t); } }
     terms.sort((a, b) => a.length - b.length);     // stable: degree, then order of appearance
     if (!terms.length && v.intercept === false) fail('the model has no terms and no intercept');
+    // a mixture: with every component in as a linear term the intercept is their sum — drop it
+    // (unless asked for explicitly) and mark the model implied, for R² and the F test
+    const linear = new Set(terms.filter(t => t.length === 1 && t[0].f !== undefined).map(t => t[0].f));
+    const allMix = mixIds.length >= 2 && mixIds.every(id => linear.has(id));
+    const intercept = allMix ? v.intercept === true : v.intercept !== false;
     return {
-      response, intercept: v.intercept !== false,
+      response, intercept, ...(allMix && !intercept ? { implied: true } : {}),
       terms: terms.map(t => ({ label: termLabel(t), comps: orderComps(t), degree: t.length })),
     };
   } finally { factorOrder = null; }
@@ -186,6 +217,8 @@ function parents(comps) {
  */
 export function modelMatrix(model, factors, rows) {
   const byId = Object.fromEntries(factors.map(f => [f.id, f]));
+  // a mixture component: its pseudo-component value; any other continuous factor: coded
+  const val = (f, x) => (f.mix ? (x - f.mix.low) / f.mix.scale : code(f, x));
   const compCols = (c, s) => {
     if (c.f !== undefined) {
       const f = byId[c.f];
@@ -196,10 +229,11 @@ export function modelMatrix(model, factors, rows) {
       }
       // a continuous nuisance term (a plate gradient) at an unspecified position: the plate's centre
       if (f.block && s[c.f] === undefined) return { vals: [0], names: [c.f] };
-      return { vals: [code(f, s[c.f])], names: [c.f] };
+      return { vals: [val(f, s[c.f])], names: [c.f] };
     }
+    if (c.D) { const a = val(byId[c.D[0]], s[c.D[0]]), b = val(byId[c.D[1]], s[c.D[1]]); return { vals: [a * b * (a - b)], names: [compKey(c)] }; }
     let v = 1;
-    for (const [id, pw] of Object.entries(c.I)) v *= code(byId[id], s[id]) ** pw;
+    for (const [id, pw] of Object.entries(c.I)) v *= val(byId[id], s[id]) ** pw;
     return { vals: [v], names: [compKey(c)] };
   };
   const columns = [], assign = [];
@@ -222,7 +256,7 @@ export function modelMatrix(model, factors, rows) {
       let names = [''];
       for (const c of t.comps) {
         const f = c.f !== undefined ? byId[c.f] : null;
-        const cn = f && f.type === 'categorical' ? f.levels.slice(1).map(l => `${c.f}[${l}]`) : [compKey(c)];
+        const cn = f && f.type === 'categorical' ? f.levels.slice(1).map(l => `${c.f}[${l}]`) : [compKey(c)];   // D, I: one column
         const nn = []; for (const b of cn) for (const a of names) nn.push(a ? `${a}:${b}` : b); names = nn;
       }
       columns.push(...names); for (let j = 0; j < names.length; j++) assign.push(ti);

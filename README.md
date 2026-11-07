@@ -49,6 +49,12 @@ curve; the Analyse step fits log-logistic and Weibull curves (as R's drc), with 
 potency and parallelism, doses for standard-curve samples, LOD and LOQ
 ([manual](docs/manual/dose-response.md); `doe design --dose`, `doe dose`).
 
+Mixtures — recipes, formulations, glazes, alloys, where the ingredients add up to a total: simplex
+lattice and centroid designs, extreme vertices and D/I-optimal designs for constrained regions,
+process factors crossed with the blends; Scheffé models in pseudo-components with the mixture
+ANOVA, ternary plots, Cox traces and blend optimisation ([manual](docs/manual/designs-mixture.md);
+`doe init --mixture`, `doe design --mixture`).
+
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,
 hard-to-change ones, groups of runs, curvature, constraints, the effect that matters, budget — one
 question at a time with why it matters, then suggests a staged plan, ranks the designs that fit,

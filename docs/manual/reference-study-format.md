@@ -13,7 +13,7 @@ The format is published as a JSON Schema: [schema/study.schema.json](../../schem
 (`doe schema` prints it). The schema checks the structure;
 the library checks the rest when it reads a study:
 
-> Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.
+> Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; mixture components are continuous factors (not log, not hard to change) with low ≥ 0, their lows add up to less than the total and their highs to at least it, and every run's components add up to the total; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.
 
 ## Top level
 
@@ -30,6 +30,7 @@ the library checks the rest when it reads a study:
 | `observations` | list of [observation](#observation) | results: one per reading (run, response, and wafer / site / repeat when measured that way) |
 | `sites` | [sites](#sites) | drop-in measurement sites on the wafer |
 | `plates` | [plates](#plates) | microplate layout: each run in a well, controls on every plate |
+| `mixture` | [mixture](#mixture) | mixture components: factors that are shares of a whole, adding up to the total (issue #62) |
 | `history` | list of [stage](#stage) | the stages of a sequential experiment |
 | `simulator` | object | the simulator that runs the design (computer experiments): { adapter, …its options } |
 | `exercise` | object | an exercise this study answers (made by the exercise generator): its id, topic, difficulty, budget, questions, the sealed truth for self-study, and the student's answers |
@@ -164,6 +165,13 @@ Without `type`, a factor whose levels include a string is categorical.
 | `efficiency` | number | layout efficiency for the design's model (1 = position costs nothing) |
 | `wells` | list of object or object | each used well: a run of the design or a control |
 | `readings` | list of object | results of the control wells |
+
+## mixture
+
+| field | type | |
+|---|---|---|
+| `components` (required) | list of [id](#id) (at least 2) | ids of continuous factors (not log, not hard to change, low ≥ 0) that are components of the mixture |
+| `total` | number (> 0) | what the components add up to in every run (1, 100 %, or the batch size) |
 
 ## constraint
 

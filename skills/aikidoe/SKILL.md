@@ -26,10 +26,13 @@ Box–Cox, model reduction; mixed models (REML, Kenward–Roger) for whole plots
 microplate layouts (runs in wells, controls, Z′, edge and row/column position terms);
 dose–response curves (log-logistic and Weibull fits, EC50s, relative potency and parallelism,
 standard curves, dilution-series and optimal dose designs: `doe design --dose`, `doe dose`);
+mixture designs (components adding up to a total: simplex lattice and centroid, extreme vertices,
+D/I-optimal; process factors crossed; Scheffé models in pseudo-components, Cox traces:
+`doe init --mixture`, `doe design --mixture`, fit with `mixquadratic`);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.
 
-What it does not do: mixture designs, time series or process control charts, Bayesian analysis,
+What it does not do: time series or process control charts, Bayesian analysis,
 non-normal responses beyond a Box–Cox transform, or causal claims from observational data. Say so
 when a question needs them.
 

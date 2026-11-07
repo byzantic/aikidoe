@@ -16,6 +16,7 @@
 // enumerated: a seeded Latin-hypercube screen, then Nelder–Mead from the best starts (projected
 // onto the region), then coordinate polishing. D is flat (0) far from the optimum, so the screen
 // matters; a small multiple of each d's distance to its acceptable range breaks ties at D = 0.
+import { optimiseMixture, referenceBlend, coxBlend, coxRange } from '../design/mixture.js';
 import { rng } from '../design/rng.js';
 import { code, decode, feasible } from '../study.js';
 import { fitModel, predict } from './ols.js';
@@ -80,6 +81,13 @@ function shortfall(spec, y) {
  */
 export function optimiseDesirability(study, models, { region = 'cube', radius, fixed = {}, starts = 20, screen = 2000, seed = 1 } = {}) {
   if (!models.length) throw new Error('no response has a desirability goal (set a goal with limits on the responses)');
+  if (study.mixture) {
+    // a mixture: search the blends (and process factors) in the constrained region
+    const val = (s) => { const ys = models.map(m => m.predict(s)), ds = ys.map((y, i) => dValue(models[i].spec, y)); const D = dOverall(ds, models.map(m => m.spec.importance ?? 1)); return { D, ys, ds, v: D > 0 ? D : -ys.reduce((a, y, i) => a + shortfall(models[i].spec, y), 0) }; };
+    const r = optimiseMixture(study, (s) => val(s).v, { seed, fixed, starts: Math.max(8, Math.round(starts / 2)) });
+    const b = val(r.settings);
+    return { settings: r.settings, coded: {}, D: b.D, feasible: true, d: models.map((m, i) => ({ id: m.id, y: b.ys[i], d: b.ds[i] })) };
+  }
   const fs = study.factors, free = fs.filter(f => f.type !== 'categorical' && fixed[f.id] === undefined);
   const cats = fs.filter(f => f.type === 'categorical' && fixed[f.id] === undefined);
   // half-width of the cube, or radius of the sphere, in coded units
@@ -162,7 +170,17 @@ function nelderMead(fn, x0, step, { iter = 600, tol = 1e-12 } = {}) {
  * Returns [{ factor, xs (natural), curves: [{ id, fit: [], lower: [], upper: [] }] }].
  */
 export function profile(study, models, at, { points = 31 } = {}) {
+  const mix = new Set(study.mixture?.components ?? []);
   return study.factors.map(f => {
+    if (mix.has(f.id)) {
+      // a mixture component: along its Cox direction (the others keep their proportions)
+      const base = referenceBlend(study, at), [a, b] = coxRange(study, base, f.id);
+      const xs = [...Array(points).keys()].map(i => a + (b - a) * i / (points - 1));
+      return { factor: f.id, xs, cox: true, curves: models.map(m => {
+        const bd = xs.map(x => m.predictBand(coxBlend(study, base, f.id, x)));
+        return { id: m.id, fit: bd.map(v => v.fit), lower: bd.map(v => v.lower), upper: bd.map(v => v.upper) };
+      }) };
+    }
     const xs = f.type === 'categorical' ? f.levels.slice() : [...Array(points).keys()].map(i => decode(f, -1 + 2 * i / (points - 1)));
     return { factor: f.id, xs, curves: models.map(m => {
       const b = xs.map(x => m.predictBand({ ...at, [f.id]: x }));
@@ -176,6 +194,7 @@ export function desirabilityGrid(study, models, at, fx, fy, { n = 41 } = {}) {
   const F = (id) => study.factors.find(f => f.id === id);
   const X = F(fx), Y = F(fy);
   if (!X || !Y || X.type === 'categorical' || Y.type === 'categorical') throw new Error('the overlay plot needs two continuous factors');
+  if (study.mixture && (study.mixture.components.includes(fx) || study.mixture.components.includes(fy))) throw new Error('mixture components cannot be varied independently: use the ternary plot');
   const xs = [...Array(n).keys()].map(i => decode(X, -1 + 2 * i / (n - 1))), ys = [...Array(n).keys()].map(i => decode(Y, -1 + 2 * i / (n - 1)));
   const cells = ys.map(yv => xs.map(xv => {
     const s = { ...at, [fx]: xv, [fy]: yv };

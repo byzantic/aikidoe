@@ -80,10 +80,10 @@ function result(ctx, answers, ui, set) {
   const lessons = a.lessons.map(lessonById).filter(Boolean);
   const create = () => {
     const s = guideStudy(answers);
-    state.ui = { design: { goal: a.goal ?? undefined, budget: a.budget ?? undefined }, ...(a.family === 'gauge' ? { gauge: { open: 'y' } } : {}), ...(a.family === 'dose' ? { dose: { open: true } } : {}) };
+    state.ui = { design: { goal: a.goal ?? undefined, budget: a.budget ?? undefined }, ...(a.family === 'gauge' ? { gauge: { open: 'y' } } : {}), ...(a.family === 'dose' ? { dose: { open: true } } : {}), ...(a.family?.startsWith('mixture') ? { mixture: { kind: a.family.slice(8) } } : {}) };
     state.step = 'define';
     setDoc(structuredClone(s));
-    toast(a.family === 'gauge' ? 'Study created: enter the gauge readings for the response' : a.family === 'dose' ? 'Study created: set the dose range (and the samples), then Design → Dose–response design' : 'Study created: name the factors and set their ranges, then Design → Recommend');
+    toast(a.family === 'gauge' ? 'Study created: enter the gauge readings for the response' : a.family === 'dose' ? 'Study created: set the dose range (and the samples), then Design → Dose–response design' : a.family?.startsWith('mixture') ? 'Study created: name the ingredients, set their limits and the total, then Design → Mixture design' : 'Study created: name the factors and set their ranges, then Design → Recommend');
   };
   const apply = state.study && a.goal ? () => { state.ui.design = { ...(state.ui.design ?? {}), goal: a.goal, budget: a.budget ?? undefined, rec: undefined }; go('design'); toast(`Goal “${a.goal}”${a.budget ? ` and budget ${a.budget}` : ''} set on the Design step`); } : null;
 

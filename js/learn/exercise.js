@@ -9,11 +9,13 @@ import { ccd } from '../design/rsm.js';
 import { appendStage } from '../design/augment.js';
 import { layoutPlates } from '../design/plate-layout.js';
 import { doseDesign, addDoseStage, doseData } from '../design/dose-design.js';
+import { mixtureDesign, optimiseMixture, randomBlend, coxBlend, coxRange, referenceBlend, mixtureCandidates } from '../design/mixture.js';
 import { fitDose, effectiveDose, relativePotency, dilutionSeries, potencyPower, MODELS as DOSE } from '../model/dose.js';
 import { foldover } from '../design/augment.js';
 import { fitModel, predict } from '../model/ols.js';
 import { fitMixedModel } from '../model/mixed.js';
 import { studentT } from '../dist.js';
+import { solve as solveLin } from '../linalg.js';
 import { studyPower } from '../model/power.js';
 import { SCENARIOS } from './scenarios.js';
 import { runVirtual, trueMean, hashNormal as hn } from './process.js';
@@ -42,6 +44,9 @@ export const TOPICS = {
   // a gradient across the columns, and each row has its own offset (a multichannel pipette)
   // dose–response (issue #65): two curves, a reference and a test; the EC50 of the test and its
   // potency relative to the reference
+  // mixtures (issue #62): three components adding up to a total, with bounds; the best blend and a
+  // prediction at a check blend
+  mixture: { title: 'Mixtures: the best blend', lesson: 16, mixture: true, k: () => 3, budget: 14, questions: ['best', 'prediction'] },
   dose: { title: 'Dose–response: EC50 and relative potency', lesson: 15, dose: true, k: () => 2, budget: 48, questions: ['ec50', 'potency'] },
   plate: { title: 'Plates: where a sample sits matters', lesson: 14, k: (d) => (d === 'easy' ? 3 : 4), budget: 48, active: (g) => 2 + g.int(2), interaction: 0.5,
     plate: true, nuisance: (sigma) => ({ plate: { edge: -2 * sigma, corner: -1 * sigma, col: 0.6 * sigma, colQuad: 1.2 * sigma, rowSd: 0.8 * sigma } }),
@@ -85,7 +90,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   const g0 = rng(seed ^ 0x5eed);
   // plate scenarios belong to the plate topic (and only they have plates), so the other topics'
   // choice of scenario — and their exercises for a given seed — are as before
-  const kindOf = (x) => (x.dose ? 'dose' : x.plate ? 'plate' : null);
+  const kindOf = (x) => (x.mixture ? 'mixture' : x.dose ? 'dose' : x.plate ? 'plate' : null);
   const pool0 = Object.keys(SCENARIOS).filter(id => kindOf(SCENARIOS[id]) === kindOf(T));
   const scId = scenario ?? pool0[g0.int(pool0.length)];
   const sc = SCENARIOS[scId];
@@ -95,9 +100,10 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   // factors: the hard-to-change one when the topic needs it; continuous for response surfaces
   let pool = sc.factors.filter(f => !f.levels && !f.htc);
   if (topic !== 'rsm' && topic !== 'split-plot' && !T.dose && g0.random() < 0.5) pool = [...pool, sc.factors.find(f => f.levels)];
-  let chosen = T.dose ? sc.factors : pick(g0, pool, k - (T.htc ? 1 : 0));
+  let chosen = T.dose || T.mixture ? sc.factors : pick(g0, pool, k - (T.htc ? 1 : 0));
   if (T.htc) chosen = [sc.factors.find(f => f.htc), ...chosen];
-  const factors = createStudy({ name: 'x', factors: chosen.map(f => ({ ...f, htc: !!(T.htc && f.htc) })) }).factors;
+  const mixture = T.mixture ? { components: chosen.map(f => f.id), total: sc.mixture.total } : undefined;
+  const factors = createStudy({ name: 'x', factors: chosen.map(f => ({ ...f, htc: !!(T.htc && f.htc) })), ...(mixture ? { mixture } : {}) }).factors;
   const response = { ...sc.response };
   const budget = typeof T.budget === 'function' ? T.budget(k) : T.budget;
   const id = `${topic}-${difficulty}-${seed}`;
@@ -106,12 +112,12 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   let last = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const g = rng((seed * 2654435761 + attempt * 97 + 13) >>> 0);
-    const truth = T.dose ? { intercept: 0, terms: {} } : makeTruth(topic, difficulty, g, factors, response);
+    const truth = T.dose ? { intercept: 0, terms: {} } : T.mixture ? mixtureTruth(difficulty, g, factors, response, mixture) : makeTruth(topic, difficulty, g, factors, response);
     const curve = T.dose ? doseTruth(sc.dose, factors, g, difficulty) : null;
     const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, sigma: response.sigma, truth, decimals: response.decimals, ...(curve ? { curve } : {}) }],
       nuisance: T.nuisance ? T.nuisance(response.sigma) : {}, ...(sc.plate ? { controls: sc.plate.truth } : {}) };
-    const questions = makeQuestions(T.dose ? { ...T, refLabel: factors[1].levels[0], testLabel: factors[1].levels[1] } : T, factors, response, g);
-    const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt });
+    const questions = makeQuestions(T.dose ? { ...T, refLabel: factors[1].levels[0], testLabel: factors[1].levels[1] } : T, factors, response, g, mixture);
+    const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt, mixture });
     const ref = referenceStrategy(ex, ex.truth);
     const grade = gradeAnswers(ex, ex.truth, ref.answers, { runs: ref.study.design.runs.length });
     const power = referencePower(ex, ex.truth, ref.study);
@@ -135,7 +141,40 @@ function doseTruth(D, factors, g, difficulty) {
   return { model: 'LL.4', dose: D.factor, by: D.curve, params: { b, c: D.c, d: D.d, e }, levels: { [levels[0]]: { e }, [levels[1]]: { e: e / ratio } } };
 }
 
-function makeQuestions(T, factors, response, g) {
+/**
+ * The true blending of a mixture exercise: a Scheffé quadratic in pseudo-components — the pure
+ * blends spread by about the difficulty's effect size, and one or two pairs blending non-linearly
+ * (synergy or antagonism), strong enough that the best blend is usually not a vertex.
+ */
+function mixtureTruth(difficulty, g, factors, response, mixture) {
+  const m = DIFFICULTIES[difficulty], s = response.sigma, terms = {};
+  // sizes relative to the region: a pseudo-component may only reach part of 0 … 1 there
+  const st = createStudy({ name: 'r', seed: 1, factors, mixture });
+  const pts = mixtureCandidates(st).map(x => factors.map((f, i) => (x[i] - f.mix.low) / f.mix.scale));
+  const span = (i) => Math.max(...pts.map(z => z[i])) - Math.min(...pts.map(z => z[i]));
+  factors.forEach((f, i) => { terms[f.id] = response.base + (g.random() - 0.5) * m * s / Math.max(span(i), 0.2); });
+  const pairs = factors.flatMap((a, i) => factors.slice(i + 1).map((b, j) => [a.id, b.id, i, i + 1 + j]));
+  const nP = 1 + g.int(2);
+  // a pair's blending is only visible as far as z_i·z_j is not linear in the components over the
+  // region: its range after removing the linear part
+  const allPairs = factors.flatMap((_, i) => factors.slice(i + 1).map((__, j) => [i, i + 1 + j]));
+  const curv = (i, j) => {
+    // … and of the other pairs' blending: what this pair alone adds over the region
+    const X = pts.map(z => [...z, ...allPairs.filter(([a2, b2]) => !(a2 === i && b2 === j)).map(([a2, b2]) => z[a2] * z[b2])]), y = pts.map(z => z[i] * z[j]), q = X[0].length;
+    const XtX = Array.from({ length: q }, (_, a2) => Array.from({ length: q }, (__, b2) => X.reduce((t, r) => t + r[a2] * r[b2], 0)));
+    const Xty = Array.from({ length: q }, (_, a2) => X.reduce((t, r, k) => t + r[a2] * y[k], 0));
+    let beta; try { beta = solveLin(XtX, Xty); } catch { return 0.05; }
+    const res = y.map((v, k) => v - X[k].reduce((t, xv, a2) => t + xv * beta[a2], 0));
+    return Math.max(...res) - Math.min(...res);
+  };
+  for (const [a, b, i, j] of pick(g, pairs, nP)) {
+    const reach = curv(i, j);
+    terms[`${a}:${b}`] = (g.random() < 0.85 ? 1 : -1) * (1.2 + 0.8 * g.random()) * m * s / Math.max(reach, 0.0005);
+  }
+  return { intercept: 0, terms };
+}
+
+function makeQuestions(T, factors, response, g, mixture) {
   const goal = response.goal === 'minimize' ? 'minimise' : 'maximise';
   const qs = [];
   for (const q of T.questions) {
@@ -145,7 +184,8 @@ function makeQuestions(T, factors, response, g) {
     if (q === 'effects') qs.push({ id: 'effects', kind: 'effects', text: `For each factor that matters, estimate its effect (low → high) on ${response.name.toLowerCase()}, with a 95 % interval.` });
     if (q === 'best') qs.push({ id: 'best', kind: 'best', goal: response.goal, text: `Which settings ${goal} ${response.name.toLowerCase()}, within the ranges?` });
     if (q === 'prediction') {
-      const at = Object.fromEntries(factors.map(f => [f.id, f.type === 'categorical' ? f.levels[0] : +decode(f, Math.round((g.random() * 1.2 - 0.6) * 20) / 20).toPrecision(6)]));
+      const at = mixture ? (() => { const st = createStudy({ name: 'q', seed: 1, factors, mixture }); const b = randomBlend(st, g); const r = Object.fromEntries(Object.entries(b).map(([k, v]) => [k, +v.toPrecision(4)])); const last = mixture.components.at(-1); r[last] = +(mixture.total - mixture.components.slice(0, -1).reduce((a, k) => a + r[k], 0)).toPrecision(6); return r; })()
+        : Object.fromEntries(factors.map(f => [f.id, f.type === 'categorical' ? f.levels[0] : +decode(f, Math.round((g.random() * 1.2 - 0.6) * 20) / 20).toPrecision(6)]));
       qs.push({ id: 'prediction', kind: 'prediction', settings: at, text: `Predict ${response.name.toLowerCase()} at ${Object.entries(at).map(([k, v]) => `${k} = ${v}`).join(', ')}.` });
     }
   }
@@ -153,8 +193,8 @@ function makeQuestions(T, factors, response, g) {
   return qs;
 }
 
-function assemble({ id, topic, difficulty, seed, scenario, sc, factors, response, budget, questions, process, attempt }) {
-  const study = createStudy({ aikidoe: FORMAT_VERSION, name: `${sc.title} (${TOPICS[topic].title.toLowerCase()})`, seed,
+function assemble({ id, topic, difficulty, seed, scenario, sc, factors, response, budget, questions, process, attempt, mixture }) {
+  const study = createStudy({ aikidoe: FORMAT_VERSION, name: `${sc.title} (${TOPICS[topic].title.toLowerCase()})`, seed, ...(mixture ? { mixture } : {}),
     description: `${sc.text} Budget: ${budget} runs.`,
     factors, responses: [{ id: response.id, name: response.name, units: response.units, ...(questions.some(q => q.kind === 'best') ? { goal: response.goal } : {}) }],
     // the plates, with their controls; the runs are laid out by the student
@@ -230,7 +270,7 @@ const MAX = 'maximize';
 export function deriveAnswers(ex, study, { alpha = 0.05 } = {}) {
   const T = TOPICS[ex.topic], r = study.responses[0].id;
   if (T.dose) return doseAnswers(ex, study);
-  const formula = T.curvature ? `${r} ~ quadratic` : (ex.topic === 'screening' || ex.topic === 'fraction') ? `${r} ~ main` : `${r} ~ 2fi`;
+  const formula = T.mixture ? `${r} ~ mixquadratic` : T.curvature ? `${r} ~ quadratic` : (ex.topic === 'screening' || ex.topic === 'fraction') ? `${r} ~ main` : `${r} ~ 2fi`;
   const mixed = study.design.runs.some(x => x.wholePlot !== undefined);
   const fit = mixed ? fitMixedModel(study, formula) : fitModel(study, formula);
   const terms = mixed
@@ -257,6 +297,10 @@ export function deriveAnswers(ex, study, { alpha = 0.05 } = {}) {
 /** Settings maximising (or minimising) f over the cube: corners and a grid, then polished. */
 export function bestSettings(study, f, goal = MAX) {
   const fs = study.factors, sgn = goal === 'minimize' ? -1 : 1;
+  if (study.mixture) {
+    const r = optimiseMixture(study, (s) => sgn * f(s), { starts: 12, seed: 7 });
+    return Object.fromEntries(Object.entries(r.settings).map(([k, v]) => [k, typeof v === 'number' ? +v.toPrecision(8) : v]));
+  }
   const cont = fs.filter(x => x.type !== 'categorical'), cat = fs.filter(x => x.type === 'categorical');
   const n = cont.length <= 2 ? 21 : cont.length === 3 ? 11 : 3;
   const grid = (k) => (k === 0 ? [[]] : grid(k - 1).flatMap(r => Array.from({ length: n }, (_, i) => [...r, -1 + 2 * i / (n - 1)])));
@@ -293,6 +337,12 @@ export function referenceStrategy(ex, truth = truthOf(ex)) {
     }
     case 'rsm': st = make(ccd(k), `rotatable central composite design (${ccd(k).X.length} runs); fit the full quadratic; maximise within the ranges`); break;
     case 'dose': return doseReference(ex, truth);
+    case 'mixture': {
+      const d = mixtureDesign(base, { kind: 'optimal', runs: ex.budget, model: 'mixquadratic', criterion: 'I', seed: ex.seed });
+      st = createStudy({ ...base, design: d });
+      steps.push(`an I-optimal design for the Scheffé quadratic, ${ex.budget} runs from the vertices, edge centroids, overall centroid and axial blends of the constrained region; fit the Scheffé quadratic (pseudo-components); the best blend by searching the region`);
+      break;
+    }
     case 'plate': {
       const reps = ex.budget / 2 ** k;
       st = make(fullFactorial(levels, { replicates: reps, continuous: cont }), `2^${k} full factorial, ${reps} replicates (${ex.budget} runs)`);
@@ -385,10 +435,35 @@ export function linearDoseStrategy(ex, truth = truthOf(ex)) {
   return { strategy: 'evenly spaced doses', steps: ['8 doses evenly spaced from 0 to the top dose, 3 per curve (48 runs)'], study: st, answers };
 }
 
+/**
+ * One component at a time (mixture topic): from the centroid of the region, each component moved
+ * to the ends of its Cox direction (the others keeping their proportions), twice over; a linear
+ * blending model, which cannot see non-linear blending.
+ */
+export function coxStrategy(ex, truth = truthOf(ex)) {
+  const base = ex.study, M = base.mixture, ref = referenceBlend(base);
+  const pts = [ref];
+  for (const id of M.components) { const [a, b] = coxRange(base, ref, id); pts.push(coxBlend(base, ref, id, a), coxBlend(base, ref, id, b)); }
+  const all = [...pts, ...pts].slice(0, ex.budget);
+  const runs = all.map((s, i) => ({ run: i + 1, order: i + 1, kind: 'other', settings: Object.fromEntries(Object.entries(s).map(([k, v]) => [k, +v.toPrecision(12)])) }));
+  let st = createStudy({ ...base, design: { kind: 'custom', params: { strategy: 'one component at a time' }, randomisation: 'none', runs } });
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  const fit = fitModel(st, `${base.responses[0].id} ~ mixlinear`);
+  const pred = (s) => predict(fit, [s])[0].fit;
+  // the best blend tried (what is usually done with these data)
+  const r = base.responses[0].id, sg = (base.responses[0].goal ?? MAX) === 'minimize' ? -1 : 1;
+  const tried = runs.map(x => ({ s: x.settings, y: st.observations.find(o => o.run === x.run && o.response === r).value })).sort((a, b) => sg * (b.y - a.y));
+  const ans = { active: [], effects: {}, runs: runs.length, best: tried[0].s };
+  const pq = ex.questions.find(q => q.kind === 'prediction');
+  if (pq) ans.prediction = { value: pred(pq.settings) };
+  return { strategy: 'one component at a time', steps: ['from the centroid, each component to the ends of its Cox direction, twice; a linear blending model'], study: st, answers: ans };
+}
+
 /** The strategy a lesson compares with: one factor at a time, the tidy plate layout, or evenly spaced doses. */
 export function comparisonStrategy(ex, truth = truthOf(ex)) {
   const T = TOPICS[ex.topic];
   if (T.dose) return linearDoseStrategy(ex, truth);
+  if (T.mixture) return coxStrategy(ex, truth);
   if (T.plate) return tidyPlateStrategy(ex, truth);
   return ofatStrategy(ex, truth);
 }
@@ -406,7 +481,7 @@ export function tidyPlateStrategy(ex, truth = truthOf(ex)) {
   return { strategy: 'tidy plate layout', steps: ['the same design, laid out by hand: conditions in standard order, replicates side by side, row by row'], study: st, answers: deriveAnswers(ex, st) };
 }
 
-function referencePower(ex, truth, study) {
+export function referencePower(ex, truth, study) {
   if (TOPICS[ex.topic].dose) {
     // the potency question: the power of the reference's last stage for the true ratio
     const resp = truth.process.responses[0], c = resp.curve, [ref, test] = Object.keys(c.levels);
@@ -418,9 +493,10 @@ function referencePower(ex, truth, study) {
   // reference design and model: the smallest power. Response surfaces: the curvature terms (the
   // optimum's location rests on them); otherwise the main effects and interactions.
   const resp = truth.process.responses[0], sigma = resp.sigma, curv = !!TOPICS[ex.topic].curvature;
-  const terms = Object.entries(resp.truth.terms).filter(([t]) => (curv ? t.startsWith('I(') : !t.startsWith('I(')));
+  // mixtures: the blending terms (a test that a pure blend's response is 0 means nothing)
+  const terms = Object.entries(resp.truth.terms).filter(([t]) => (TOPICS[ex.topic].mixture ? t.includes(':') : curv ? t.startsWith('I(') : !t.startsWith('I(')));
   if (!terms.length) return 1;
-  const model = curv ? 'quadratic' : (ex.topic === 'screening' || ex.topic === 'fraction') ? 'main' : '2fi';
+  const model = TOPICS[ex.topic].mixture ? 'mixquadratic' : curv ? 'quadratic' : (ex.topic === 'screening' || ex.topic === 'fraction') ? 'main' : '2fi';
   const eta = ex.topic === 'split-plot' ? (truth.process.nuisance.reset / sigma) ** 2 : 1;
   let min = 1;
   for (const [t, b] of terms) {

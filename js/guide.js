@@ -15,6 +15,8 @@ import { definitiveScreening } from './design/dsd.js';
 
 const PHYSICAL = (a) => a.aim && a.aim !== 'measure' && a.aim !== 'simulate';
 const FACTORIAL = (a) => PHYSICAL(a) && a.aim !== 'dose';            // the questions about factors and models
+const MIX = (a) => FACTORIAL(a) && (a.mixture === 'all' || a.mixture === 'some');   // a mixture (issue #62)
+const PLAIN = (a) => FACTORIAL(a) && !MIX(a);                        // factorial questions that a mixture replaces
 
 export const QUESTIONS = [
   { id: 'aim', type: 'choice', text: 'What do you want to find out?',
@@ -50,7 +52,25 @@ export const QUESTIONS = [
   { id: 'names', type: 'text', optional: true, when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'dose', text: 'Their names (optional, separated by commas)',
     why: 'Only to label the study the guide creates; you can rename the factors and set their ranges on the Define step.',
     help: ['concepts', 'factors-and-coded-units'] },
-  { id: 'types', type: 'choice', when: FACTORIAL, text: 'What kind of factors are they?',
+  { id: 'mixture', type: 'choice', when: (a) => FACTORIAL(a) && (a.factors ?? 0) >= 2, text: 'Are some of the factors ingredients that make up a fixed total — a recipe, a formulation, a composition?',
+    why: 'Shares of a whole cannot be varied independently: more of one ingredient means less of another, so most corners of a factorial design do not add up, and “the effect of A” depends on what it replaces. Mixture designs spread blends over the region the ingredients’ limits leave, and Scheffé models describe how they blend.',
+    help: ['designs-mixture', ''],
+    options: [
+      { value: 'no', label: 'No — each factor can be set independently' },
+      { value: 'all', label: 'Yes — all of them are ingredients adding up to a total' },
+      { value: 'some', label: 'Some are ingredients; others are process settings (time, temperature …)' },
+    ] },
+  { id: 'components', type: 'number', min: 2, max: 30, when: (a) => MIX(a) && a.mixture === 'some', text: 'How many of the factors are ingredients?',
+    why: 'The ingredients form the mixture; the remaining factors are process settings, crossed with the blends (each blend run at their low and high settings), so the analysis can show whether the best blend depends on them.',
+    help: ['designs-mixture', 'process-variables'] },
+  { id: 'bounds', type: 'choice', when: MIX, text: 'Do the ingredients have their own limits (a minimum or maximum share)?',
+    why: 'With lower limits only, the blends still form a simplex (a triangle for three ingredients) and the classical lattice and centroid designs fit. Upper limits — or limits on combinations — cut corners off it, and the design has to be built from the corners of the region that is left (extreme vertices) or searched for (an optimal design).',
+    help: ['designs-mixture', 'constrained-regions'],
+    options: [
+      { value: 'none', label: 'Lower limits at most (each can go from its minimum up to the whole)' },
+      { value: 'limits', label: 'Some have upper limits, or limits on combinations' },
+    ] },
+  { id: 'types', type: 'choice', when: PLAIN, text: 'What kind of factors are they?',
     why: 'A continuous factor has a range (temperature 900–1000 °C) and can be set between its ends, so curvature can be studied. A categorical factor is a choice (supplier A or B). Two-level choices fit the standard factorial designs; three or more choices usually need an optimal design.',
     help: ['concepts', 'factors-and-coded-units'],
     options: [
@@ -58,10 +78,10 @@ export const QUESTIONS = [
       { value: 'two-level', label: 'Some are choices between two options' },
       { value: 'multi', label: 'Some are choices among three or more options' },
     ] },
-  { id: 'categorical', type: 'number', min: 1, max: 30, when: (a) => FACTORIAL(a) && (a.types === 'two-level' || a.types === 'multi'), text: 'How many of them are choices (categorical)?',
+  { id: 'categorical', type: 'number', min: 1, max: 30, when: (a) => PLAIN(a) && (a.types === 'two-level' || a.types === 'multi'), text: 'How many of them are choices (categorical)?',
     why: 'Only to set up the study; you can change any factor\'s type on the Define step.',
     help: ['concepts', 'factors-and-coded-units'] },
-  { id: 'htc', type: 'number', min: 0, max: 30, when: FACTORIAL, text: 'How many factors are hard, slow or expensive to change between runs? (0 if none)',
+  { id: 'htc', type: 'number', min: 0, max: 30, when: PLAIN, text: 'How many factors are hard, slow or expensive to change between runs? (0 if none)',
     why: 'A furnace temperature that takes hours to settle, or a fixture that has to be rebuilt, tempts you to run all the low settings first and then all the high ones. That confounds the factor with everything that drifts over time. A split-plot design changes the hard factor a limited number of times on purpose, and its analysis tests that factor against the right, larger error.',
     help: ['designs-split-plot', ''] },
   { id: 'groups', type: 'choice', when: PHYSICAL, text: 'Will the runs be done in groups that may differ — several days, batches of material, chambers?',
@@ -75,11 +95,11 @@ export const QUESTIONS = [
     why: 'Wells are not all alike: the outer ring evaporates and warms faster, pipettes and readers leave row and column differences, and plates differ. Filling a plate the tidy way (each condition in a row, controls in one column) puts those differences into the effects; a balanced layout spreads them, and the analysis takes out the plate, edge and gradients.',
     help: ['plates', ''],
     options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
-  { id: 'curvature', type: 'choice', when: (a) => FACTORIAL(a) && a.aim !== 'optimise', text: 'Could the response peak, dip or level off inside the ranges you will use?',
+  { id: 'curvature', type: 'choice', when: (a) => PLAIN(a) && a.aim !== 'optimise', text: 'Could the response peak, dip or level off inside the ranges you will use?',
     why: 'Two-level designs fit straight lines between the low and high settings and cannot see curvature. Centre points test for it cheaply; designs with three levels can estimate it.',
     help: ['designs-rsm', ''],
     options: [{ value: 'no', label: 'Unlikely — roughly linear over the ranges' }, { value: 'unsure', label: 'Not sure' }, { value: 'yes', label: 'Likely' }] },
-  { id: 'constraints', type: 'choice', when: FACTORIAL, text: 'Can every combination of settings be run?',
+  { id: 'constraints', type: 'choice', when: PLAIN, text: 'Can every combination of settings be run?',
     why: 'Standard designs put runs at the corners of the region — every factor at an extreme at once. If those are unsafe, a design without corner runs helps; if some combinations are impossible, an optimal design can be searched within what is allowed.',
     help: ['designs-optimal', 'constraints'],
     options: [
@@ -119,7 +139,7 @@ export function checkAnswer(q, v, answers = {}) {
   if (q.type !== 'number') return null;
   if (v === null || v === '' || v === undefined) return q.optional ? null : 'an answer is needed';
   if (!Number.isInteger(v)) return 'a whole number, please';
-  const max = q.id === 'htc' || q.id === 'categorical' ? answers.factors ?? q.max : q.max;
+  const max = q.id === 'htc' || q.id === 'categorical' ? answers.factors ?? q.max : q.id === 'components' ? Math.max(2, (answers.factors ?? q.max + 1) - 1) : q.max;
   if (v < q.min || v > max) return `between ${q.min} and ${max}`;
   return null;
 }
@@ -200,6 +220,8 @@ export function advise(a) {
   if (aim === 'screen' && k <= 4) { notes.push(`With ${k} factor${k === 1 ? '' : 's'}, screening is not needed: a full factorial costs only ${2 ** k} runs and answers more.`); aim = 'understand'; }
 
   const stagesFirst = (title, text) => plan.push({ title, text });
+  if (MIX(a)) mixturePlan(a, out, { plan, notes, warnings, lesson, read, stages });
+  else {
   const htcText = htc ? ` Factor${htc > 1 ? 's' : ''} hard to change: set ${htc > 1 ? 'them' : 'it'} once per whole plot and vary the others within; the analysis is a mixed model, and the power for the hard-to-change factor${htc > 1 ? 's' : ''} depends on the number of whole plots, not the number of runs.` : '';
   if (htc) { lesson('split-plot'); read(M('designs-split-plot', '', 'split-plot designs'), M('analysis', 'mixed-models', 'mixed models')); }
   if (htc && htc === k) warnings.push('Every factor is hard to change: a split-plot needs some easy-to-change factors to vary within the whole plots. Either reset the factors for every run (completely randomised, slower) or accept fewer, larger groups.');
@@ -289,6 +311,7 @@ export function advise(a) {
     plan.push({ title: 'Confirm', text: 'Run 3–4 confirmation runs at the predicted best settings and check they fall within the prediction interval before acting on the model.' });
     read(M('designs-sequential', 'confirmation-runs', 'confirmation runs'));
   }
+  }
 
   // microplates
   if (a.plates === 'yes') {
@@ -316,6 +339,29 @@ export function advise(a) {
   return out;
 }
 
+/** Mixtures (issue #62): the design family, the plan and the notes. */
+function mixturePlan(a, out, { plan, notes, warnings, lesson, read, stages }) {
+  const k = a.factors ?? 2, q = a.mixture === 'all' ? k : Math.min(Math.max(2, a.components ?? 2), k), p = k - q;
+  const simplex = a.bounds !== 'limits', screen = a.aim === 'screen' && q > 6;
+  const terms = screen ? q : q * (q + 1) / 2, procTerms = p ? (screen ? p : p + q * p) : 0;
+  const cross = 2 ** Math.min(p, 3);
+  let base, kind;
+  if (screen) { kind = simplex ? 'lattice' : 'optimal'; base = simplex ? q + 1 + q : terms + 4; }
+  else if (simplex && q <= 6) { kind = 'lattice'; base = terms + 1 + q; }           // {q, 2} lattice, the centroid and the axial blends
+  else { kind = simplex ? 'optimal' : q <= 4 ? 'vertices' : 'optimal'; base = Math.max(terms + 5, kind === 'vertices' ? terms + 5 : 0); }
+  const runs = p > 3 ? terms + procTerms + 6 : base * cross;
+  const label = { lattice: screen ? 'simplex screening design (pure blends, the centroid and the axial blends)' : 'simplex lattice {q, 2} with the centroid and axial check blends', vertices: 'extreme vertices with edge and face centroids', optimal: `${a.aim === 'optimise' ? 'I' : 'D'}-optimal mixture design` }[kind];
+  Object.assign(out, { goal: null, family: `mixture-${kind}`, runs, headline: `Mixture design for ${q} ingredients: ${label}${p ? `, crossed with ${p} process factor${p > 1 ? 's' : ''}` : ''} (about ${runs} runs)` });
+  plan.push({ title: screen ? 'Screen the ingredients' : 'Blend', text: `${screen ? `With ${q} ingredients, fit the linear (Scheffé) blending model first — ${q} coefficients, one per ingredient — to see which matter.` : `The Scheffé quadratic model — one coefficient per ingredient and one blending term per pair, ${terms} in all — describes how they blend: a positive pair term means they are better together than their average.`} Design step: mixture design, ${kind === 'lattice' ? 'simplex lattice (degree 2) with axial blends and a centroid run' : kind === 'vertices' ? 'extreme vertices (edge centroids, the overall centroid)' : `optimal for ${screen ? 'mixlinear' : 'mixquadratic'}, about ${base} runs`}.${simplex ? '' : ' The ingredients’ limits cut the simplex: set them on the Define step (each component’s low and high); the design is built inside what is left.'}` });
+  if (p) plan.push({ title: 'Process factors', text: p > 3 ? `With ${p} process factors, crossing every blend with every combination is too many runs: an optimal design for the blending model plus each ingredient’s interaction with the process factors (mixquadratic + mixlinear:(…), about ${terms + procTerms} terms).` : `Each blend runs at the low and high settings of the ${p} process factor${p > 1 ? 's' : ''} (${cross} combinations): the model adds each ingredient’s interaction with them, so the best blend may differ between process settings.` });
+  if (!screen) plan.push({ title: a.aim === 'optimise' ? 'Find the best blend and confirm' : 'Read the blending', text: `The ternary plot (Analyse step) shows the fitted response over the blends, and traces along the Cox directions show each ingredient's effect as it replaces the others in proportion.${a.aim === 'optimise' ? ' The Optimise step finds the best blend within the limits; confirm it with 3–4 runs.' : ''}` });
+  else if (stages) plan.push({ title: 'Then', text: 'Keep the few ingredients that matter (fixing the others, or lumping them into one), and fit the quadratic blending model on those.' });
+  notes.push('Enter each ingredient as a continuous factor with its limits and tick it as a mixture component on the Define step, with the total (100 %, 1, or the batch size).');
+  notes.push('If one ingredient is only a filler (water, a base, a diluent) whose own effect does not interest you, an alternative is the slack-variable approach: vary the others as ordinary factors and let the filler make up the rest. It is simpler to analyse, but its effects are “replacing the filler” — read the manual before choosing.');
+  if (a.htc) warnings.push('Hard-to-change settings in a mixture study need a split-plot mixture design, which this app does not build yet: run the blends within each setting of the hard-to-change factor as blocks.');
+  lesson('mixture'); read(M('designs-mixture', '', 'mixture designs'), M('designs-mixture', simplex ? 'simplex-designs' : 'constrained-regions', simplex ? 'lattice and centroid designs' : 'constrained regions'), M('designs-mixture', 'mixture-models', 'Scheffé models'));
+}
+
 function budgetCheck(out, warnings, stages = false) {
   if (out.budget === null || !out.runs) return;
   if (out.budget < out.runs) warnings.push(`The budget (${out.budget} runs) is below what this plan's first experiment needs (about ${out.runs}). Fewer factors, wider ranges or a smaller design (screening first) are the options; the recommender shows what fits.`);
@@ -331,6 +377,18 @@ export function guideStudy(a, { name = 'Study from the guide' } = {}) {
     const factors = [{ id: 'dose', name: 'Dose', low: 0, high: 100 }, ...(nc > 1 ? [{ id: 'sample', name: 'Sample', levels: Array.from({ length: nc }, (_, i) => (i === 0 ? 'reference' : nc === 2 ? 'test' : `test${i}`)) }] : [])];
     const description = [`Planned with the guide: ${adv.headline}.`, ...adv.plan.map((p, i) => `${i + 1}. ${p.title}: ${p.text}`)].join('\n');
     return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors, responses: [{ id: 'y', name: 'Response' }] });
+  }
+  if (MIX(a)) {
+    const k = Math.max(2, a.factors ?? 2), q = a.mixture === 'all' ? k : Math.min(Math.max(2, a.components ?? 2), k), adv = advise(a);
+    const names = String(a.names ?? '').split(',').map(x => x.trim()).filter(Boolean), used = new Set();
+    const factors = Array.from({ length: k }, (_, j) => {
+      let id = (names[j] ?? '').replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, 'f$1') || (j < q ? String.fromCharCode(65 + j) : `P${j - q + 1}`);
+      while (used.has(id)) id += '_';
+      used.add(id);
+      return j < q ? { id, name: names[j] ?? `Ingredient ${String.fromCharCode(65 + j)}`, low: 0, high: 100, units: '%' } : { id, name: names[j] ?? `Process ${j - q + 1}`, low: -1, high: 1 };
+    });
+    const description = [`Planned with the guide: ${adv.headline}.`, ...adv.plan.map((x, i) => `${i + 1}. ${x.title}: ${x.text}`)].join('\n');
+    return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors, mixture: { components: factors.slice(0, q).map(f => f.id), total: 100 }, responses: [{ id: 'y', name: 'Response' }] });
   }
   const k = a.factors ?? 2, cats = a.types && a.types !== 'continuous' ? Math.min(a.categorical ?? 1, k) : 0, htc = Math.min(a.htc ?? 0, k);
   const names = String(a.names ?? '').split(',').map(s => s.trim()).filter(Boolean);

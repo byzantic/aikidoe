@@ -8,6 +8,10 @@
 //        SPEC for a factor: id:low:high[:units][:log]  or  id=level1,level2,…  (categorical)
 //                           append ! to mark it hard to change, e.g. T:900:1000:°C!
 //        SPEC for a response: id[:units]
+//        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
+//   design STUDY --mixture lattice|centroid|vertices|optimal [--degree m] [--axial] [--centre n]
+//        [--runs N --model mixquadratic|… --criterion D|I] [--replicates r] [--seed S]   a mixture design
+//        (lattice and centroid in pseudo-components need a simplex region; process factors are crossed)
 //   design STUDY  (--full | --runs N | --generators "E=ABCD,…" | --pb [--runs N]
 //                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
 //                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
@@ -111,6 +115,7 @@ import { CATALOGUE } from '../js/design/catalogue.js';
 import { runSheetCSV, runSheetHTML, importResults, applyResults, plateGridToLong } from '../js/io/runsheet.js';
 import { layoutPlates, layoutReport } from '../js/design/plate-layout.js';
 import { doseDesign, addDoseStage, doseData, doseRoles } from '../js/design/dose-design.js';
+import { mixtureDesign, mixtureOf, isSimplexRegion, mixtureAnova, coxTrace } from '../js/design/mixture.js';
 import { fitDose, effectiveDose, relativePotency, parallelism, inversePredict, detectionLimits, dilutionSeries, optimalDoses,
   doseDesignQuality, guessScenarios, potencyPower, MODELS as DOSE_MODELS } from '../js/model/dose.js';
 import { pipettingCSV, plateMapHTML, plateMapText } from '../js/io/platemap.js';
@@ -192,7 +197,8 @@ function cmdInit({ pos, opt }) {
   });
   if (!factors.length) fail('init: give at least one --factor');
   const responses = list(opt.response).map(spec => { const [id, units] = String(spec).split(':'); return units ? { id, units } : { id }; });
-  const study = createStudy({ name: opt.name ?? file.replace(/\.aikidoe\.json$|\.json$/, ''), ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), factors, responses });
+  const mixture = opt.mixture ? { components: String(opt.mixture).split(',').map(x => x.trim()), ...(opt.total !== undefined ? { total: Number(opt.total) } : {}) } : undefined;
+  const study = createStudy({ name: opt.name ?? file.replace(/\.aikidoe\.json$|\.json$/, ''), ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), factors, ...(mixture ? { mixture } : {}), responses });
   save(file, study);
   put({ file, study: studySummary(study) });
   out(`created ${file}: ${factors.length} factors, ${responses.length} responses, seed ${study.seed}`);
@@ -202,6 +208,7 @@ function cmdDesign({ pos, opt }) {
   const file = pos[0];
   const study = load(file);
   if (opt.dose !== undefined) return cmdDoseDesign(file, study, opt);
+  if (opt.mixture !== undefined || study.mixture) return cmdMixtureDesign(file, study, opt);
   if (study.design && !opt.force) fail(`${file} already has a design (use --force to replace it${study.observations.length ? ' — its observations will be removed' : ''})`);
   const k = study.factors.length;
   const rsmDesign = !!(opt.ccd || opt.bbd || opt.dsd || opt.optimal);
@@ -292,6 +299,23 @@ const parseGuess = (t) => {
   for (const k of ['b', 'd', 'e']) if (!Number.isFinite(g[k])) fail(`--guess needs ${k}=…`);
   return { c: 0, f: 1, ...g };
 };
+
+function cmdMixtureDesign(file, study, opt) {
+  if (!study.mixture) fail('--mixture: the study has no mixture (doe init … --mixture A,B,C)');
+  if (study.design && !opt.force) fail(`${file} already has a design (use --force to replace it${study.observations.length ? ' — its observations will be removed' : ''})`);
+  const kind = opt.mixture === true || opt.mixture === undefined ? (isSimplexRegion(study) ? 'lattice' : 'vertices') : String(opt.mixture);
+  const d = mixtureDesign(study, { kind, degree: opt.degree ? int(opt.degree, 'degree') : 2, axial: !!opt.axial, centre: opt.centre ? int(opt.centre, 'centre') : 0,
+    replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1, ...(opt.runs ? { runs: int(opt.runs, 'runs') } : {}), ...(opt.model ? { model: String(opt.model) } : {}),
+    ...(opt.criterion ? { criterion: String(opt.criterion) } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
+  const next = createStudy({ ...study, design: d, observations: [], ...platesWithoutWells(study) });
+  save(file, next);
+  put({ file, design: { ...next.design, seed: d.params.seed } });
+  const M = mixtureOf(next);
+  out(`${file}: mixture design (${kind}${kind === 'lattice' ? ` {${M.ids.length},${d.params.degree}}` : ''}), ${d.runs.length} runs over ${M.ids.join(', ')} (adding up to ${M.total})${M.process.length ? `, crossed with ${M.process.map(f => f.id).join(', ')}` : ''}; randomisation complete, seed ${d.params.seed}`);
+  if (kind === 'vertices') out(`${d.params.vertices} vertices and ${d.params.centroids} centroids of the constrained region, and its overall centroid`);
+  if (kind === 'optimal') out(`${d.params.criterion}-optimal for ${d.params.model}: log det ${num(d.params.logdet, 6)}, average prediction variance ${num(d.params.averageVariance, 4)}`);
+  if (!isSimplexRegion(next)) out('the region is not a simplex (upper bounds or constraints cut it): coefficients are for L-pseudo-components');
+}
 
 function cmdDoseDesign(file, study, opt) {
   const stage = !!opt.stage;
@@ -513,11 +537,24 @@ function cmdFit({ pos, opt }) {
     { key: 'term', label: 'term', align: 'left' }, { key: 'est', label: 'estimate' }, { key: 'se', label: 'std. error' },
     { key: 't', label: 't' }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars },
   ] : [{ key: 'term', label: 'term', align: 'left' }, { key: 'est', label: 'estimate' }], coefRows));
-  out('coded units: each continuous factor runs from −1 (low) to +1 (high)');
+  out(study.mixture ? `mixture components in L-pseudo-components (x − low) / ${num(mixtureOf(study).scale, 6)}, 0 … 1; ${mixtureOf(study).process.length ? 'process factors coded −1 … +1; ' : ''}no intercept (the linear blending terms add up to it)` : 'coded units: each continuous factor runs from −1 (low) to +1 (high)');
   if (fit.dfRes > 0) {
     out(`\nσ = ${num(fit.sigma)}   R² = ${num(fit.r2)}   adjusted R² = ${num(fit.adjR2)}   predicted R² = ${num(fit.predR2)}`);
     if (Number.isFinite(fit.fStat)) out(`F = ${num(fit.fStat)} on ${fit.dfModel} and ${fit.dfRes} df, p ${pval(fit.fP).startsWith('<') ? pval(fit.fP) : '= ' + pval(fit.fP)}`);
     const type = opt.anova ? int(opt.anova, 'anova') : 1;
+    if (fit.model.implied) {
+      const rows = mixtureAnova(fit);
+      put({ anova: { type: 'mixture', rows } });
+      out('\nANOVA (mixture: linear blending against the mean, then each further term in order)');
+      out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ss', label: 'sum of sq.' }, { key: 'ms', label: 'mean sq.' }, { key: 'F', label: 'F' }, { key: 'p', label: 'p', fmt: pval }], rows));
+      if (opt.trace) {
+        const tr = coxTrace(study, (s) => predict(fit, [s])[0].fit, { points: 5 });
+        out('\nresponse traces (Cox directions through the centroid of the region; each component from its smallest to its largest feasible value)');
+        out(table([{ key: 'id', label: 'component', align: 'left' }, ...[0, 1, 2, 3, 4].map(i => ({ key: `p${i}`, label: i === 0 ? 'low' : i === 4 ? 'high' : '' }))], tr.map(t => ({ id: t.id, ...Object.fromEntries(t.points.map((p, i) => [`p${i}`, `${num(p.x, 3)}: ${num(p.y, 4)}`])) }))));
+        put({ trace: tr });
+      }
+    }
+    if (!fit.model.implied) {
     out(`\nANOVA (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'})`);
     const rows = anova(fit, type);
     const lof = lackOfFit(fit);
@@ -530,6 +567,7 @@ function cmdFit({ pos, opt }) {
       { key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ss', label: 'sum of sq.' },
       { key: 'ms', label: 'mean sq.' }, { key: 'F', label: 'F' }, { key: 'p', label: 'p', fmt: pval },
     ], rows));
+    }
   } else out('\nno residual degrees of freedom: use --lenth to judge the effects');
   if (opt.lenth) {
     const eff = twoLevelEffects(fit);
@@ -860,7 +898,7 @@ function cmdOptimise({ pos, opt }) {
   put({ models: models.map(m => ({ id: m.id, formula: m.formula, mixed: m.fit.kind === 'mixed' })), region, fixed, settings: o.settings, D: o.D, feasible: o.feasible,
     responses: models.map((m, i) => { const b = m.predictBand(o.settings); return { id: m.id, predicted: o.d[i].y, lower: b.lower, upper: b.upper, d: o.d[i].d, goal: m.spec }; }) });
   out(`models: ${models.map(m => m.formula + (m.fit.kind === 'mixed' ? ' (mixed)' : '')).join('; ')}`);
-  out(`region: ${region}${opt.radius !== undefined ? ` (${region === 'sphere' ? 'radius' : 'half-width'} ${opt.radius} coded)` : ''}${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ''}`);
+  out(study.mixture ? `region: the mixture (${study.mixture.components.join(" + ")} = ${study.mixture.total}, within the bounds)${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ""}` : `region: ${region}${opt.radius !== undefined ? ` (${region === 'sphere' ? 'radius' : 'half-width'} ${opt.radius} coded)` : ''}${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ''}`);
   out(`\nbest settings: ${showSettings(o.settings)}${o.feasible ? '' : '  (violates a constraint)'}`);
   out(`overall desirability D = ${num(o.D, 4)}`);
   out(table([{ key: 'id', label: 'response', align: 'left' }, { key: 'y', label: 'predicted' }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'goal', label: 'goal', align: 'left' }, { key: 'd', label: 'd' }],
@@ -1257,6 +1295,7 @@ function cmdInfo({ pos }) {
     s.factors.map(f => ({ ...f, range: f.type === 'categorical' ? f.levels.join(', ') : `${num(f.low, 6)} … ${num(f.high, 6)}${f.units ? ' ' + f.units : ''}`, note: [f.transform === 'log' ? 'log' : '', f.htc ? 'hard to change' : ''].filter(Boolean).join(', ') }))));
   out(`responses: ${s.responses.map(r => r.id + (r.units ? ` (${r.units})` : '') + (r.derived ? ` [wafer ${r.derived.stat} of ${r.derived.from}]` : '') + (r.measurement ? ` [σ_meas ${num(r.measurement.sigma, 3)}${r.measurement.pctGRR !== undefined ? `, GRR ${num(r.measurement.pctGRR, 3)} %` : ''}]` : '')).join(', ') || 'none'}`);
   if (s.sites) out(`sites: ${s.sites.scheme}, ${s.sites.positions.length} positions${s.sites.diameter ? `, ${s.sites.diameter} mm wafer` : ''}`);
+  if (s.mixture) out(`mixture: ${s.mixture.components.join(' + ')} = ${s.mixture.total}${isSimplexRegion(s) ? '' : ' (a constrained region: L-pseudo-components)'}`);
   if (s.plates) out(`plates: ${s.plates.rows} × ${s.plates.cols}, ${plateNumbers(s).length} in use, layout ${s.plates.layout}${s.plates.controls.length ? `, controls ${s.plates.controls.map(c => `${c.id} ×${c.perPlate}`).join(', ')}` : ''}`);
   if (!s.design) { out('no design yet'); return; }
   const runs = s.design.runs, done = new Set(s.observations.filter(o => o.value !== null).map(o => o.run));
