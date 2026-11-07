@@ -253,7 +253,12 @@ export function fitGLM(mm, y, o = {}) {
     nullDev = sum(y.map((v, i) => fam.devRes(v, intercept ? wm : L.inv(offset[i]), weights[i])));
   }
   const dfNull = n - (intercept ? 1 : 0);
-  // residuals and influence (R's residuals.glm, rstandard.glm, rstudent.glm, cooks.distance.glm)
+  // residuals and influence: Pearson and deviance residuals as R's residuals.glm; standardised
+  // deviance residuals r_D / √(φ(1 − h)) (R's rstandard.glm, type "deviance"); studentised
+  // residuals sign(r_D) √(r_D² + h r_P² / (1 − h)) / s, with s = 1 for families of fixed
+  // dispersion and the leave-one-out Pearson dispersion for quasi families (R ≥ 4.6 does not
+  // leave one out when the dispersion is fixed; earlier versions did for the negative binomial);
+  // Cook's distance (r_P / (1 − h))² h / (φ p)
   const pearson = y.map((v, i) => (v - mu[i]) * Math.sqrt(weights[i]) / Math.sqrt(fam.variance(mu[i])));
   const devRes = y.map((v, i) => Math.sign(v - mu[i]) * Math.sqrt(Math.max(0, fam.devRes(v, mu[i], weights[i]))));
   const Q = f ? f.Q() : [];
@@ -261,10 +266,10 @@ export function fitGLM(mm, y, o = {}) {
   const tidy = (v, i) => (Math.abs(1 - h[i]) < 1e-10 ? NaN : v);
   const rstandard = devRes.map((d, i) => tidy(d / Math.sqrt(dispersion * (1 - h[i])), i));
   const fixedFamily = distribution === 'poisson' || distribution === 'binomial';
-  const ss = sum(devRes.map(d => d * d));
+  const ssP = sum(pearson.map(e => e * e));
   const rstudent = devRes.map((d, i) => {
     const r0 = Math.sign(d) * Math.sqrt(d * d + h[i] * pearson[i] ** 2 / (1 - h[i]));
-    const s = fixedFamily ? 1 : Math.sqrt((ss - d * d / (1 - h[i])) / (dfRes - 1));
+    const s = estimated ? Math.sqrt((ssP - pearson[i] ** 2 / (1 - h[i])) / (dfRes - 1)) : 1;
     return tidy(r0 / s, i);
   });
   const cooks = pearson.map((e, i) => tidy((e / (1 - h[i])) ** 2 * h[i] / (dispersion * rank), i));

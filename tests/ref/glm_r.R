@@ -30,12 +30,20 @@ glmcase <- function(name, m, input, dispersionFixed = TRUE) {
   cf <- s$coefficients
   disp <- s$dispersion
   a1 <- anova(m, test = if (dispersionFixed) "Chisq" else "F")
+  # influence measures written out (R 4.6 changed several of R's own for glm objects): standardised
+  # deviance residuals, studentised residuals (leave-one-out Pearson dispersion only when it is
+  # estimated), Cook's distance with Pearson residuals
+  h <- hatvalues(m); dr <- residuals(m, "deviance"); pr <- residuals(m, "pearson")
+  rstd <- dr / sqrt(disp * (1 - h))
+  s1 <- if (dispersionFixed) 1 else sqrt((sum(pr^2) - pr^2 / (1 - h)) / (df.residual(m) - 1))
+  rstu <- sign(dr) * sqrt(dr^2 + h * pr^2 / (1 - h)) / s1
+  cooks <- (pr / (1 - h))^2 * h / (disp * m$rank)
   out <- list(
     columns = I(rownames(cf)), coef = I(unname(cf[, 1])), se = I(unname(cf[, 2])), stat = I(unname(cf[, 3])), p = I(unname(cf[, 4])),
     deviance = deviance(m), nullDeviance = m$null.deviance, dfRes = df.residual(m), dispersion = disp,
     aic = if (dispersionFixed) AIC(m) else NA,
     fitted = I(unname(fitted(m))), pearson = I(unname(residuals(m, "pearson"))), devres = I(unname(residuals(m, "deviance"))),
-    hat = I(unname(hatvalues(m))), rstandard = I(unname(rstandard(m))), rstudent = I(unname(rstudent(m))), cooks = I(unname(cooks.distance(m))),
+    hat = I(unname(h)), rstandard = I(unname(rstd)), rstudent = I(unname(rstu)), cooks = I(unname(cooks)),
     anova1 = list(term = I(rownames(a1)[-1]), df = I(a1$Df[-1]), deviance = I(a1$Deviance[-1]), p = I(a1[-1, ncol(a1)])))
   if (dispersionFixed) {
     a2 <- Anova(m, type = 2, test.statistic = "LR"); a3 <- Anova(m, type = 3, test.statistic = "LR")
