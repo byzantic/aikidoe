@@ -15,4 +15,4 @@ SixSigma
 desirability
 drc
 numDeriv
-mixexp
+mixexp@1.2.7.1
