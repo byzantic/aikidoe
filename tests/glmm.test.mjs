@@ -29,15 +29,15 @@ const caseData = (c) => {
 section('against lme4::glmer: adaptive quadrature (nAGQ = 25) and Laplace (nAGQ = 1)');
 // AGQ agrees to the optimiser's precision. For nAGQ = 1, lme4's own objective differs from the
 // Laplace approximation computed here by up to 1e-4 in the log-likelihood (its penalised iteratively
-// reweighted least squares conventions); the estimates then agree to about 1e-3, the standard errors
-// (both from finite-difference Hessians) to about 0.3 %.
+// reweighted least squares conventions); the estimates then agree to about 1e-3. Laplace standard
+// errors are not recorded: lme4's own moved by up to 0.3 % between versions 1.1-35 and 2.1.
 for (const c of F.cases) {
   const { d, y, g, o } = caseData(c), R = c.output, agq = c.input.nAGQ > 1;
   const T = agq ? { coef: 2e-5, se: 2e-4, sigma: 2e-5, ll: 1e-6, obj: 1e-8, lr: 2e-4, modes: 2e-5 } : { coef: 1e-3, se: 5e-3, sigma: 1e-3, ll: 2e-4, obj: 2e-4, lr: 2e-3, modes: 2e-3 };
   const fit = fitGLMM(mmOf(c.input.formula, d), y, g, o);
   const small = fitGLMM(mmOf(`${c.input.formula} - ${c.input.drop}`, d), y, g, o);
   near(`${c.name}: coefficients`, fit.coef, R.coef, { abs: T.coef });
-  near(`${c.name}: standard errors (Wald, as lme4)`, fit.seWald, R.se, { rel: T.se });
+  if (R.se) near(`${c.name}: standard errors (Wald, as lme4)`, fit.seWald, R.se, { rel: T.se });
   near(`${c.name}: σ of the random intercept`, fit.sigma, R.sigma, { abs: T.sigma });
   near(`${c.name}: log-likelihood`, fit.loglik, R.loglik, { abs: T.ll });
   near(`${c.name}: the objective at glmer's estimates`, glmmLoglikAt(mmOf(c.input.formula, d), y, g, o, R.coef, R.sigma), R.loglik, { abs: T.obj });

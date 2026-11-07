@@ -3,7 +3,7 @@
 # and pass/fail results; the Laplace approximation (nAGQ = 1) and adaptive Gauss–Hermite quadrature
 # (nAGQ = 25), canonical and non-canonical links, and a fit whose block variance is estimated as 0.
 # Recorded: the fixed effects and their standard errors (vcov from the Hessian over σ and β, lme4's
-# default), σ of the random intercept, the log-likelihood, the conditional modes of the block
+# default; for nAGQ > 1 only, see below), σ of the random intercept, the log-likelihood, the conditional modes of the block
 # effects, and the likelihood-ratio test of one term (anova of nested fits).
 # The data are coded factors ±1 of replicated 2^k designs, simulated here with a fixed seed.
 source("tests/ref/fixture.R")
@@ -13,12 +13,22 @@ cases <- list()
 
 ctrl <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1e5))
 
-# With nAGQ > 1, lme4's log-likelihood is built from the deviance residuals, so it leaves out the
-# saturated model's log-likelihood (Σ log f(y | μ = y)); it is added back here, so that every case
-# records the full log-likelihood (as logLik gives for nAGQ = 1).
+# The full log-likelihood is recorded (with Σ log y! and the binomial coefficients, as logLik gives
+# for nAGQ = 1). For nAGQ > 1, lme4 before 2.0 built logLik from the deviance residuals, leaving out
+# the saturated model's log-likelihood (Σ log f(y | μ = y)); lme4 2.x includes it. Which convention
+# a version uses is decided from the data, not the version number: the full AGQ log-likelihood is
+# within a little of the Laplace one (always full), so the saturated part is added back only when
+# that brings the two together.
 saturated <- function(fam, y, n) switch(fam$family,
   poisson = sum(dpois(y, y, log = TRUE)),
   binomial = sum(dbinom(round(y * n), n, y, log = TRUE)))
+fullLoglik <- function(m, nAGQ, y, n) {
+  ll <- as.numeric(logLik(m))
+  if (nAGQ == 1) return(ll)
+  lap <- as.numeric(logLik(update(m, nAGQ = 1)))
+  sat <- saturated(stats::family(m), y, n)
+  if (abs(ll + sat - lap) < abs(ll - lap)) ll + sat else ll
+}
 
 glmmcase <- function(name, f, data, family, nAGQ, drop, input, offset = NULL, weights = NULL) {
   data$.off <- if (is.null(offset)) 0 else offset
@@ -28,12 +38,14 @@ glmmcase <- function(name, f, data, family, nAGQ, drop, input, offset = NULL, we
   a <- anova(m0, m)
   re <- ranef(m)[[1]]
   y <- model.response(model.frame(m))
-  ll <- as.numeric(logLik(m)) + (if (nAGQ > 1) saturated(stats::family(m), y, data$.w) else 0)
+  ll <- fullLoglik(m, nAGQ, y, data$.w)
   list(name = name, input = c(input, list(nAGQ = nAGQ, drop = drop)),
        output = list(coef = I(unname(fixef(m))), names = I(names(fixef(m))),
-                     se = I(unname(sqrt(diag(as.matrix(vcov(m)))))),
+                     # Laplace standard errors are left out: lme4's finite-difference Hessian for
+                     # nAGQ = 1 moved by up to 0.3 % between lme4 1.1-35 and 2.1 (AGQ's by < 2e-5)
+                     se = if (nAGQ > 1) I(unname(sqrt(diag(as.matrix(vcov(m)))))) else NULL,
                      sigma = unname(getME(m, "theta")),
-                     loglik = ll, lme4loglik = as.numeric(logLik(m)),
+                     loglik = ll,
                      modes = I(unname(re[, 1])), groups = I(rownames(re)),
                      lr = list(chisq = a$Chisq[2], df = a$Df[2], p = a[["Pr(>Chisq)"]][2])))
 }
