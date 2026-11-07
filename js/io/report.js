@@ -8,6 +8,7 @@ import { fitModel, anova } from '../model/fit.js';
 import { lackOfFit } from '../model/ols.js';
 import { noiseOf } from '../model/noise.js';
 import { fitMixedModel, observationTable, randomEffects } from '../model/mixed.js';
+import { fitCountMixedModel, randomGroupOf, glmmTests } from '../model/glmm.js';
 import { defaultFormula } from '../model/defaults.js';
 import { checkConfirmation } from '../design/augment.js';
 import { serializeStudy } from '../study.js';
@@ -46,6 +47,15 @@ function responseSection(study, r, formula) {
       out.push('<h3>Variance components</h3>', tbl(['source', 'variance', 'std. dev.', '95% CI (variance)'], m.varcomp.map(v => [v.name, v.variance, v.sd, v.boundary ? 'on the boundary (0)' : `${num(v.lower)} … ${num(v.upper)}`])));
       out.push('<h3>Fixed effects</h3>', tbl(['term', 'estimate', 'std. error', 'df', 't', 'p', ''], m.columns.map((c, j) => [c, m.coef[j], m.seKR[j], m.dfKR[j], m.t[j], pval(m.pKR[j]), stars(m.pKR[j])]).filter(x => Number.isFinite(x[1]))));
       out.push('<h3>Tests of model terms</h3>', tbl(['term', 'F', 'ndf', 'ddf', 'p', 'tested in'], m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block).map(t => [t.term, t.FKR, t.df, t.ddfKR, pval(t.pKR), t.stratum ?? ''])));
+    } else if (r.distribution && ['poisson', 'binomial', 'bernoulli'].includes(r.distribution) && randomGroupOf(study)) {
+      // counts and proportions in a split-plot: the GLMM with a random whole-plot intercept
+      const fit = fitCountMixedModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;
+      out.push(`<p>Model: <code>${esc(formula)}</code> — ${esc(nm.label)}, ${esc(fit.link)} link, with a random intercept per ${esc(fit.random.name)} (${fit.random.m} of them; adaptive Gauss–Hermite quadrature, maximum likelihood), ${fit.n} observations; coefficients on the ${esc(fit.link)} scale in coded units.${fit.groupLevel.length && !fit.boundary ? ` ${esc(fit.groupLevel.join(', '))} change only between ${esc(fit.random.name)}s: t on ${fit.dfGroups} df.` : ''}</p>`);
+      out.push(tbl(['term', 'estimate', 'std. error', 'z or t', 'df', 'p', '', ...(ratio ? [ratio] : [])], fit.columns.map((c, j) => [c, fit.coef[j], fit.se[j], fit.z[j], fit.df[j] === Infinity ? 'z' : fit.df[j], pval(fit.p[j]), stars(fit.p[j]), ...(ratio ? [Math.exp(fit.coef[j])] : [])]).filter(x => Number.isFinite(x[1]))));
+      out.push(`<p class="stats">${esc(fit.random.name)} σ = ${esc(num(fit.sigma))} on the ${esc(fit.link)} scale${fit.boundary ? ' (estimated as 0)' : ` · σ = 0 test p ${esc(pval(fit.sigmaTest.p))}`} · log-likelihood = ${esc(num(fit.loglik))} · AIC = ${esc(num(fit.aic))}</p>`);
+      for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
+      const rows = glmmTests(fit, 1), F = rows.some(x => x.F !== undefined);
+      out.push('<h3>Likelihood-ratio tests (type I)</h3>', tbl(['source', 'df', 'χ²', ...(F ? ['F'] : []), 'p'], rows.map(x => [x.term, x.df, x.chi2, ...(F ? [x.F ?? ''] : []), pval(x.p)])));
     } else if (r.distribution) {
       // counts and proportions: the generalised linear model
       const fit = fitModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;

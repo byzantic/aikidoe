@@ -38,6 +38,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   designs. *Technometrics* 41, 62–70.
 - Box, G. E. P. & Behnken, D. W. (1960). Some new three level designs for the study of quantitative
   variables. *Technometrics* 2, 455–475.
+- Bates, D., Mächler, M., Bolker, B. & Walker, S. (2015). Fitting linear mixed-effects models
+  using lme4. *Journal of Statistical Software* 67(1), 1–48. (The GLMMs for counts and proportions
+  are checked against its `glmer`.)
 - Box, G. E. P. & Wilson, K. B. (1951). On the experimental attainment of optimum conditions.
   *Journal of the Royal Statistical Society B* 13, 1–45.
 - Brideau, C., Gunter, B., Pikounis, B. & Liaw, A. (2003). Improved statistical methods for hit

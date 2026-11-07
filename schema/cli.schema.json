@@ -1859,6 +1859,268 @@
             }
           },
           "description": "a generalised linear model (a count or proportion response, issue #64)"
+        },
+        {
+          "type": "object",
+          "description": "a count or proportion response with a random intercept per whole plot or block (GLMM by adaptive Gauss–Hermite quadrature or Laplace)",
+          "required": [
+            "kind",
+            "response",
+            "formula",
+            "distribution",
+            "link",
+            "nAGQ",
+            "random",
+            "n",
+            "rank",
+            "coefficients",
+            "loglik",
+            "tests"
+          ],
+          "properties": {
+            "kind": {
+              "const": "glmm"
+            },
+            "response": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "distribution": {
+              "enum": [
+                "poisson",
+                "binomial",
+                "bernoulli"
+              ]
+            },
+            "link": {
+              "type": "string"
+            },
+            "nAGQ": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "random": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "groups",
+                "sigma",
+                "boundary",
+                "test"
+              ],
+              "properties": {
+                "id": {
+                  "enum": [
+                    "wholePlot",
+                    "block"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "groups": {
+                  "type": "integer"
+                },
+                "sigma": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "sigmaSE": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "boundary": {
+                  "type": "boolean"
+                },
+                "test": {
+                  "type": "object",
+                  "required": [
+                    "chi2",
+                    "df",
+                    "p"
+                  ],
+                  "properties": {
+                    "chi2": {
+                      "type": "number"
+                    },
+                    "df": {
+                      "type": "integer"
+                    },
+                    "p": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "modes": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "n": {
+              "type": "integer"
+            },
+            "rank": {
+              "type": "integer"
+            },
+            "aliased": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "units": {
+              "const": "coded"
+            },
+            "groupLevel": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "coefficients that vary only between groups: t on dfGroups df, standard errors scaled"
+            },
+            "dfGroups": {
+              "type": "integer"
+            },
+            "coefficients": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "estimate",
+                  "se",
+                  "statistic",
+                  "p",
+                  "lower",
+                  "upper"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "type": "number"
+                  },
+                  "se": {
+                    "type": "number"
+                  },
+                  "seWald": {
+                    "type": "number"
+                  },
+                  "statistic": {
+                    "type": "number"
+                  },
+                  "df": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "null: a z test"
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "lower": {
+                    "type": "number"
+                  },
+                  "upper": {
+                    "type": "number"
+                  },
+                  "ratio": {
+                    "type": "object",
+                    "properties": {
+                      "estimate": {
+                        "type": "number"
+                      },
+                      "lower": {
+                        "type": "number"
+                      },
+                      "upper": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "loglik": {
+              "type": "number"
+            },
+            "aic": {
+              "type": "number"
+            },
+            "converged": {
+              "type": "boolean"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tests": {
+              "type": "object",
+              "required": [
+                "type",
+                "rows"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "term",
+                      "df",
+                      "chi2",
+                      "p"
+                    ],
+                    "properties": {
+                      "term": {
+                        "type": "string"
+                      },
+                      "df": {
+                        "type": "integer"
+                      },
+                      "chi2": {
+                        "type": "number"
+                      },
+                      "F": {
+                        "type": "number"
+                      },
+                      "ddf": {
+                        "type": "integer"
+                      },
+                      "p": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -1923,7 +2185,8 @@
           "enum": [
             "ols",
             "mixed",
-            "glm"
+            "glm",
+            "glmm"
           ]
         },
         "response": {

@@ -17,7 +17,8 @@ export function glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }) {
   const notes = [];
   for (const v of hierarchyViolations(fit.model)) notes.push(`${v.term} is in the model without ${v.missing.join(', ')}.`);
   if (fit.aliased.length) notes.push(`Not estimable (aliased with earlier terms): ${fit.aliased.join(', ')}.`);
-  if (study.design.runs.some(r => r.wholePlot !== undefined)) notes.push('Split-plot design: this model treats every run as independent, so tests of the hard-to-change factors are too optimistic (random effects for counts and proportions come later).');
+  const splitNote = study.design.runs.some(r => r.wholePlot !== undefined) ? h('div', { class: 'msg warning', id: 'glm-splitplot' }, 'Split-plot design: this model treats every run as independent, so tests of the hard-to-change factors are too optimistic. ',
+    h('button', { class: 'btn small', id: 'use-glmm', onclick: () => set({ countRandom: 'wholePlot' }) }, 'use the random whole-plot effect')) : null;
 
   // the checks, with their remedies
   const checks = [];
@@ -30,6 +31,7 @@ export function glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }) {
     h('button', { class: 'btn small', id: 'use-firth', onclick: () => set({ firth: true }) }, 'use Firth’s method')));
   if (fit.firth) checks.push(h('div', { class: 'msg', id: 'glm-firth' }, 'Firth’s penalised likelihood (estimates shrunk slightly towards zero; Wald tests and intervals). ', h('button', { class: 'btn small', onclick: () => set({ firth: false }) }, 'ordinary maximum likelihood')));
   for (const w of fit.warnings.filter(w => !/overdispersion|separated/.test(w))) checks.push(h('div', { class: 'msg warning' }, w));
+  if (splitNote) checks.unshift(splitNote);
 
   // coefficients with ratios and intervals (profile likelihood unless Firth)
   let ci = [];

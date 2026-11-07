@@ -23,7 +23,7 @@ An agent helping a user plan or analyse an experiment should load the skill firs
 - [Manual contents](docs/manual/index.md)
 - [Getting started](docs/manual/getting-started.md)
 - [Concepts](docs/manual/concepts.md)
-- [Analysis](docs/manual/analysis.md) — includes counts and proportions (Poisson, negative binomial, binomial GLMs; overdispersion, separation, Firth)
+- [Analysis](docs/manual/analysis.md) — includes counts and proportions (Poisson, negative binomial, binomial GLMs; overdispersion, separation, Firth; random whole-plot or block effects)
 - [Worked example: a 2⁵⁻¹ screening experiment](docs/manual/example-screening.md)
 
 ## Optional

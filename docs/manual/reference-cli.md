@@ -57,6 +57,9 @@ Commands
        odds ratios and profile intervals [--wald], analysis of deviance, overdispersion and
        separation checks [--firth]; [--distribution poisson|negbin|quasipoisson|binomial|… --link L]
        to try another than the response's
+       counts and proportions in a split-plot (or with blocks): a GLMM with a random intercept per
+       whole plot (automatic) or block [--random wholePlot|block|none] [--nagq 25 (1: Laplace)];
+       likelihood-ratio tests, σ of the random effect and its test
        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
@@ -71,7 +74,8 @@ Commands
                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
        adds a stage of runs to the design as a new block
   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
-       (counts and proportions: [--exposure e] [--trials n] for the new run)
+       (counts and proportions: [--exposure e] [--trials n] for the new run; with a random effect
+       [--random …]: for a typical whole plot or block, averaged over them, and a new run in a new one)
        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses

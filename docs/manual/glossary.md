@@ -50,6 +50,10 @@ likelihood. See [counts and proportions](analysis.md#counts-and-proportions).
 
 **Generator** — the rule defining an added factor's column in a fraction, e.g. `E = ABCD`.
 
+**GLMM** (generalised linear mixed model) — a model for counts or proportions with random
+effects, such as a shift per whole plot on the log or logit scale
+([random effects for counts](analysis.md#random-effects-for-counts-and-proportions)).
+
 **Hard-to-change factor** — a factor set once for a group of runs (a whole plot).
 
 **Hierarchy** — a model is hierarchical if every interaction or power comes with the terms it is
