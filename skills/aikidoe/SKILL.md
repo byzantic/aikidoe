@@ -32,12 +32,13 @@ D/I-optimal; process factors crossed; Scheffé models in pseudo-components, Cox 
 counts and proportions (Poisson, negative binomial, quasi-Poisson, binomial, pass/fail GLMs with
 exposure offsets and trials; rate and odds ratios with profile intervals, analysis of deviance,
 overdispersion and separation checks, Firth: `doe init --response count@poisson`, `doe fit
-[--distribution …] [--firth]`);
+[--distribution …] [--firth]`; power for a rate or odds ratio: `doe power --response R --baseline b
+--ratio r [--simulate N]`);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.
 
 What it does not do: time series or process control charts, Bayesian analysis,
-mixed models or power for counts and proportions (yet), or causal claims from observational data. Say so
+mixed models for counts and proportions (yet), or causal claims from observational data. Say so
 when a question needs them.
 
 ## Setup

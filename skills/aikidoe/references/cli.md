@@ -62,6 +62,10 @@ Commands
        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
        runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
+  power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
+       [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
+       power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
+  recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
                 | --optimal --runs n [--model …] [--criterion D|I|A]
                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]

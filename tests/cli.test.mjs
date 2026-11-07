@@ -282,6 +282,12 @@ try {
   check('fit --json --distribution quasipoisson: t tests and the dispersion', o.distribution === 'quasipoisson' && 't' in o.coefficients[0] && o.dispersion > 0 && o.aic === null);
   o = js('predict', 'jc.aikidoe.json', 'germ ~ A + B', '--at', 'A=1,B=-1');
   check('predict --json (binomial): a proportion with an interval inside 0 … 1', o.kind === 'glm' && o.predictions[0].fit > 0.5 && o.predictions[0].lower > 0 && o.predictions[0].upper < 1);
+  o = js('power', 'jc.aikidoe.json', '--model', 'A*B', '--response', 'colonies', '--baseline', '20', '--ratio', '1.5', '--simulate', '60', '--seed', '2');
+  check('power --json for a rate ratio, with a simulation check', o.distribution === 'poisson' && o.terms.length === 3 && o.terms.every(x => x.power > 0.5 && x.simulated > 0.3 && x.detectableRatio > 1 && x.detectableRatio < 1.6), JSON.stringify(o.terms?.[0]));
+  o = js('power', 'jc.aikidoe.json', '--response', 'germ', '--baseline', '1.5');
+  check('… a proportion must lie between 0 and 1', o.ok === false && /between 0 and 1/.test(o.error.message));
+  o = js('recommend', 'jc.aikidoe.json', '--response', 'colonies', '--baseline', '20', '--ratio', '1.5', '--budget', '16');
+  check('recommend --json ranks by the rate-ratio power', o.counts?.distribution === 'poisson' && o.options[0].reasons.concat(o.options[0].warnings).some(x => /rate ratio of 1.5/.test(x)));
   o = js('fit', 'jc.aikidoe.json', 'colonies ~ A * B', '--lenth');
   check('… --lenth refuses a count', o.ok === false && /normal noise/.test(o.error.message));
   o = js('fit', 'jsp.aikidoe.json', 'y ~ T + P + t + G + F');

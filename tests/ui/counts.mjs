@@ -86,6 +86,19 @@ try {
   check('Firth: finite odds ratios, Wald tests', await page.locator('#glm-firth').count() === 1 && /Wald tests/.test(await page.textContent('#glm-tests')) && !/NaN|Infinity/.test(await page.textContent('#fit-stats')));
   await shot('counts-firth');
 
+  section('Design: power for a rate ratio, and the recommender ranking by it');
+  await page.click('[data-step="design"]'); await settle();
+  await page.selectOption('select[aria-label="power for"]', 'colonies'); await settle();
+  await page.fill('input[aria-label="power baseline"]', '10'); await page.keyboard.press('Tab'); await settle();
+  await page.fill('input[aria-label="power ratio"]', '1.5'); await page.keyboard.press('Tab'); await settle();
+  const ptxt = await page.textContent('#power');
+  check('power at a rate ratio of 1.5 for each term, and the ratio for 80 %', /power at rate ratio 1.5/.test(ptxt) && /rate ratio for 80%/.test(ptxt) && await page.locator('#power tr[data-power]').count() >= 3, ptxt.slice(0, 200));
+  await page.click('#power-simulate'); await settle();
+  check('checked by simulation', /simulated/.test(await page.textContent('#power')) && /±/.test(await page.textContent('#power')));
+  await page.click('#recommend-btn'); await settle();
+  check('the recommender ranks by the rate-ratio power', /power at rate ratio 1.5 for colonies/.test(await page.textContent('#recommend')));
+  await shot('counts-power');
+
   section('Optimise on a count');
   await page.evaluate(() => { const d = structuredClone(window.aikidoe.state.doc); d.responses[0].goal = 'maximize'; d.responses[0].lower = 5; d.responses[0].upper = 20; window.aikidoe.setDoc(d); }); await settle();
   await page.click('[data-step="optimise"]'); await settle();

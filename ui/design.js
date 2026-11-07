@@ -8,16 +8,16 @@ import { plackettBurman, correlationTable, PB_RUNS } from '../js/design/pb.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import * as T from '../js/design/twolevel.js';
-import { createStudy, feasible } from '../js/study.js';
+import { createStudy, feasible, decode } from '../js/study.js';
 import { definitiveScreening, dsdOrder } from '../js/design/dsd.js';
 import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
-import { parseFormula } from '../js/model/formula.js';
+import { parseFormula, modelMatrix } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
 import { platePanel } from './plates.js';
 import { doseDesignPanel } from './dose.js';
 import { mixtureDesignPanel } from './mixture.js';
 import { platesWithoutWells } from '../js/plate.js';
-import { designPower, detectableEffect } from '../js/model/power.js';
+import { designPower, detectableEffect, detectableRatio, simulatePower } from '../js/model/power.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
 import { candidates, buildCandidate, intendedModel, wholePlotChoices, defaultWholePlots, recommend, GOALS } from '../js/design/recommend.js';
 
@@ -71,15 +71,16 @@ export function render(ctx) {
   const set = (patch) => setUI({ design: { ...ui, ...patch } });
 
   // ---------------------------------------------------------------- recommender (shared with `doe recommend`)
-  const recKey = JSON.stringify([study.factors, study.simulator?.adapter ?? null, ui.goal ?? null, ui.budget ?? null]);
+  const counts = countsSpec(study, ui.power);
+  const recKey = JSON.stringify([study.factors, study.simulator?.adapter ?? null, ui.goal ?? null, ui.budget ?? null, counts]);
   const rec = ui.rec?.key === recKey ? ui.rec.result : null;
   const recRow = h('div', { class: 'row', id: 'recommend' },
     h('label', { class: 'inline' }, 'goal', select([{ value: '', label: 'auto' }, ...Object.entries(GOALS).map(([value, g]) => ({ value, label: `${value} — ${g.what}` }))], ui.goal ?? '', (v) => set({ goal: v || undefined }), { 'aria-label': 'recommend goal' })),
     h('label', { class: 'inline' }, 'budget (runs)', h('input', { class: 'num', type: 'number', min: 1, value: ui.budget ?? '', placeholder: 'any', 'aria-label': 'recommend budget', onchange: (e) => set({ budget: e.target.value === '' ? undefined : Number(e.target.value) }) })),
     h('button', { class: 'btn primary', id: 'recommend-btn', onclick: () => {
-      try { set({ rec: { key: recKey, result: recommend(study, { goal: ui.goal, budget: ui.budget }) }, recError: null }); } catch (e) { set({ recError: e.message }); }
+      try { set({ rec: { key: recKey, result: recommend(study, { goal: ui.goal, budget: ui.budget, ...(counts ? { counts } : {}) }) }, recError: null }); } catch (e) { set({ recError: e.message }); }
     } }, 'Recommend'),
-    rec ? h('span', { class: 'muted small' }, `ranked for: ${rec.goalText} (${rec.model}, ${rec.terms} terms); power at Δ = ${rec.delta}σ`) : null);
+    rec ? h('span', { class: 'muted small' }, `ranked for: ${rec.goalText} (${rec.model}, ${rec.terms} terms); power at ${rec.counts ? `${ratioWord(rec.counts.distribution)} ${rec.counts.ratio} for ${ui.power.response} (baseline ${rec.counts.baseline})` : `Δ = ${rec.delta}σ`}`) : null);
   const recOf = (id) => rec?.options.find(o => o.id === id);
   const rows = rec ? [...cands].sort((a, b) => (recOf(a.id)?.rank ?? 1e9) - (recOf(b.id)?.rank ?? 1e9)) : cands;
   const list = h('section', { class: 'panel' }, h('h2', {}, `Designs for ${study.factors.length} factors`, help('getting-started','choosing-a-design')), recRow, ui.recError ? h('div', { class: 'msg error' }, ui.recError) : null,
@@ -216,11 +217,75 @@ function diagnostics(study, d, modelFor) {
   return h('div', {}, parts);
 }
 
+// counts and proportions (issue #64): power for a rate or odds ratio, for a response chosen in the
+// power section; the recommender ranks by it too
+const isProp = (d) => String(d).includes('binomial') || d === 'bernoulli';
+const ratioWord = (d) => (isProp(d) ? 'odds ratio' : 'rate ratio');
+function countsSpec(study, pw = {}) {
+  const r = study.responses.find(x => x.id === pw.response && x.distribution);
+  if (!r) return null;
+  const c = pw.counts?.[r.id] ?? {}, d = r.distribution;
+  return { distribution: d, ...(r.link ? { link: r.link } : {}), baseline: c.baseline ?? (isProp(d) ? 0.5 : 10), ratio: c.ratio ?? 2,
+    ...(isProp(d) ? { trials: d === 'bernoulli' ? 1 : r.trials ?? c.trials ?? 20 } : {}), ...(d === 'negbin' ? { theta: c.theta ?? 5 } : {}), ...(d.startsWith('quasi') ? { dispersion: c.dispersion ?? 1.5 } : {}) };
+}
+
+function countsPowerSection(study, d, cand, ui, set, model, alpha, controlsHead) {
+  const pw = ui.power ?? {}, r = study.responses.find(x => x.id === pw.response), spec = countsSpec(study, pw);
+  const c = pw.counts?.[r.id] ?? {};
+  const setC = (patch) => set({ power: { ...pw, counts: { ...(pw.counts ?? {}), [r.id]: { ...c, ...patch } }, sim: null } });
+  const numIn = (key, label, title, value, attrs = {}) => h('label', { class: 'inline', title }, label,
+    h('input', { class: 'num', type: 'number', step: 'any', value, 'aria-label': `power ${key}`, onchange: (e) => setC({ [key]: Number(e.target.value) }), ...attrs }));
+  const prop = isProp(spec.distribution), rw = ratioWord(spec.distribution);
+  const controls = h('div', { class: 'row' }, controlsHead,
+    numIn('baseline', prop ? 'baseline proportion' : 'baseline count', prop ? 'the proportion of successes you expect at the centre of the design' : 'the mean count you expect at the centre of the design (per unit exposure)', spec.baseline, { min: 0 }),
+    numIn('ratio', rw, prop ? 'the odds ratio from a factor’s low to its high setting that matters' : 'the ratio of mean counts, high over low setting, that matters', spec.ratio, { min: 1, step: 0.1 }),
+    prop && spec.distribution !== 'bernoulli' && r.trials === undefined ? numIn('trials', 'trials per run', 'the number of trials (cells, seeds …) in each run', spec.trials, { min: 1, step: 1 }) : null,
+    spec.distribution === 'negbin' ? numIn('theta', 'θ', 'the overdispersion you expect: variance μ + μ²/θ (smaller θ, more variable)', spec.theta, { min: 0 }) : null,
+    spec.distribution.startsWith('quasi') ? numIn('dispersion', 'dispersion', 'variance as a multiple of the Poisson or binomial variance', spec.dispersion, { min: 1 }) : null);
+  let res, err = null;
+  try { res = designPower(study, d.X, { model, block: d.block, alpha, ...spec }); } catch (e) { err = e.message; }
+  if (err) return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, h('div', { class: 'msg error' }, err));
+  const det = Object.fromEntries(detectableRatio(res, { power: 0.8 }).map(x => [x.term, x.ratio]));
+  const simKey = JSON.stringify([cand.id, model, spec, alpha]);
+  const sim = pw.sim?.key === simKey ? Object.fromEntries(pw.sim.result.map(x => [x.term, x])) : null;
+  const runSim = () => {
+    const m = designMatrix(study, d, model);
+    set({ power: { ...pw, sim: { key: simKey, result: simulatePower(m, { ...spec, alpha, nsim: 200, seed: study.seed }) } } });
+  };
+  const rows = res.terms.filter(t => !t.block);
+  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls,
+    d.wholePlot ? h('div', { class: 'msg warning' }, 'Split-plot: this power treats every run as independent (random effects for counts and proportions come later), so it overstates the power for hard-to-change factors.') : null,
+    dataTable([{ key: 'term', label: 'term' }, { key: 'df', label: 'df', cls: 'n' },
+      { key: 'power', label: `power at ${rw} ${spec.ratio}`, cls: 'n', fmt: (v) => (Number.isNaN(v) ? h('span', { class: 'muted' }, 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
+      ...(sim ? [{ key: 'sim', label: 'simulated', cls: 'n', fmt: (v) => (v ? `${num(v.power, 2)} ± ${num(v.se, 1)}` : '') }] : []),
+      { key: 'det', label: `${rw} for 80%`, cls: 'n', fmt: (v) => (Number.isFinite(v) ? num(v, 3) : '> 1000') }],
+    rows.map(t => ({ ...t, det: det[t.term], sim: sim?.[t.term] })), { rowAttrs: () => ({ 'data-power': '' }) }),
+    h('div', { class: 'row small' }, h('button', { class: 'btn small', id: 'power-simulate', onclick: runSim }, 'check by simulation (200 experiments)'),
+      h('span', { class: 'muted' }, `${prop ? `Odds ratio: the odds of success at a factor’s high setting over its low setting (${spec.trials} trials per run).` : 'Rate ratio: the mean count at a factor’s high setting over its low setting.'} Each term is assessed alone with the others at the baseline: Wald tests with the information at the expected ${prop ? 'proportions' : 'counts'}${spec.dispersion ? ', F with the dispersion' : ''}; the simulation runs the likelihood-ratio test the analysis uses.`)));
+}
+
+/** The design's model matrix for a model (as designPower builds it, without blocks). */
+function designMatrix(study, d, model) {
+  const settings = d.X.map(r => Object.fromEntries(study.factors.map((f, j) => [f.id, f.type === 'categorical' ? (f.levels.length === 2 && (r[j] === -1 || r[j] === 1) ? f.levels[r[j] < 0 ? 0 : 1] : f.levels[r[j]]) : decode(f, r[j])])));
+  return modelMatrix(parseFormula(model, study.factors), study.factors, settings);
+}
+
 function powerSection(study, d, cand, ui, set) {
   const pw = ui.power ?? {}, model = pw.models?.[cand.id] ?? intendedModel(study, d);
   const ratio = pw.ratio ?? 2, alpha = pw.alpha ?? 0.05;
   const setP = (patch) => set({ power: { ...pw, ...patch } });
-  const controls = h('div', { class: 'row' },
+  // which response the power is for: a measurement (Δ/σ) or a count or proportion (a ratio)
+  const glmResps = study.responses.filter(r => r.distribution);
+  const forSel = glmResps.length ? h('label', { class: 'inline' }, 'for', select([{ value: '', label: 'a measurement (Δ/σ)' }, ...glmResps.map(r => ({ value: r.id, label: `${r.name} (${ratioWord(r.distribution)})` }))],
+    countsSpec(study, pw) ? pw.response : '', (v) => setP({ response: v || undefined, sim: null }), { 'aria-label': 'power for' })) : null;
+  if (countsSpec(study, pw)) {
+    const head = [forSel,
+      h('label', { class: 'inline' }, 'model', h('input', { type: 'text', class: 'formula', style: 'width:16em', value: model, 'aria-label': 'power model',
+        onchange: (e) => setP({ models: { ...(pw.models ?? {}), [cand.id]: e.target.value.replace(/^.*~/, '').trim() || 'main' } }) })),
+      h('label', { class: 'inline' }, 'α', select([0.01, 0.05, 0.1], alpha, (v) => setP({ alpha: Number(v) }), { 'aria-label': 'power alpha' }))];
+    return countsPowerSection(study, d, cand, ui, set, model, alpha, head);
+  }
+  const controls = h('div', { class: 'row' }, forSel,
     h('label', { class: 'inline' }, 'model', h('input', { type: 'text', class: 'formula', style: 'width:16em', value: model, 'aria-label': 'power model',
       onchange: (e) => setP({ models: { ...(pw.models ?? {}), [cand.id]: e.target.value.replace(/^.*~/, '').trim() || 'main' } }) })),
     h('label', { class: 'inline', title: 'the change in the response from the low to the high setting that matters, in units of the run-to-run standard deviation σ' }, 'effect Δ/σ',
