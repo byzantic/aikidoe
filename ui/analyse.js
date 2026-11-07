@@ -4,7 +4,7 @@ import { plot } from './plot.js';
 import { num, pval } from '../js/format.js';
 import { defaultFormula } from '../js/model/defaults.js';
 export { defaultFormula };
-import { fitModel, anova, lackOfFit, boxCox, lenth, halfNormal, twoLevelEffects } from '../js/model/ols.js';
+import { fitModel, anova, lackOfFit, boxCox, lenth, halfNormal, twoLevelEffects, predict } from '../js/model/ols.js';
 import { hierarchyViolations } from '../js/model/formula.js';
 import { normal } from '../js/dist.js';
 import { confirmPanel } from './augment.js';
@@ -14,6 +14,7 @@ import { observationsOf, availablePositionTerms, sitePositions } from '../js/mod
 import { waferPlot } from './wafer.js';
 import { plateAnalysisPanel } from './plates.js';
 import { doseAnalysis } from './dose.js';
+import { mixtureAnalysis } from './mixture.js';
 
 /** A sensible first model for the study's design. */
 
@@ -56,7 +57,7 @@ export function render(ctx) {
   const controls = h('section', { class: 'panel' }, h('h2', {}, 'Model', help('analysis','formulas')),
     h('div', { class: 'row', style: 'margin-bottom:8px' },
       withData.length > 1 ? h('label', { class: 'inline' }, 'response', select(withData.map(r => ({ value: r.id, label: r.name })), resp.id, (v) => set({ response: v }), { 'aria-label': 'response' })) : h('span', {}, h('b', {}, resp.name), resp.units ? ` (${resp.units})` : ''),
-      ['main', '2fi', 'quadratic'].map(s => h('button', { class: 'btn', onclick: () => setFormula(`${resp.id} ~ ${s}`), title: { main: 'main effects', '2fi': 'main effects and two-factor interactions', quadratic: 'full quadratic (response surface)' }[s] }, s)),
+      (study.mixture ? ['mixlinear', 'mixquadratic', 'mixspecial'] : ['main', '2fi', 'quadratic']).map(s => h('button', { class: 'btn', onclick: () => setFormula(`${resp.id} ~ ${s}`), title: { main: 'main effects', '2fi': 'main effects and two-factor interactions', quadratic: 'full quadratic (response surface)', mixlinear: 'Scheffé linear blending', mixquadratic: 'Scheffé quadratic: linear blending and the binary blending terms', mixspecial: 'Scheffé special cubic: the quadratic and the three-way terms' }[s] }, s)),
       h('button', { class: 'btn', onclick: () => setFormula(defaultFormula(study, resp.id)) }, 'reset'),
       ['p', 'aicc'].map(m => h('button', { class: 'btn', id: `reduce-${m}`, title: m === 'p' ? 'backward elimination: drop the least significant term while p > 0.10, keeping the model hierarchical' : 'backward elimination by AICc, keeping the model hierarchical',
         onclick: () => {
@@ -78,7 +79,7 @@ export function render(ctx) {
       h('label', { class: 'inline' }, 'ANOVA', select([{ value: 1, label: 'type I (sequential)' }, { value: 2, label: 'type II' }, { value: 3, label: 'type III' }], ui.anovaType ?? 1, (v) => set({ anovaType: Number(v) }), { 'aria-label': 'ANOVA type' }))),
     fIn,
     reduction(ui.reduce, resp.id, (f) => set({ formulas: { ...(ui.formulas ?? {}), [resp.id]: f }, reduce: null }), () => set({ reduce: null })),
-    h('p', { class: 'muted small' }, 'R-style formula over factor ids: ', h('span', { class: 'mono' }, 'A*B'), ' = A + B + A:B, ', h('span', { class: 'mono' }, '(A+B+C)^2'), ', ', h('span', { class: 'mono' }, 'I(T^2)'), ', ', h('span', { class: 'mono' }, '- A:B'), '. Coefficients are in coded units (−1 … +1).'));
+    h('p', { class: 'muted small' }, 'R-style formula over factor ids: ', h('span', { class: 'mono' }, 'A*B'), ' = A + B + A:B, ', h('span', { class: 'mono' }, '(A+B+C)^2'), ', ', h('span', { class: 'mono' }, 'I(T^2)'), ', ', h('span', { class: 'mono' }, '- A:B'), study.mixture ? '. Mixture components: mixquadratic, mixspecial, mixcubic, mixlinear (Scheffé models, no intercept), e.g. mixquadratic + mixlinear:(T); coefficients are in L-pseudo-components (0 … 1).' : '. Coefficients are in coded units (−1 … +1).'));
 
   let fit = null, fitErr = null;
   try { fit = fitModel(study, formula, ui.noPosition ? { position: false } : {}); } catch (e) { fitErr = e; }
@@ -124,7 +125,8 @@ export function render(ctx) {
 
   // ---------------------------------------------------------------- ANOVA
   let anovaPanel = null;
-  if (fit.dfRes > 0) {
+  const mixPanel = study.mixture && fit.model.implied && fit.dfRes > 0 ? mixtureAnalysis(study, fit, ui, set, (st) => predict(fit, [st])[0].fit) : null;
+  if (fit.dfRes > 0 && !mixPanel) {
     const rows = anova(fit, ui.anovaType ?? 1);
     const lof = lackOfFit(fit);
     if (lof?.lackOfFit) { const res = rows.pop(); rows.push(res, { term: '  lack of fit', ...lof.lackOfFit }, { term: '  pure error', ...lof.pureError }); }
@@ -139,7 +141,7 @@ export function render(ctx) {
   const twoLevel = study.factors.every(f => f.type === 'continuous' || f.levels.length === 2) && !['ccd', 'box-behnken'].includes(study.design.kind) && !fit.model.terms.some(t => t.comps.some(c => c.I))
     && !(study.design.kind === 'sequential' && study.design.params.stages.some(s => s.kind === 'axial'));
   const eff = twoLevelEffects(fit);
-  if (twoLevel && eff.length >= 3) {
+  if (twoLevel && !study.mixture && eff.length >= 3) {
     const L = lenth(eff.map(e => e.effect)), hn = halfNormal(eff.map(e => e.effect));
     effectsPanel = h('section', { class: 'panel' }, h('h2', {}, 'Effects', help('analysis','effects-and-lenths-method')),
       h('p', { class: 'small' }, `Lenth’s method: PSE = ${num(L.pse)}; effects beyond ME = ${num(L.me)} are likely active, beyond SME = ${num(L.sme)} active even allowing for looking at all ${eff.length}.`, fit.dfRes > 0 ? ' (With residual degrees of freedom the t-tests above are usually preferable; Lenth is shown for comparison.)' : ''),
@@ -174,7 +176,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, backToDose, controls, olsNote, summary, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  return h('div', {}, backToDose, controls, olsNote, summary, mixPanel, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

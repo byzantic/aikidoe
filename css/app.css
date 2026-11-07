@@ -149,3 +149,12 @@ table.plate-grid td.neg { background: color-mix(in srgb, #c94040 25%, transparen
 table.plate-grid td.blank, table.plate-grid td.oth { background: color-mix(in srgb, var(--muted) 20%, transparent); }
 table.plate-grid td.std { background: color-mix(in srgb, #3b6fd6 25%, transparent); }
 .controls-table td { padding: 2px 6px 2px 0; border: 0; }
+/* mixtures: ternary plots and Cox traces */
+svg.plot .ln.t1 { stroke: var(--trace-1); } svg.plot .ln.t2 { stroke: var(--trace-2); } svg.plot .ln.t3 { stroke: var(--trace-3); } svg.plot .ln.t4 { stroke: var(--trace-4); }
+svg.plot .ln.t5 { stroke: var(--trace-5); } svg.plot .ln.t6 { stroke: var(--trace-6); } svg.plot .ln.t7 { stroke: var(--trace-7); } svg.plot .ln.t8 { stroke: var(--trace-8); }
+.ternary-fig { margin: 0; max-width: 360px; } .ternary-fig figcaption { margin-top: 2px; }
+svg.ternary { width: 100%; height: auto; } svg.ternary text { font-size: 12px; fill: var(--ink); }
+svg.ternary .tcell { stroke: none; } svg.ternary .tcell.out { fill: var(--line); opacity: 0.35; }
+svg.ternary .tframe { fill: none; stroke: var(--ink); stroke-width: 1; }
+svg.ternary .tpt { fill: var(--panel); stroke: var(--ink); stroke-width: 1.2; }
+svg.ternary .tbest { stroke: var(--trace-2); stroke-width: 2.4; }

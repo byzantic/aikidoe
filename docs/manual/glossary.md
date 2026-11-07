@@ -15,6 +15,10 @@ stage); the design and analysis account for it.
 
 **Confirmation run** — a run at settings chosen from a model, to check its prediction.
 
+**Cox direction** — in a mixture, the line along which one component changes while the others keep
+their proportions to each other; the traces of the response along it show each component's effect.
+See [analysis](designs-mixture.md#analysis).
+
 **Defining relation** — the set of words (products of factors) equal to the identity in a regular
 fraction; it gives every alias.
 
@@ -29,6 +33,10 @@ wells (evaporation, temperature). See [microplates](plates.md).
 
 **Effect** — the change in a response from a factor's low to its high setting (twice the coded
 coefficient).
+
+**Extreme vertices** — the corners of a mixture region cut by the components' limits; with the
+centroids of its edges and faces, a design for constrained mixtures. See
+[constrained regions](designs-mixture.md#constrained-regions).
 
 **Fold-over** — a second fraction with signs reversed, run to separate aliased effects.
 
@@ -48,6 +56,9 @@ explain.
 **Lenth's method** — judging effects in an unreplicated two-level design from the spread of the
 effects themselves.
 
+**Mixture** — factors that are shares of a whole and add up to a fixed total; they cannot be varied
+independently. See [mixture designs](designs-mixture.md).
+
 **Mixed model** — a model with fixed effects (the factors) and random effects (whole plots, runs,
 wafers) for nested sources of variation.
 
@@ -56,6 +67,10 @@ condition for a single relative potency. See [relative potency](dose-response.md
 
 **Plate layout** — which run goes in which well of a microplate; a balanced layout keeps the
 effects clear of plate, edge and row and column differences. See [layouts](plates.md#layouts).
+
+**Pseudo-component** — a mixture component rescaled to its share of what is left above the lower
+limits: zᵢ = (xᵢ − Lᵢ) / (total − ΣL), from 0 to 1. See
+[pseudo-components](designs-mixture.md#pseudo-components).
 
 **Power** — the probability that a test detects an effect of a given size.
 
@@ -78,6 +93,10 @@ measurement of the same run).
 **Resolution** — the length of the shortest word in a fraction's defining relation: III, IV, V …
 
 **Response** — what is measured.
+
+**Scheffé model** — a polynomial for a mixture without an intercept (it is absorbed in the linear
+terms): Σ βᵢ zᵢ, plus blending terms βᵢⱼ zᵢ zⱼ (quadratic) and so on. See
+[Scheffé models](designs-mixture.md#mixture-models).
 
 **Split-plot** — a design in which hard-to-change factors are set once per whole plot and the
 others vary within it.

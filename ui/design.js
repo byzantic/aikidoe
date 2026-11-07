@@ -15,6 +15,7 @@ import { parseFormula } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
 import { platePanel } from './plates.js';
 import { doseDesignPanel } from './dose.js';
+import { mixtureDesignPanel } from './mixture.js';
 import { platesWithoutWells } from '../js/plate.js';
 import { designPower, detectableEffect } from '../js/model/power.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
@@ -60,6 +61,8 @@ const designHelp = (kind) => [({ full: 'designs-factorial', fraction: 'designs-f
 export function render(ctx) {
   const { state, setDoc, setUI } = ctx;
   const study = state.study;
+  // a mixture: the components add up to a total, so the factorial / response-surface designs do not apply
+  if (study.mixture) return h('div', {}, study.design ? platePanel(ctx) : null, mixtureDesignPanel(ctx));
   const next = study.design && study.design.kind !== 'dose-response' ? nextStagePanel(ctx) : null;
   const ui = state.ui.design ??= {};
   const cands = candidates(study);

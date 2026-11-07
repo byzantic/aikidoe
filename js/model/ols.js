@@ -43,10 +43,13 @@ export function fitOLS(mm, y, { names } = {}) {
   const Q = f.Q();
   const h = Q.map(row => { let s = 0; for (let j = 0; j < rank; j++) s += row[j] * row[j]; return s; });
   const ybar = sum(y) / n;
-  const tss = model.intercept ? sum(y.map(v => (v - ybar) ** 2)) : sum(y.map(v => v * v));
-  const dfModel = rank - (model.intercept ? 1 : 0);
+  // a mixture model without an intercept still contains the mean (its linear terms add up to it):
+  // R² and the F test are about the mean, as for a model with an intercept
+  const centred = model.intercept || model.implied;
+  const tss = centred ? sum(y.map(v => (v - ybar) ** 2)) : sum(y.map(v => v * v));
+  const dfModel = rank - (centred ? 1 : 0);
   const r2 = 1 - rss / tss;
-  const adjR2 = 1 - (1 - r2) * (n - (model.intercept ? 1 : 0)) / dfRes;
+  const adjR2 = 1 - (1 - r2) * (n - (centred ? 1 : 0)) / dfRes;
   // PRESS is undefined when a point is fitted exactly (leverage 1)
   const press = h.some(v => Math.abs(1 - v) < 1e-10) ? NaN : sum(resid.map((e, i) => (e / (1 - h[i])) ** 2));
   const s = Math.sqrt(sigma2);

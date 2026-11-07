@@ -12,6 +12,7 @@ export const PAGES = [
   { id: 'designs-split-plot', title: 'Split-plot designs', part: 'Designs' },
   { id: 'designs-sequential', title: 'Sequential experiments: augmenting and confirming', part: 'Designs' },
   { id: 'designs-space-filling', title: 'Space-filling designs', part: 'Designs' },
+  { id: 'designs-mixture', title: 'Mixture designs', part: 'Designs' },
   { id: 'analysis', title: 'Analysis', part: 'Analysis' },
   { id: 'optimisation', title: 'Optimisation and robust design', part: 'Analysis' },
   { id: 'process', title: 'Process topics: wafers, sites, gauges', part: 'Process' },

@@ -8,6 +8,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Innovation, and Discovery*, 2nd ed. Wiley. (The reactor data of the
   [screening example](example-screening.md) are from the first edition: Box, Hunter & Hunter
   (1978), p. 379.)
+- Cornell, J. A. (2002). *Experiments with Mixtures: Designs, Models, and the Analysis of Mixture
+  Data*, 3rd ed. Wiley. (The yarn data of the [mixture analysis](designs-mixture.md#analysis).)
 - Finney, D. J. (1978). *Statistical Method in Biological Assay*, 3rd ed. Griffin. (Relative
   potency and parallel-line assays; see [dose–response](dose-response.md#relative-potency).)
 - Montgomery, D. C. (2017). *Design and Analysis of Experiments*, 9th ed. Wiley. (The
@@ -37,6 +39,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Brideau, C., Gunter, B., Pikounis, B. & Liaw, A. (2003). Improved statistical methods for hit
   selection in high-throughput screening. *Journal of Biomolecular Screening* 8, 634–647. (B-scores:
   median polish of plate rows and columns; see [microplates](plates.md#analysis).)
+- Cox, D. R. (1971). A note on polynomial response functions for mixtures. *Biometrika* 58,
+  155–159.
 - Derringer, G. & Suich, R. (1980). Simultaneous optimization of several response variables.
   *Journal of Quality Technology* 12, 214–219.
 - Fries, A. & Hunter, W. G. (1980). Minimum aberration 2^(k−p) designs. *Technometrics* 22, 601–608.
@@ -56,13 +60,20 @@ Books for learning and reference, and the papers behind specific methods in aiki
   469–473.
 - Lin, D. K. J. & Tu, W. (1995). Dual response surface optimization. *Journal of Quality
   Technology* 27, 34–39.
+- Lawson, J. & Willden, C. (2016). Mixture experiments in R using mixexp. *Journal of Statistical
+  Software* 72, Code Snippet 2. (The mixexp package that aikidoe's mixture designs are checked
+  against.)
 - McKay, M. D., Beckman, R. J. & Conover, W. J. (1979). A comparison of three methods for selecting
   values of input variables in the analysis of output from a computer code. *Technometrics* 21,
   239–245.
+- McLean, R. A. & Anderson, V. L. (1966). Extreme vertices design of mixture experiments.
+  *Technometrics* 8, 447–454.
 - Meyer, R. K. & Nachtsheim, C. J. (1995). The coordinate-exchange algorithm for constructing exact
   optimal experimental designs. *Technometrics* 37, 60–69.
 - Morris, M. D. & Mitchell, T. J. (1995). Exploratory designs for computational experiments.
   *Journal of Statistical Planning and Inference* 43, 381–402.
+- Piepel, G. F. (1982). Measuring component effects in constrained mixture experiments.
+  *Technometrics* 24, 29–39.
 - Plackett, R. L. & Burman, J. P. (1946). The design of optimum multifactorial experiments.
   *Biometrika* 33, 305–325.
 - Ritz, C., Baty, F., Streibig, J. C. & Gerhard, D. (2015). Dose-response analysis using R.
@@ -71,6 +82,12 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Saltelli, A., Annoni, P., Azzini, I., Campolongo, F., Ratto, M. & Tarantola, S. (2010). Variance
   based sensitivity analysis of model output: design and estimator for the total sensitivity
   index. *Computer Physics Communications* 181, 259–270.
+- Scheffé, H. (1958). Experiments with mixtures. *Journal of the Royal Statistical Society B* 20,
+  344–360.
+- Scheffé, H. (1963). The simplex-centroid design for experiments with mixtures. *Journal of the
+  Royal Statistical Society B* 25, 235–263.
+- Snee, R. D. & Marquardt, D. W. (1976). Screening concepts and designs for experiments with
+  mixtures. *Technometrics* 18, 19–29.
 - Sobol', I. M. (2001). Global sensitivity indices for nonlinear mathematical models and their
   Monte Carlo estimates. *Mathematics and Computers in Simulation* 55, 271–280.
 - United States Pharmacopeia. General chapters ⟨1032⟩ Design and development of biological
