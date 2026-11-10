@@ -141,9 +141,15 @@ others vary within it.
 **Stratum** — the level of a design at which a factor changes (between days, between whole plots
 within a day, within whole plots), and so the variation it is judged against.
 
+**Scaled prediction variance** — N · Var(ŷ)/σ² at given settings: how precisely a design predicts
+there, before any run is made. See [prediction variance](concepts.md#prediction-variance).
+
 **Surrogate** — a model fitted to a simulator's runs, used in its place for fast prediction.
 
 **Tolerance** — the spread of a factor's actual value about its setting.
+
+**Variance dispersion graph** — the smallest, average and largest scaled prediction variance at
+each distance from the centre of a design: one picture to compare response-surface designs.
 
 **Whole plot** — a group of runs sharing the settings of the hard-to-change factors.
 

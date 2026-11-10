@@ -153,6 +153,54 @@ of about 2 for 80 % power; the DNA, varied within each load, about 1.3. The temp
 on the twelve loads: eight plates per load bring its ratio only to 1.84, twenty-four loads of two
 plates to 1.52.
 
+## Where the runs are
+
+Before running anything, look at where the runs sit. The Design step draws, for the chosen design
+and for the study's own (with any stages added since):
+
+- **every pair of factors** in coded units (−1 low, +1 high): the shape of a mark tells the kind
+  of run — factorial, centre, axial, optimal, augmented, confirmation — a number how many runs
+  land on the same point in that pair (replicates, centre points), the colour the block or whole
+  plot; settings that the [constraints](designs-optimal.md#constraints) rule out are shaded;
+- **the prediction variance** over any two factors (below);
+- for designs of continuous factors, the **variance dispersion graph** (below).
+
+`doe plot STUDY --pairs | --pv A,B | --vdg` writes the same pictures as SVG files.
+
+### Prediction variance
+
+How precisely a design predicts depends on where you predict. The **scaled prediction variance**
+N · Var(ŷ(x))/σ² — the variance of the fitted mean at settings x, times the number of runs, in
+units of the run-to-run variance — is low where the runs give much information and rises towards
+and beyond the edges. It depends only on the design and the model, so it can be judged before
+anything is run. A response-surface design should keep it low and even over the region you care
+about; an I-optimal design minimises its average.
+
+The **variance dispersion graph** sums it up for a design of continuous factors: at each distance
+from the centre, the smallest, average and largest value over all directions. A rotatable central
+composite design has one line (the same in every direction); a Box–Behnken spreads out towards the
+corners it leaves out. Plotting it for the candidate designs is the usual way to compare them.
+
+```console
+$ doe init vp.aikidoe.json --factor temp:140:180 --factor P:1:3 --factor C:2:8 --response y --seed 3
+created vp.aikidoe.json: 3 factors, 1 responses, seed 3
+$ doe design vp.aikidoe.json --ccd
+vp.aikidoe.json: ccd, 20 runs, randomisation complete, seed 3
+α = 1.6818 (rotatable); cube 8 runs; centre points 6
+scaled prediction variance (full quadratic) by radius: ρ 0: 3.33, ρ 0.5: 3.21, ρ 1: 3.91, ρ 1.73: 13.4
+$ doe plot vp.aikidoe.json --vdg
+variance dispersion for quadratic: scaled prediction variance on spheres about the centre
+distance  min    mean   max
+--------  -----  -----  -----
+0         3.327  3.327  3.327
+0.346     3.25   3.25   3.25
+0.693     3.259  3.259  3.259
+1.04      4.074  4.074  4.074
+1.39      6.893  6.893  6.893
+1.73      13.4   13.4   13.4
+wrote vp-vdg.svg
+```
+
 ## Hierarchy
 
 A model is **hierarchical** if, whenever it contains an interaction (A:B) or a power (A²), it

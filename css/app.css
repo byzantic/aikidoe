@@ -31,6 +31,7 @@ h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); font-weight: 600;
 button.btn, .btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 5px;
   background: var(--panel); cursor: pointer; text-decoration: none; color: var(--ink); white-space: nowrap; }
 button.btn:hover, .btn:hover { border-color: var(--axis); }
+button.btn[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 button.danger { border-color: var(--err); color: var(--err); }
 button:disabled { opacity: .5; cursor: default; }

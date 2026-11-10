@@ -71,8 +71,12 @@ export function mixtureDesignPanel(ctx) {
     toast(`Mixture design: ${d.runs.length} runs`);
   };
   const ev = (() => { try { return extremeVertices(study); } catch { return null; } })();
-  const dg = M.ids.length >= 3 && d ? ternaryGrid(study, () => 0, { components: M.ids.slice(0, 3), n: 24, pseudo: true }) : null;
-  const tri = dg ? ternaryPlot({ grid: dg, label: 'design', values: false, points: d.runs.map(r => ({ z: shares(r.settings, M.ids.slice(0, 3), dg), title: `run ${r.run}: ${M.ids.map(id => `${id} ${num(r.settings[id], 4)}`).join(', ')}` })), width: 300 }) : null;
+  // the three components drawn (issue #88: any three, not always the first)
+  const pick3 = (ui.ternary ?? M.ids.slice(0, 3)).filter(id => M.ids.includes(id)), three = pick3.length === 3 && new Set(pick3).size === 3 ? pick3 : M.ids.slice(0, 3);
+  const dg = M.ids.length >= 3 && d ? ternaryGrid(study, () => 0, { components: three, n: 24, pseudo: true }) : null;
+  const triFig = dg ? ternaryPlot({ grid: dg, label: 'design', values: false, points: d.runs.map(r => ({ z: shares(r.settings, three, dg), title: `run ${r.run}: ${M.ids.map(id => `${id} ${num(r.settings[id], 4)}`).join(', ')}` })), width: 300 }) : null;
+  const tri = triFig && M.ids.length > 3 ? h('div', { id: 'mixture-design-ternary' }, h('div', { class: 'row small' }, 'triangle of', ...[0, 1, 2].map(k => select(M.ids, three[k], (v) => { const c = three.slice(); c[k] = v; if (new Set(c).size === 3) set({ ternary: c }); }, { 'aria-label': `design ternary component ${k + 1}` }))),
+    triFig, h('p', { class: 'muted small' }, `With ${M.ids.length} components each run is drawn by its shares of these three (the others left out): runs that differ only in the other components fall on the same point.`)) : triFig;
   return h('section', { class: 'panel', id: 'mixture-design' }, h('h2', {}, 'Mixture design', help('designs-mixture', '')),
     h('p', { class: 'small' }, `${M.ids.join(' + ')} = ${M.total}; ${simplex ? 'the bounds leave a simplex (a triangle for three components): lattice and centroid designs fit.' : 'upper bounds or constraints cut the simplex: extreme vertices or an optimal design.'}${M.process.length ? ` Process factors ${M.process.map(f => f.id).join(', ')} are crossed with the blends (each blend at their low and high settings).` : ''}${ev ? ` The region has ${ev.vertices.length} vertices.` : ''}`),
     h('div', { class: 'row' },

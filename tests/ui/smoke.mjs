@@ -52,6 +52,11 @@ try {
   await shot('2-recommend');
   await page.click('tr[data-design="frac-16"]'); await settle();
   check('2^(5−1) selected: no aliasing message, generator in factor ids', /Conc = F:Cat:RPM:T/.test(await page.textContent('main')) && /No aliasing among main effects/.test(await page.textContent('main')));
+  check('where the candidate\'s runs would sit: every pair of the 5 factors (10 panels), 16 runs', (await page.getAttribute('#space-pairs', 'data-runs')) === '16' && await page.locator('#space-pairs g.panel').count() === 10);
+  await page.click('tr[data-design="ccd"]'); await settle();
+  check('a central composite candidate: the axial runs, its prediction variance and variance dispersion graph', /axial run/.test(await page.innerHTML('#space-pairs')) && await page.locator('#space-spv svg').count() === 1 && await page.locator('#space-vdg svg').count() === 1);
+  await shot('2b-ccd-space');
+  await page.click('tr[data-design="frac-16"]'); await settle();
   check('power table for the 2^(5−1) with its 2fi model: saturated, no power', /no residual degrees of freedom/.test(await page.textContent('#power')));
   await page.fill('input[aria-label="power model"]', 'main'); await page.keyboard.press('Tab'); await settle();
   check('power for main effects: 5 terms, values shown', (await page.locator('tr[data-power]').count()) === 5 && /0\.\d{2}/.test(await page.textContent('#power')));
@@ -60,7 +65,7 @@ try {
   await page.click('tr[data-design="frac-8"]'); await settle();
   check('2^(5−2): alias chains listed', (await page.textContent('[data-aliases]')).includes('='));
   await page.click('tr[data-design="ccd"]'); await settle();
-  check('CCD: α and a variance plot', /α = /.test(await page.textContent('main')) && (await page.locator('svg.plot').count()) === 1);
+  check('CCD: α and a variance dispersion graph', /α = /.test(await page.textContent('main')) && (await page.locator('#space-vdg svg.plot').count()) === 1);
   await shot('2-design-ccd');
   await page.click('tr[data-design="dsd"]'); await settle();
   check('DSD: 13 runs for 5 factors, efficiency for the quadratic shown', /Built from a conference matrix of order 6/.test(await page.textContent('main')) && /D \d/.test(await page.textContent('[data-efficiency]')));
@@ -161,6 +166,15 @@ try {
   await page.click('[data-step="analyse"]'); await settle();
   check('confirmation results checked: outside the interval', /outside/.test(await page.textContent('#confirm')) && /28 runs/.test(await page.textContent('#fit-stats')));
   await shot('6-sequential');
+  // where the runs are (issue #88): the study's own design, with the axial stage and the confirmation runs
+  await page.click('[data-step="design"]'); await settle();
+  const runsNow = (await state()).study.design.runs.length;
+  check(`the study's design drawn: all ${runsNow} runs, the axial and confirmation runs told apart`, (await page.getAttribute('#spaceCurrent-pairs', 'data-runs')) === String(runsNow)
+    && /axial run/.test(await page.innerHTML('#spaceCurrent-pairs')) && /confirmation run/.test(await page.innerHTML('#spaceCurrent-pairs')));
+  check('… the prediction variance over two factors, with its runs', await page.locator('#spaceCurrent-spv svg').count() === 1 && await page.locator('#spaceCurrent-spv circle.run').count() > 0);
+  await page.selectOption('select[aria-label="variance up"]', { index: 2 }); await settle();
+  check('… another pair of factors chosen', await page.locator('#spaceCurrent-spv svg').count() === 1);
+  await shot('6b-where-runs');
 
   section('split-plot designs (issue #14)');
   await page.click('#btn-examples'); await page.click('[data-example="reactor-plan"]'); await settle();

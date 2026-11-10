@@ -288,6 +288,17 @@ try {
   check('fit --json --distribution quasipoisson: t tests and the dispersion', o.distribution === 'quasipoisson' && 't' in o.coefficients[0] && o.dispersion > 0 && o.aic === null);
   o = js('predict', 'jc.aikidoe.json', 'germ ~ A + B', '--at', 'A=1,B=-1');
   check('predict --json (binomial): a proportion with an interval inside 0 … 1', o.kind === 'glm' && o.predictions[0].fit > 0.5 && o.predictions[0].lower > 0 && o.predictions[0].upper < 1);
+  // where the runs sit (issue #88): doe plot writes SVG
+  r = run('init', 'pl.aikidoe.json', '--factor', 'A:0:10', '--factor', 'B:0:10', '--factor', 'C:0:10', '--response', 'y', '--seed', '2');
+  r = run('design', 'pl.aikidoe.json', '--ccd');
+  o = js('plot', 'pl.aikidoe.json', '--pairs', '--out', 'pl-pairs.svg');
+  check('plot --pairs --json: an SVG of every pair, all runs', o.kind === 'plot' && o.plot === 'pairs' && o.runs === 20 && /<svg xmlns=/.test(readFileSync(join(dir, 'pl-pairs.svg'), 'utf8')), JSON.stringify(o));
+  o = js('plot', 'pl.aikidoe.json', '--pv', 'A,B', '--at', 'C=7.5');
+  check('plot --pv A,B --at C=7.5: the quadratic\'s variance over A and B, the file named after the study', o.plot === 'pv' && o.model === 'quadratic' && o.min > 0 && o.max > o.min && o.file === 'pl-pv.svg');
+  o = js('plot', 'pl.aikidoe.json', '--vdg', '--model', '2fi');
+  check('plot --vdg --model 2fi: the curves', o.plot === 'vdg' && o.model === '2fi' && o.curves.length === 21 && o.curves.every(c => c.min <= c.mean + 1e-9 && c.mean <= c.max + 1e-9));
+  r = run('plot', 'pl.aikidoe.json');
+  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B or --vdg/.test(r.err));
   // projectivity (issue #79): alias and recommend report it
   r = run('init', 'pj.aikidoe.json', '--factor', 'A:0:1', '--factor', 'B:0:1', '--factor', 'C:0:1', '--factor', 'D:0:1', '--factor', 'E:0:1', '--factor', 'F:0:1', '--factor', 'G:0:1', '--response', 'y', '--seed', '1');
   r = run('design', 'pj.aikidoe.json', '--pb');
