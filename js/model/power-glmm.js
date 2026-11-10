@@ -12,11 +12,15 @@
 //
 // (penalised quasi-likelihood at the anticipated means; it ignores that a log-normal shift also
 // changes the counts' variance, which makes it a little optimistic for large σ). The test is the
-// analysis's: a term whose columns are all constant within every whole plot has λ divided by
-// m/(m − q) (the standard errors the analysis widens) and is an F on (df, m − q), m whole plots
-// and q such columns, the intercept among them; other terms are χ² on df. σ = 0 gives the GLM's
-// power for the coefficients that vary within whole plots, and the F on m − q for the others. For
-// the negative binomial, V(μ) = μ + μ²/θ in w, θ as anticipated (the analysis estimates it).
+// analysis's: a term whose columns are all constant within every whole plot is an F on (df, m − q),
+// m whole plots and q such columns, the intercept among them, with its λ from V with σ² widened by
+// m/(m − q) — the small-sample correction applied to the whole-plot variance it is meant for (the
+// maximum-likelihood σ̂² is biased low by about (m − q)/m), not to the runs' own scatter within whole
+// plots; other terms are χ² on df, with σ² as given. (#77 divided the whole λ by m/(m − q) instead:
+// against glmer and glmmTMB simulations of the analysis that was 2–10 points low for whole-plot
+// factors, most for the negative binomial, whose within-whole-plot scatter is largest; this is
+// 0.5–8 points low.) σ = 0 gives the GLM's power, with the F on m − q for whole-plot terms. For the
+// negative binomial, V(μ) = μ + μ²/θ in w, θ as anticipated (the analysis estimates it).
 //
 // By simulation: experiments are simulated from the GLMM (each whole plot's shift drawn), fitted
 // with fitGLMM with and without the term, and the analysis's likelihood-ratio test (F on m − q for
@@ -86,6 +90,8 @@ export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, basel
   const level = columns.map((_, j) => est[j] && G.rows.every(I => I.every(i => X[i][j] === X[I[0]][j])));
   const q = level.filter(Boolean).length, dfG = G.m - q, kG = dfG >= 1 ? G.m / dfG : NaN;
   const lambdaFor = (S, bS) => {
+    // a whole-plot term: σ² widened by m/(m − q) (see the header)
+    const s2 = S.length && S.every(j => level[j]) ? sigma * sigma * kG : sigma * sigma;
     const beta = columns.map((_, j) => (j === icpt ? b0 : 0));
     S.forEach((j, k) => { beta[j] = bS[k]; });
     const eta = X.map((r, i) => r.reduce((s, v, j) => s + v * beta[j], 0) + (counts && L.name === 'log' ? Math.log(expo[i]) : 0));
@@ -97,7 +103,7 @@ export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, basel
     const J = est.map((e, j) => j).filter(j => est[j]), p = J.length;
     const M = Array.from({ length: p }, () => new Array(p).fill(0));
     for (const I of G.rows) {
-      const sw = I.reduce((s, i) => s + w[i], 0), c = sigma * sigma / (1 + sigma * sigma * sw);
+      const sw = I.reduce((s, i) => s + w[i], 0), c = s2 / (1 + s2 * sw);
       const u = J.map(j => I.reduce((s, i) => s + w[i] * X[i][j], 0));     // Xᵀ W 1 for this whole plot
       for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) {
         let s = 0; for (const i of I) s += X[i][J[a]] * w[i] * X[i][J[b]];
@@ -109,7 +115,7 @@ export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, basel
     const A = idx.map(a => idx.map(b => V[a][b]));
     const x = solveSym(A, bS);
     const lam = bS.reduce((s, v, i) => s + v * x[i], 0);
-    return S.every(j => level[j]) ? lam / kG : lam;
+    return lam;
   };
   const isWP = (S) => S.length > 0 && S.every(j => level[j]);
   const powerOf = (df, lambda, wp) => {

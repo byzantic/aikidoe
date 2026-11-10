@@ -128,8 +128,8 @@ approximation, at the expected counts, is within a few points of `lme4::glmer` s
 analysis and a little conservative for whole-plot factors; `--simulate` fits the random-effect
 model to simulated experiments (slower: a few seconds per hundred). For negative binomial counts give θ as
 well (`--theta`): extra scatter within whole plots costs mostly the factors that change within
-them. The approximation is then more conservative for hard-to-change factors (about 10 points low
-in a check against simulation), so `--simulate` is worth running.
+them. The approximation is then a little more conservative for hard-to-change factors (about 8
+points low in a check against simulation), so `--simulate` is worth running.
 
 ```console
 $ doe init spc.aikidoe.json --factor temp:30:37:°C! --factor dna:1:10:ng --response colonies@poisson --seed 4
@@ -141,7 +141,7 @@ $ doe power spc.aikidoe.json --model "temp + dna" --response colonies --baseline
 power for temp + dna, poisson (log link) with a random whole-plot intercept: 24 runs in 12 whole plots; whole-plot σ = 0.3 on the log scale; α = 0.05; baseline mean count 20
 term  df  tested against          rate ratio  power   rate ratio for 80%
 ----  --  ----------------------  ----------  ------  ------------------
-temp   1  whole plots (F, 10 df)         1.5  0.3997  1.956
+temp   1  whole plots (F, 10 df)         1.5  0.4122  1.931
 dna    1  runs (χ²)                      1.5  0.9926  1.293
 rate ratio: the mean count at a factor's high setting over its low setting, each term alone, the others at the baseline. A term that changes only between whole plots is judged against the whole-plot variation, an F on 10 df as in the analysis; the others by χ² (Wald approximation at the expected means)
 ```
@@ -149,7 +149,7 @@ rate ratio: the mean count at a factor's high setting over its low setting, each
 With twelve incubator loads (whole plots) of two plates each, the temperature needs a rate ratio
 of about 2 for 80 % power; the DNA, varied within each load, about 1.3. The temperature is judged
 on the twelve loads: eight plates per load bring its ratio only to 1.84, twenty-four loads of two
-plates to 1.53.
+plates to 1.52.
 
 ## Hierarchy
 
