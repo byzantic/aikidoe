@@ -74,7 +74,9 @@ try {
   check('design --bbd', r.code === 0 && /box-behnken, 15 runs/.test(r.out), r.out + r.err);
 
   r = run('design', 'ccd.aikidoe.json', '--dsd', '--force');
-  check('design --dsd: 3 factors → order 4, 9 runs', r.code === 0 && /definitive-screening, 9 runs/.test(r.out) && /order 4/.test(r.out), r.out + r.err);
+  check('design --dsd: 3 factors → order 6 by default (3 fake columns), 13 runs: the quadratic in all three (issue #79)', r.code === 0 && /definitive-screening, 13 runs/.test(r.out) && /order 6/.test(r.out), r.out + r.err);
+  r = run('design', 'ccd.aikidoe.json', '--dsd', '--fake', '0', '--force');
+  check('… --fake 0: order 4, 9 runs', r.code === 0 && /definitive-screening, 9 runs/.test(r.out) && /order 4/.test(r.out), r.out + r.err);
   r = run('design', 'ccd.aikidoe.json', '--optimal', '--runs', '12', '--model', 'quadratic', '--criterion', 'I', '--restarts', '5', '--force');
   check('design --optimal: I-optimal quadratic, efficiencies printed', r.code === 0 && /optimal, 12 runs/.test(r.out) && /I-optimal for quadratic: D-efficiency/.test(r.out), r.out + r.err);
 
@@ -286,6 +288,18 @@ try {
   check('fit --json --distribution quasipoisson: t tests and the dispersion', o.distribution === 'quasipoisson' && 't' in o.coefficients[0] && o.dispersion > 0 && o.aic === null);
   o = js('predict', 'jc.aikidoe.json', 'germ ~ A + B', '--at', 'A=1,B=-1');
   check('predict --json (binomial): a proportion with an interval inside 0 … 1', o.kind === 'glm' && o.predictions[0].fit > 0.5 && o.predictions[0].lower > 0 && o.predictions[0].upper < 1);
+  // projectivity (issue #79): alias and recommend report it
+  r = run('init', 'pj.aikidoe.json', '--factor', 'A:0:1', '--factor', 'B:0:1', '--factor', 'C:0:1', '--factor', 'D:0:1', '--factor', 'E:0:1', '--factor', 'F:0:1', '--factor', 'G:0:1', '--response', 'y', '--seed', '1');
+  r = run('design', 'pj.aikidoe.json', '--pb');
+  o = js('alias', 'pj.aikidoe.json');
+  check('alias --json (Plackett–Burman 12): projectivity 3, generalised resolution 3.67, every 4 factors carry main effects and 2fis', o.kind === 'plackett-burman' && o.projectivity === 3 && Math.abs(o.generalisedResolution - 11 / 3) < 1e-12 && o.fourFactor2fi.estimable === o.fourFactor2fi.total, JSON.stringify(o).slice(-300));
+  r = run('design', 'pj.aikidoe.json', '--dsd', '--force');
+  o = js('alias', 'pj.aikidoe.json');
+  check('alias --json (definitive screening, 7 factors): the quadratic in every 3 factors, in no 4', o.kind === 'definitive-screening' && o.quadraticProjections[0].estimable === 35 && o.quadraticProjections[1].estimable === 0);
+  o = js('alias', '--factors', '7', '--runs', '16');
+  check('alias --json (2^(7−3)): projectivity R − 1 = 3', o.projectivity === 3);
+  o = js('recommend', 'pj.aikidoe.json', '--goal', 'screen', '--budget', '24', '--no-optimal');
+  check('recommend --json: every Plackett–Burman size up to the budget, with P and generalised resolution', JSON.stringify(o.options.filter(x => x.kind === 'pb').map(x => x.runs).sort((a, b) => a - b)) === '[12,20,24]' && o.options.filter(x => x.kind === 'pb').every(x => x.projectivity === 3 && x.generalisedResolution > 3 && x.generalisedResolution < 4), JSON.stringify(o.options.map(x => [x.id, x.projectivity])));
   // counts in a split-plot (issue #64, phase 5): the GLMM with a random whole-plot intercept, automatically
   {
     const s0 = createStudy({ name: 'sp counts', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'D', low: 1, high: 10 }], responses: [{ id: 'n', distribution: 'poisson' }] });

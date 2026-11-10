@@ -18,8 +18,8 @@ Use it when the user has a process, product or simulator whose response depends 
 can set, and wants to know which factors matter, how much, how they interact, where the optimum is,
 or how robust a setting is — and can run experiments (or a simulator) to find out.
 
-What it does: two-level and mixed-level factorials, fractions, Plackett–Burman, definitive
-screening, central composite and Box–Behnken designs, optimal designs (with constraints),
+What it does: two-level and mixed-level factorials, fractions, Plackett–Burman (with projectivity
+and generalised resolution; `doe alias`), definitive screening, central composite and Box–Behnken designs, optimal designs (with constraints),
 split-plot designs for hard-to-change factors, sequential augmentation (fold-over, axial points,
 optimal augmentation, confirmation runs); least squares with ANOVA, Lenth's method, diagnostics,
 Box–Cox, model reduction; mixed models (REML, Kenward–Roger) for whole plots, wafers and sites;

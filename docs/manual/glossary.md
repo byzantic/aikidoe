@@ -48,6 +48,11 @@ centroids of its edges and faces, a design for constrained mixtures. See
 the log-odds of a proportion) with the noise of the data (Poisson, binomial …), fitted by maximum
 likelihood. See [counts and proportions](analysis.md#counts-and-proportions).
 
+**Generalised resolution** — for a non-regular design such as a Plackett–Burman, a resolution
+between the whole numbers: 3.67 for 12 runs, where main effects are only partially aliased with
+two-factor interactions (3 would be complete aliasing). See
+[screening designs](designs-screening.md#plackettburman).
+
 **Generator** — the rule defining an added factor's column in a fraction, e.g. `E = ABCD`.
 
 **GLMM** (generalised linear mixed model) — a model for counts or proportions with random
@@ -88,6 +93,11 @@ condition for a single relative potency. See [relative potency](dose-response.md
 
 **Plate layout** — which run goes in which well of a microplate; a balanced layout keeps the
 effects clear of plate, edge and row and column differences. See [layouts](plates.md#layouts).
+
+**Projectivity** — the largest P such that any P factors of a design form a full two-level
+factorial: if only P factors matter, their interactions can be estimated from the same runs
+(resolution R gives R − 1; Plackett–Burman designs 3). See
+[projectivity](designs-screening.md#projectivity).
 
 **Pseudo-component** — a mixture component rescaled to its share of what is left above the lower
 limits: zᵢ = (xᵢ − Lᵢ) / (total − ΣL), from 0 to 1. See

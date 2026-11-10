@@ -29,8 +29,10 @@ Run the 8-run fraction, look at the alias chains, then add a **fold-over** (Desi
   { id: 'screening', n: 5, title: 'Screening many factors', topic: 'screening', difficulty: 'medium',
     text: `With six or seven candidate factors, usually only a few matter (**effect sparsity**). A 16-run resolution IV fraction estimates every main effect clear of two-factor interactions; Plackett–Burman and definitive screening designs are the alternatives.
 
-Use **Recommend** on the Design step (goal: screen, budget 16), run the design, and find the active factors.`,
-    manual: [M('designs-screening', '', 'screening designs'), M('designs-factorial', 'fractional-factorial', 'fractional factorials')] },
+Use **Recommend** on the Design step (goal: screen, budget 16), run the design, and find the active factors.
+
+Once you know which few factors matter, the same runs often say more about them: in a resolution IV fraction or a Plackett–Burman design any three factors form a full 2³ (**projectivity** 3), so their interactions can be estimated without new runs — the Analyse step offers it when only a few factors look active.`,
+    manual: [M('designs-screening', '', 'screening designs'), M('designs-screening', 'projectivity', 'projectivity'), M('designs-factorial', 'fractional-factorial', 'fractional factorials')] },
   { id: 'blocking', n: 6, title: 'Blocking and randomisation', topic: 'blocking', difficulty: 'medium',
     text: `The tool can do 8 runs a day, and days differ — a different chamber condition, a new bottle of gas. If the high settings of a factor happen to fall on a good day, the day masquerades as an effect.
 

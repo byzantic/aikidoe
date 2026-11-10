@@ -119,9 +119,10 @@
 // …results, text: [the notes] }, or { ok: false, error: { message } } with a non-zero exit).
 // STUDY is a *.aikidoe.json file. Commands that change it write it back in place.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { createStudy, parseStudy, serializeStudy, StudyError } from '../js/study.js';
+import { createStudy, parseStudy, serializeStudy, StudyError, code } from '../js/study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
+import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
 import { optimalDesign } from '../js/design/optimal.js';
@@ -268,7 +269,7 @@ function cmdDesign({ pos, opt }) {
   } else if (opt.dsd) {
     const cats = study.factors.map((f, j) => (f.type === 'categorical' ? j : -1)).filter(j => j >= 0);
     if (cats.some(j => study.factors[j].levels.length !== 2)) fail('definitive screening designs allow only two-level categorical factors');
-    d = definitiveScreening(k, { fake: opt.fake ? int(opt.fake, 'fake') : 0, ...(centreOpt !== undefined ? { centre: centreOpt } : {}), categorical: cats });
+    d = definitiveScreening(k, { ...(opt.fake !== undefined ? { fake: int(opt.fake, 'fake') } : {}), ...(centreOpt !== undefined ? { centre: centreOpt } : {}), categorical: cats });
   } else if (opt.optimal) {
     d = optimalDesign(study, { runs: int(opt.runs ?? fail('--optimal needs --runs N'), 'runs'), model: opt.model ?? 'main', criterion: opt.criterion ?? 'D',
       ...(opt.restarts ? { restarts: int(opt.restarts, 'restarts') } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
@@ -1028,12 +1029,24 @@ function cmdAlias({ pos, opt }) {
     else if (study.design.kind === 'plackett-burman') {
       const X = study.design.runs.map(r => study.factors.map(f => ((f.type === 'categorical' ? r.settings[f.id] === f.levels[1] : r.settings[f.id] === f.high) ? 1 : -1)));
       out(`Plackett–Burman design: main effects are orthogonal; two-factor interactions are partially aliased with them`);
+      const pr = projectionSummary(X);
       const t = correlationTable(X, study.factors.map(f => f.id));
-      put({ kind: 'plackett-burman', correlations: t });
+      put({ kind: 'plackett-burman', correlations: t, ...pr.json });
       out(table([{ key: 'effect', label: 'main effect', align: 'left' }, { key: 'with', label: '2fi', align: 'left' }, { key: 'r', label: 'correlation' }], t.slice(0, 30)));
       if (t.length > 30) out(`… ${t.length - 30} more`);
+      for (const l of pr.lines) out(l);
       return;
     } else if (study.design.kind === 'full-factorial') { put({ kind: 'full-factorial', aliasChains: [] }); out('full factorial: no aliasing'); return; }
+    else if (study.design.kind === 'definitive-screening') {
+      // main effects are clear of all second-order terms; what matters is how many factors' quadratics the runs can carry
+      const X = study.design.runs.filter(r => r.kind !== 'confirm').map(r => study.factors.map(f => (f.type === 'categorical' ? (r.settings[f.id] === f.levels[0] ? -1 : 1) : code(f, r.settings[f.id]))));
+      const cols = study.factors.map((f, j) => (f.type === 'continuous' ? j : -1)).filter(j => j >= 0);
+      const q = [3, 4].filter(s => s <= cols.length).map(s => estimableProjections(X, s, { model: 'quadratic', columns: cols }));
+      put({ kind: 'definitive-screening', runs: X.length, quadraticProjections: q.map(x => ({ size: x.size, estimable: x.estimable, total: x.total })) });
+      out(`definitive screening design, ${X.length} runs: main effects clear of every 2fi and quadratic term`);
+      for (const x of q) out(`full quadratic in ${x.size} factors estimable in ${x.estimable} of ${x.total} sets${x.estimable === x.total ? ' (all)' : ''}`);
+      return;
+    }
     else if (study.design.kind === 'sequential') {
       const a = sequentialAliases(study, { order: opt.order ? int(opt.order, 'order') : 2 });
       put({ kind: 'sequential', runs: a.runs, aliasChains: a.chains.map(c => c.join(' = ')), withBlocks: a.withBlocks });
@@ -1057,12 +1070,24 @@ function cmdAlias({ pos, opt }) {
   out(`defining relation: I = ${rel.slice(0, 15).join(' = ')}${rel.length > 15 ? ` = … (${rel.length} words)` : ''}`);
   out(`word-length pattern (A3, A4, …): ${T.wordLengthPattern(d).slice(2).join(', ')}`);
   const chains = T.aliasChains(d, order, names).filter(c => c.effects.length > 1);
-  put({ kind: 'regular-fraction', factors: d.k, runs: d.runs, resolution: T.resolution(d), generators: d.cols.slice(d.q).map((m, j) => `${nm(names, d.q + j)} = ${d.signs[d.q + j] < 0 ? '-' : ''}${maskNames(m, names)}`),
+  const R = T.resolution(d), Pr = Math.min(d.k, R - 1);
+  out(`projectivity ${Pr}: any ${Pr} factors form a full 2^${Pr}${Pr < d.k ? ` (resolution ${roman(R)} → R − 1)` : ''}`);
+  put({ kind: 'regular-fraction', factors: d.k, runs: d.runs, resolution: T.resolution(d), projectivity: Pr, generators: d.cols.slice(d.q).map((m, j) => `${nm(names, d.q + j)} = ${d.signs[d.q + j] < 0 ? '-' : ''}${maskNames(m, names)}`),
     definingRelation: rel, wlp: T.wordLengthPattern(d).slice(2), order, aliasChains: chains.map(c => c.effects.join(' = ')) });
   if (!chains.length) out(`\nno aliasing among effects up to order ${order}`);
   else { out(`\nalias chains among effects up to order ${order}:`); for (const c of chains) out(`  ${c.effects.join(' = ')}`); }
 }
 const nm = (names, i) => (names ? names[i] : T.factorName(i));
+
+/** Projection properties of a non-regular two-level design (issue #79): text lines and JSON fields. */
+function projectionSummary(X) {
+  const p = projectivity(X, { max: 4 }), g = generalisedResolution(X, { max: 4 }), k = X[0].length;
+  const two = k >= 4 ? estimableProjections(X, 4, { model: '2fi' }) : null;
+  const lines = [`generalised resolution ${num(g.resolution, 4)} (between III and IV: main effects partially aliased with 2fis, |r| ≤ ${num(g.maxJ, 3)})`,
+    `projectivity ${p.P}: any ${p.P} factors form a full 2^${p.P}${p.next ? `; ${p.next.full} of ${p.next.total} sets of ${p.next.size} do` : ''}`];
+  if (two) lines.push(`main effects and 2fis of any 4 factors estimable from these runs in ${two.estimable} of ${two.total} sets`);
+  return { lines, json: { projectivity: p.P, generalisedResolution: g.resolution, ...(p.next ? { projectivityNext: { size: p.next.size, full: p.next.full, total: p.next.total } } : {}), ...(two ? { fourFactor2fi: { estimable: two.estimable, total: two.total } } : {}) } };
+}
 const maskNames = (m, names) => { const p = []; for (let i = 0; m >> i; i++) if (m >> i & 1) p.push(nm(names, i)); return p.join(names ? ':' : ''); };
 
 function cmdSites({ pos, opt }) {
@@ -1382,8 +1407,10 @@ function cmdRecommend({ pos, opt }) {
   put(r);
   const at = r.counts ? `a ${String(r.counts.distribution).includes('binomial') || r.counts.distribution === 'bernoulli' ? 'odds' : 'rate'} ratio of ${typeof r.counts.ratio === 'number' ? r.counts.ratio : JSON.stringify(r.counts.ratio)} (${r.counts.distribution}, baseline ${r.counts.baseline})` : `Δ = ${r.delta}σ`;
   out(`goal: ${r.goal} — ${r.goalText}; model ${r.model} (${r.terms} terms); power at ${at}, α = ${r.alpha}${r.budget ? `; budget ${r.budget} runs` : ''}`);
-  out(table([{ key: 'rank', label: '#' }, { key: 'label', label: 'design', align: 'left' }, { key: 'runs', label: 'runs' }, { key: 'res', label: 'res.', align: 'left' }, { key: 'dEff', label: 'D-eff %' }, { key: 'pw', label: 'min power' }],
-    r.options.map(o => ({ ...o, rank: o.rank ?? '–', res: o.resolution ? roman(o.resolution) : '', dEff: o.dEfficiency ?? '', pw: o.minPower ?? '' }))));
+  const kF = study.factors.length;
+  out(table([{ key: 'rank', label: '#' }, { key: 'label', label: 'design', align: 'left' }, { key: 'runs', label: 'runs' }, { key: 'res', label: 'res.', align: 'left' }, { key: 'P', label: 'P' }, { key: 'dEff', label: 'D-eff %' }, { key: 'pw', label: 'min power' }],
+    r.options.map(o => ({ ...o, rank: o.rank ?? '–', res: o.resolution ? roman(o.resolution) : o.generalisedResolution ? num(o.generalisedResolution, 3) : '', P: o.projectivity && o.projectivity < kF ? `${o.projectivity}${o.projectivityCapped ? '+' : ''}` : '', dEff: o.dEfficiency ?? '', pw: o.minPower ?? '' }))));
+  out('res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial');
   for (const o of r.options.filter(x => x.rank && x.rank <= 3)) {
     out(`\n${o.rank}. ${o.label} (${o.runs} runs${o.wholePlots ? `, ${o.wholePlots} whole plots` : ''})`);
     for (const x of o.reasons) out(`   + ${x}`);

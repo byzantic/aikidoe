@@ -8,6 +8,12 @@ history records each stage.
 In the app, the **Next stage** panel (on the Design step, once there is a design) offers the
 augmentations that fit the design; on the command line, `doe augment`.
 
+Before adding runs, check what the existing ones already hold: when screening leaves only a few
+active factors, a resolution IV fraction or a Plackett–Burman design (projectivity 3) contains a
+full factorial in any 3 of them, and a definitive screening design can fit the quadratic in any 3
+— the Analyse step offers that fit ([projectivity](designs-screening.md#projectivity)). New runs
+are needed when more factors are active, or to separate effects the projection still aliases.
+
 ## Fold-over
 
 A fold-over repeats the two-level runs with signs reversed:

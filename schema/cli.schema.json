@@ -2592,7 +2592,8 @@
             "split-plot-fraction",
             "plackett-burman",
             "full-factorial",
-            "sequential"
+            "sequential",
+            "definitive-screening"
           ]
         },
         "aliasChains": {
@@ -2621,6 +2622,33 @@
           "type": "array",
           "items": {
             "type": "object"
+          }
+        },
+        "projectivity": {
+          "type": "integer",
+          "description": "two-level designs: any P factors form a full 2^P (regular fractions R − 1; Plackett–Burman 3)"
+        },
+        "generalisedResolution": {
+          "type": "number",
+          "description": "Plackett–Burman: Deng & Tang's generalised resolution"
+        },
+        "projectivityNext": {
+          "type": "object"
+        },
+        "fourFactor2fi": {
+          "type": "object",
+          "description": "Plackett–Burman: the 4-factor sets in which main effects and all 2fis are estimable"
+        },
+        "quadraticProjections": {
+          "type": "array",
+          "description": "definitive screening: per set size, how many sets of factors carry the full quadratic",
+          "items": {
+            "type": "object",
+            "required": [
+              "size",
+              "estimable",
+              "total"
+            ]
           }
         }
       }
@@ -3400,6 +3428,31 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "projectivity": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "any P factors form a full two-level factorial (two-level designs)"
+              },
+              "projectivityCapped": {
+                "type": "boolean",
+                "description": "P is at least this (the search stops at 4)"
+              },
+              "projectivityNext": {
+                "type": "object"
+              },
+              "generalisedResolution": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Plackett–Burman: Deng & Tang's generalised resolution (null: no aliasing among the factors' effects)"
+              },
+              "quadratic3": {
+                "type": "number",
+                "description": "definitive screening: share of the 3-factor sets whose full quadratic is estimable"
               }
             }
           }

@@ -1,0 +1,440 @@
+{
+  "fixture": "projectivity-r",
+  "generator": "tests/ref/projectivity_r.R",
+  "meta": {
+    "R": "4.3.3",
+    "packages": {
+      "DoE.base": "1.2.5"
+    }
+  },
+  "cases": [
+    {
+      "name": "pb12",
+      "input": {
+        "design": "pb12",
+        "runs": 12,
+        "factors": 11
+      },
+      "output": {
+        "gr": 3.6666666667,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": 0,
+          "total": 330
+        },
+        "fourFactor2fi": {
+          "estimable": 330,
+          "total": 330
+        }
+      }
+    },
+    {
+      "name": "pb16",
+      "input": {
+        "design": "pb16",
+        "runs": 16,
+        "factors": 15
+      },
+      "output": {
+        "gr": 3,
+        "projectivity": 2,
+        "next": {
+          "size": 3,
+          "full": 448,
+          "total": 455
+        },
+        "fourFactor2fi": {
+          "estimable": 1260,
+          "total": 1365
+        }
+      }
+    },
+    {
+      "name": "pb20",
+      "input": {
+        "design": "pb20",
+        "runs": 20,
+        "factors": 19
+      },
+      "output": {
+        "gr": 3.4,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": 0,
+          "total": 3876
+        },
+        "fourFactor2fi": {
+          "estimable": 3876,
+          "total": 3876
+        }
+      }
+    },
+    {
+      "name": "pb24",
+      "input": {
+        "design": "pb24",
+        "runs": 24,
+        "factors": 23
+      },
+      "output": {
+        "gr": 3.6666666667,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": 3795,
+          "total": 8855
+        },
+        "fourFactor2fi": {
+          "estimable": 8855,
+          "total": 8855
+        }
+      }
+    },
+    {
+      "name": "pb28",
+      "input": {
+        "design": "pb28",
+        "runs": 28,
+        "factors": 27
+      },
+      "output": {
+        "gr": 3.5714285714,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": 8775,
+          "total": 17550
+        }
+      }
+    },
+    {
+      "name": "pb32",
+      "input": {
+        "design": "pb32",
+        "runs": 32,
+        "factors": 31
+      },
+      "output": {
+        "gr": 3.75,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": 19065,
+          "total": 31465
+        }
+      }
+    },
+    {
+      "name": "pb36",
+      "input": {
+        "design": "pb36",
+        "runs": 36,
+        "factors": 35
+      },
+      "output": {
+        "gr": 3.6666666667,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": null,
+          "total": 52360
+        }
+      }
+    },
+    {
+      "name": "pb40",
+      "input": {
+        "design": "pb40",
+        "runs": 40,
+        "factors": 39
+      },
+      "output": {
+        "gr": 3,
+        "projectivity": 2,
+        "next": {
+          "size": 3,
+          "full": 9120,
+          "total": 9139
+        }
+      }
+    },
+    {
+      "name": "pb44",
+      "input": {
+        "design": "pb44",
+        "runs": 44,
+        "factors": 43
+      },
+      "output": {
+        "gr": 3.7272727273,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": null,
+          "total": 123410
+        }
+      }
+    },
+    {
+      "name": "pb48",
+      "input": {
+        "design": "pb48",
+        "runs": 48,
+        "factors": 47
+      },
+      "output": {
+        "gr": 3.6666666667,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": null,
+          "total": 178365
+        }
+      }
+    },
+    {
+      "name": "pb40-38cols",
+      "input": {
+        "design": "pb40-38cols",
+        "runs": 40,
+        "factors": 38
+      },
+      "output": {
+        "gr": 3.4,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": null,
+          "total": 73815
+        }
+      }
+    },
+    {
+      "name": "frac-7-3",
+      "input": {
+        "design": "frac-7-3",
+        "runs": 16,
+        "factors": 7
+      },
+      "output": {
+        "gr": 4,
+        "projectivity": 3,
+        "next": {
+          "size": 4,
+          "full": 28,
+          "total": 35
+        }
+      }
+    },
+    {
+      "name": "frac-9-5",
+      "input": {
+        "design": "frac-9-5",
+        "runs": 16,
+        "factors": 9
+      },
+      "output": {
+        "gr": 3,
+        "projectivity": 2,
+        "next": {
+          "size": 3,
+          "full": 80,
+          "total": 84
+        }
+      }
+    },
+    {
+      "name": "frac-5-1",
+      "input": {
+        "design": "frac-5-1",
+        "runs": 16,
+        "factors": 5
+      },
+      "output": {
+        "gr": 5,
+        "projectivity": 4
+      }
+    },
+    {
+      "name": "frac-6-3",
+      "input": {
+        "design": "frac-6-3",
+        "runs": 8,
+        "factors": 6
+      },
+      "output": {
+        "gr": 3,
+        "projectivity": 2,
+        "next": {
+          "size": 3,
+          "full": 16,
+          "total": 20
+        }
+      }
+    },
+    {
+      "name": "dsd-4",
+      "input": {
+        "design": "dsd-4",
+        "runs": 9,
+        "factors": 4
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 0,
+          "total": 4
+        },
+        "quadratic4": {
+          "estimable": 0,
+          "total": 1
+        }
+      }
+    },
+    {
+      "name": "dsd-4-fake2",
+      "input": {
+        "design": "dsd-4-fake2",
+        "runs": 13,
+        "factors": 4
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 4,
+          "total": 4
+        },
+        "quadratic4": {
+          "estimable": 0,
+          "total": 1
+        }
+      }
+    },
+    {
+      "name": "dsd-5",
+      "input": {
+        "design": "dsd-5",
+        "runs": 13,
+        "factors": 5
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 10,
+          "total": 10
+        },
+        "quadratic4": {
+          "estimable": 0,
+          "total": 5
+        }
+      }
+    },
+    {
+      "name": "dsd-6",
+      "input": {
+        "design": "dsd-6",
+        "runs": 13,
+        "factors": 6
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 20,
+          "total": 20
+        },
+        "quadratic4": {
+          "estimable": 0,
+          "total": 15
+        }
+      }
+    },
+    {
+      "name": "dsd-8",
+      "input": {
+        "design": "dsd-8",
+        "runs": 17,
+        "factors": 8
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 56,
+          "total": 56
+        },
+        "quadratic4": {
+          "estimable": 0,
+          "total": 70
+        }
+      }
+    },
+    {
+      "name": "dsd-8-cat2",
+      "input": {
+        "design": "dsd-8-cat2",
+        "runs": 18,
+        "factors": 8
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 20,
+          "total": 20
+        },
+        "quadratic4": {
+          "estimable": 0,
+          "total": 15
+        }
+      }
+    },
+    {
+      "name": "dsd-10",
+      "input": {
+        "design": "dsd-10",
+        "runs": 21,
+        "factors": 10
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 120,
+          "total": 120
+        },
+        "quadratic4": {
+          "estimable": 0,
+          "total": 210
+        }
+      }
+    },
+    {
+      "name": "dsd-12",
+      "input": {
+        "design": "dsd-12",
+        "runs": 25,
+        "factors": 12
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 220,
+          "total": 220
+        },
+        "quadratic4": {
+          "estimable": 165,
+          "total": 495
+        }
+      }
+    },
+    {
+      "name": "dsd-14",
+      "input": {
+        "design": "dsd-14",
+        "runs": 29,
+        "factors": 14
+      },
+      "output": {
+        "quadratic3": {
+          "estimable": 364,
+          "total": 364
+        },
+        "quadratic4": {
+          "estimable": 728,
+          "total": 1001
+        }
+      }
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import { hierarchyViolations } from '../js/model/formula.js';
 import { normal } from '../js/dist.js';
 import { confirmPanel } from './augment.js';
 import { reduceModel } from '../js/model/reduce.js';
+import { activeProjection } from '../js/design/projectivity.js';
 import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
 import { observationsOf, availablePositionTerms, sitePositions } from '../js/model/sites.js';
 import { waferPlot } from './wafer.js';
@@ -205,6 +206,15 @@ export function render(ctx) {
       h('p', { class: 'muted small' }, 'Effect = change in the response from the low to the high setting (2 × coefficient).'));
   }
 
+  // ---------------------------------------------------------------- projection (issue #79): a few active factors, fitted in more detail from the same runs
+  let projPanel = null;
+  try {
+    const ap = activeProjection(study, fit, { refit: (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) }) });
+    if (ap) projPanel = h('div', { class: 'msg', id: 'projection' },
+      `Only ${ap.active.join(', ')} look active. ${ap.kind === 'quadratic' ? `These runs can fit their full quadratic (curvature and interactions)` : ap.full ? `In these runs they form a full 2${['', '', '²', '³', '⁴'][ap.active.length]} factorial, so their interactions can be estimated` : 'These runs can estimate their two-factor interactions too'} without new runs: the other factors' runs act as replicates (${ap.dfRes} residual df). `,
+      h('button', { class: 'btn small', id: 'fit-projection', onclick: () => setFormula(ap.formula) }, ap.kind === 'quadratic' ? 'fit their quadratic' : 'fit them with their interactions'), ' ', help('designs-screening', 'projectivity'));
+  } catch { /* not a screening fit */ }
+
   // ---------------------------------------------------------------- diagnostics
   let diag = null;
   if (fit.dfRes > 0) {
@@ -227,7 +237,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, backToDose, controls, olsNote, summary, mixPanel, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  return h('div', {}, backToDose, controls, olsNote, summary, projPanel, mixPanel, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)
