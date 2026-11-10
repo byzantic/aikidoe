@@ -21,3 +21,6 @@ body.manual .brand { color: inherit; text-decoration: none; }
 .page-nav { display: flex; justify-content: space-between; gap: 12px; margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; }
 .page-nav .next { margin-left: auto; }
 @media (max-width: 760px) { .manual-layout { grid-template-columns: 1fr; } #toc { position: static; max-height: none; } }
+#page figure.picture { margin: 14px 0; }
+#page figure.picture svg { display: block; max-width: 100%; height: auto; }
+#page figure.picture figcaption { font-size: 13px; color: var(--muted); margin-top: 4px; max-width: 640px; }

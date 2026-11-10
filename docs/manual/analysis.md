@@ -111,6 +111,18 @@ Counts and proportions are drawn on the response scale (a mean count, a proporti
 for a typical whole plot or block. `doe plot STUDY --contour A,B --model "y ~ …"` writes the same
 picture as SVG.
 
+The conversion study (a rotatable CCD in temperature and time, one of the app's examples): the
+quadratic fit has a maximum inside the region, slightly tilted, as T and time interact.
+
+```console
+$ doe plot examples/conversion-ccd.aikidoe.json --contour T,time --model "conv ~ quadratic" --out conv-contour.svg
+fitted conv over T and time: 59.46 … 79.8; 13 runs
+stationary point: a maximum at T = 166.8, time = 61.64 (coded 0.683, 0.624), fitted 79.8; canonical eigenvalues -2.113, -3.952
+wrote conv-contour.svg
+```
+
+![The fitted conversion over temperature and time (coded), the runs filled with their own results on the same colour scale, the maximum marked with its canonical axes.](img/conv-contour.svg)
+
 ## Counts and proportions
 
 Many results are not measurements with constant noise but **counts** (colonies, cells, plaques,

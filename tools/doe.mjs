@@ -120,6 +120,9 @@
 //        variance dispersion graph
 //   plot STUDY --contour A,B --model "y ~ …" [--at "C=0.5,…"] [--colour response|residual|none] [--out FILE.svg]
 //        the fitted response over two factors, the runs on it, the stationary point of a quadratic
+//   plot STUDY --desirability A,B [--model "y ~ …" …] [--at "C=150,…"] [--out FILE.svg]
+//        the overall desirability over two factors (the others at --at, natural units, else at the
+//        best settings), with the runs on it, as the Optimise step's overlay
 //   info STUDY
 //
 // Every command takes --json: one JSON object on stdout ({ schema: "aikidoe-cli/1", command, ok,
@@ -130,7 +133,7 @@ import { createStudy, parseStudy, serializeStudy, StudyError, code } from '../js
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
-import { codedRuns, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
+import { codedRuns, codedRow, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
 import { pairsSVG, contourSVG, vdgSVG, standalone, viridis } from '../js/io/svg-space.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../js/model/surface.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
@@ -160,7 +163,7 @@ import { fitCountMixedModel, randomGroupOf, glmmTests, glmmConfint, predictCount
 import { studyGlmmPower, studyGlmmMatrix, simulateGlmmPower, detectableGlmmRatio } from '../js/model/power-glmm.js';
 import { siteScheme, sitePositions, addSummaries, SUMMARY_STATS } from '../js/model/sites.js';
 import { gaugeRR, gaugeRowsFromTable } from '../js/model/msa.js';
-import { fittedModels, optimiseDesirability, dValue } from '../js/model/desirability.js';
+import { fittedModels, optimiseDesirability, dValue, desirabilityGrid } from '../js/model/desirability.js';
 import { propagationOfError, dualResponse } from '../js/model/robust.js';
 import { parseCSV } from '../js/io/csv.js';
 import { lhsDesign, fitSurrogates, surrogateYield, surrogateSensitivity, directYieldCheck } from '../js/sim/surrogate.js';
@@ -1093,7 +1096,7 @@ const nm = (names, i) => (names ? names[i] : T.factorName(i));
 function cmdPlot({ pos, opt }) {
   const file = pos[0], study = load(file);
   if (!study.design) fail('the study has no design yet');
-  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : opt.contour !== undefined ? 'contour' : fail('plot: give --pairs, --pv A,B, --vdg or --contour A,B');
+  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : opt.contour !== undefined ? 'contour' : opt.desirability !== undefined ? 'desirability' : fail('plot: give --pairs, --pv A,B, --vdg, --contour A,B or --desirability A,B');
   const sp = codedRuns(study), X = sp.runs.map(r => r.x), F = study.factors;
   const base = file.replace(/\.aikidoe\.json$|\.json$/, '');
   const outFile = opt.out ? String(opt.out) : `${base}-${which}.svg`;
@@ -1124,9 +1127,36 @@ function cmdPlot({ pos, opt }) {
         r: colour === 'residual' && Number.isFinite(r.residual) ? 2.5 + 3 * Math.abs(r.residual) / maxRes : 3.3 })),
       best: onSl ? { x: sp.x[a], y: sp.x[b], title: `stationary point (${sp.kind})` } : null,
       axes: canonicalAxesOn(sp, a, b) });
-    out(`fitted ${respId} over ${a} and ${b}${Object.keys(at).length ? ` (${Object.entries(at).map(([id, v]) => `${id} = ${num(v, 3)} coded`).join(', ')})` : ', the other factors at their centre'}: ${num(sl.min, 4)} … ${num(sl.max, 4)}; ${runsS.length} runs`);
+    out(`fitted ${respId} over ${a} and ${b}${Object.keys(at).length ? ` (${Object.entries(at).map(([id, v]) => `${id} = ${num(v, 3)} coded`).join(', ')})` : F.length > 2 ? ', the other factors at their centre' : ''}: ${num(sl.min, 4)} … ${num(sl.max, 4)}; ${runsS.length} runs`);
     if (sp) out(`stationary point: a ${sp.kind} at ${sp.factors.map(id => `${id} = ${num(sp.settings[id], 4)}`).join(', ')} (coded ${sp.factors.map(id => num(sp.x[id], 3)).join(', ')}), fitted ${num(sp.value, 4)}${sp.inside ? '' : ' — outside the runs: an extrapolation'}; canonical eigenvalues ${sp.eigen.map(e => num(e.value, 4)).join(', ')}`);
     res = { ...res, x: a, y: b, model: formula, min: sl.min, max: sl.max, ...(sp ? { stationary: { kind: sp.kind, coded: sp.x, settings: Object.fromEntries(sp.factors.map(id => [id, sp.settings[id]])), value: sp.value, inside: sp.inside, eigenvalues: sp.eigen.map(e => e.value) } } : {}) };
+  } else if (which === 'desirability') {
+    const [a, b] = String(opt.desirability).split(',').map(x => x.trim());
+    if (!a || !b || a === b) fail('--desirability: give two different factors, e.g. --desirability A,B');
+    const formulas = {};
+    for (const m of list(opt.model)) { const f = String(m); const id = f.slice(0, f.indexOf('~')).trim(); if (!f.includes('~') || !id) fail(`--model "${f}": give "response ~ terms"`); formulas[id] = f; }
+    const { models } = fittedModels(study, { formulas });
+    if (!models.length) fail('no response with a goal and limits has a model: set goals with "doe goal" and give results');
+    // the other factors at --at (natural units), else at the best settings
+    const given = Object.fromEntries(list(opt.at).flatMap(x => String(x).split(',')).filter(Boolean).map(t => { const [id, v] = t.split('='); const f = F.find(x => x.id === id.trim()) ?? fail(`--at: unknown factor "${id}"`); return [f.id, f.type === 'categorical' ? v.trim() : Number(v)]; }));
+    const best = optimiseDesirability(study, models, { seed: study.seed });
+    const at = { ...best.settings, ...given };
+    let gr;
+    try { gr = desirabilityGrid(study, models, at, a, b, { n: 41 }); } catch (e) { fail(e.message); }
+    const fa = F.find(f => f.id === a), fb = F.find(f => f.id === b), c0 = codedRow(study, at);
+    const ia = F.indexOf(fa), ib = F.indexOf(fb);
+    const runs = sp.runs.filter(r => Math.abs(r.x[ia]) <= 1.0001 && Math.abs(r.x[ib]) <= 1.0001).map(r => {
+      const d = Math.sqrt(F.reduce((t, f, j) => (j === ia || j === ib ? t : t + (f.type === 'categorical' ? (r.x[j] === c0[j] ? 0 : 1) : (r.x[j] - c0[j]) ** 2)), 0));
+      return { x: r.x[ia], y: r.x[ib], fade: Math.min(1, d / 1.5), title: `run ${r.run}` };
+    });
+    const z = gr.cells.map(row => row.map(c => (c.ok ? c.D : 0)));
+    svg = contourSVG({ xs: gr.xs.map(v => code(fa, v)), ys: gr.ys.map(v => code(fb, v)), z, xLabel: `${a} (coded)`, yLabel: `${b} (coded)`, valueLabel: 'overall desirability D', digits: 3,
+      levels: [0.2, 0.4, 0.6, 0.8], runs, best: { x: c0[ia], y: c0[ib], title: Object.keys(given).length ? 'the settings given' : `best settings, D = ${num(best.D, 3)}` } });
+    const others = F.filter(f => f.id !== a && f.id !== b);
+    out(`overall desirability over ${a} and ${b}${others.length ? `, ${others.map(f => `${f.id} = ${f.type === 'categorical' ? at[f.id] : num(at[f.id], 4)}`).join(', ')}` : ''}: up to ${num(Math.max(...z.flat()), 3)}; ${runs.length} runs drawn; ✚ ${Object.keys(given).length ? 'the settings given' : `the best settings (D = ${num(best.D, 3)})`}`);
+    const beyond = beyondRuns(study, models, at);
+    if (beyond) out(`warning: these settings ${beyond.inside ? 'are far from the runs' : 'lie outside the region the runs cover'}: an extrapolation`);
+    res = { ...res, x: a, y: b, models: models.map(m => m.formula), at, max: Math.max(...z.flat()), beyondRuns: beyond };
   } else if (which === 'pairs') {
     const ids = opt.factors ? String(opt.factors).split(',').map(x => x.trim()) : F.map(f => f.id).slice(0, 6);
     const idx = ids.map(id => { const j = F.findIndex(f => f.id === id); if (j < 0) fail(`--factors: unknown factor "${id}"`); return j; });
@@ -1143,7 +1173,7 @@ function cmdPlot({ pos, opt }) {
     const model = modelOf(), sl = spvSlice(study, X, model, { x: a, y: b, at, n: 41 });
     svg = contourSVG({ xs: sl.xs, ys: sl.ys, z: sl.z, xLabel: `${a} (coded)`, yLabel: `${b} (coded)`, valueLabel: 'scaled prediction variance', log: sl.max / sl.min > 20,
       runs: sp.runs.map(r => ({ x: r.x[sl.ix], y: r.x[sl.iy], title: `run ${r.run}` })) });
-    out(`scaled prediction variance for ${model} over ${a} and ${b}${Object.keys(at).length ? ` (${Object.entries(at).map(([id, v]) => `${id} = ${num(v, 3)} coded`).join(', ')})` : ', the other factors at their centre'}: ${num(sl.min, 4)} … ${num(sl.max, 4)}`);
+    out(`scaled prediction variance for ${model} over ${a} and ${b}${Object.keys(at).length ? ` (${Object.entries(at).map(([id, v]) => `${id} = ${num(v, 3)} coded`).join(', ')})` : F.length > 2 ? ', the other factors at their centre' : ''}: ${num(sl.min, 4)} … ${num(sl.max, 4)}`);
     res = { ...res, model, x: a, y: b, min: sl.min, max: sl.max };
   } else {
     const model = modelOf(), g = vdg(study, X, model).curves, k = F.length;

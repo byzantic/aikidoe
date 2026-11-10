@@ -33,6 +33,9 @@ node tools/gen-manual.mjs   # regenerates reference-cli.md, reference-study-form
 - The manual's ```` ```console ```` blocks are executed by the tests.
   `node tools/gen-manual.mjs --outputs <page>` rewrites a page's outputs, and ```` ```file name ````
   blocks create input files for them. Read the rewritten outputs before committing.
+- Pictures in the manual are generated: `![caption](img/NAME.svg)` shows the `NAME.svg` that the
+  page's console blocks write (`doe plot … --out NAME.svg`). `gen-manual --outputs <page>` saves
+  it to `docs/manual/img/`, and `npm test` fails if it is stale or unused.
 - A new page in `docs/manual/` must be listed in `docs/manual/pages.js`. Help links in the UI
   (`help(page, anchor)`) must point at a real heading. An anchor is the slugged heading text, and
   a non-ASCII heading makes an awkward anchor.

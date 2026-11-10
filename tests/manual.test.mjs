@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { section, check, done } from './lib/check.mjs';
 import { linksAndAnchors, parse } from '../js/markdown.js';
 import { PAGES } from '../docs/manual/pages.js';
-import { MANUAL, referenceCli, referenceStudyFormat, runPage, outputMatches, blocksOf } from '../tools/gen-manual.mjs';
+import { MANUAL, IMG, referenceCli, referenceStudyFormat, runPage, outputMatches, blocksOf, pictureRefs } from '../tools/gen-manual.mjs';
 import { EXAMPLES } from '../ui/examples.js';
 import { serializeStudy } from '../js/study.js';
 import { fitModel } from '../js/model/fit.js';
@@ -47,7 +47,8 @@ section('links');
       if ((m = /^#(.+)$/.exec(href))) { if (!anchors[id].has(m[1])) bad.push(href); continue; }
       if ((m = /^([\w-]+)\.md(?:#(.+))?$/.exec(href))) { if (!pages[m[1]] || (m[2] && !anchors[m[1]].has(m[2]))) bad.push(href); continue; }
       if ((m = /^\.\.\/\.\.\/index\.html#example=([\w-]+)$/.exec(href))) { if (!exampleIds.has(m[1])) bad.push(href); continue; }
-      if (href === '../../index.html#guide') continue;                     // the app's Guide step
+      if (href === '../../index.html#guide') continue;
+      if ((m = /^img\/([\w.-]+\.svg)$/.exec(href))) { if (!existsSync(join(IMG, m[1]))) bad.push(href); continue; }   // a picture (checked below)                     // the app's Guide step
       if ((m = /^\.\.\/\.\.\/index\.html#lesson=([\w-]+)&difficulty=(easy|medium|hard)&seed=\d+$/.exec(href))) { if (!lessonIds.has(m[1])) bad.push(href); continue; }
       if ((m = /^\.\.\/\.\.\/([^#?]+)$/.exec(href))) { if (!existsSync(join(ROOT, m[1]))) bad.push(href); continue; }
       bad.push(href);
@@ -77,15 +78,25 @@ section('links');
   check(`the ${lessonLinks.length} manual links in the lessons resolve to sections`, lessonLinks.length >= LESSONS.length && !badL.length, badL.map(x => x.join(' → ')).join(', '));
 }
 
-section('console blocks: every command run, output as shown');
+section('console blocks: every command run, output as shown; pictures as the blocks draw them');
 for (const [id, md] of Object.entries(pages)) {
   if (!md || !blocksOf(md).some(b => b.lang === 'console')) continue;
   let n = 0, bad = [];
-  for (const { commands } of runPage(md)) for (const c of commands) {
+  const res = runPage(md);
+  for (const { commands } of res) for (const c of commands) {
     n++;
     if (!outputMatches(c.expected, c.actual)) bad.push(`$ ${c.cmd}\n--- page shows ---\n${c.expected}\n--- doe prints ---\n${c.actual}`);
   }
   check(`${id}: ${n} commands`, !bad.length, bad.length ? `\n${bad[0]}` : '');
+  for (const name of pictureRefs(md)) {
+    const drawn = res.pictures[name], kept = existsSync(join(IMG, name)) ? readFileSync(join(IMG, name), 'utf8') : null;
+    check(`${id}: img/${name} is what the page's commands draw (node tools/gen-manual.mjs --outputs ${id})`, drawn !== undefined && drawn === kept, drawn === undefined ? 'no command on the page writes it' : 'out of date');
+  }
+}
+{
+  const used = new Set(Object.values(pages).filter(Boolean).flatMap(pictureRefs));
+  const files = existsSync(IMG) ? readdirSync(IMG) : [];
+  check('every picture in docs/manual/img is shown on a page', files.every(f => used.has(f)), files.filter(f => !used.has(f)).join(', '));
 }
 
 section('worked examples against their published values');
@@ -101,7 +112,7 @@ section('worked examples against their published values');
   near('gauge: %contribution and %study variation of total gauge R&R, ndc (SixSigma ss.rr)', [g.components[0].contribution, g.pctGRR, g.ndc], [fx.output.contrib[0], fx.output.studyVar[0][2], fx.output.ncat], { abs: 0.005 });
   check('the gauge page shows the same data as the SixSigma fixture', fx.input.rows.every(r => pages['example-gauge'].includes(`${r.part.replace(' #', '')},${r.operator.replace(' #', '')},${r.value}`)));
   // the example study files are the app's examples
-  for (const [file, id] of [['reactor-bhh', 'reactor-bhh'], ['furnace-anneal', 'anneal-results']])
+  for (const [file, id] of [['reactor-bhh', 'reactor-bhh'], ['furnace-anneal', 'anneal-results'], ['conversion-ccd', 'ccd-results']])
     check(`examples/${file}.aikidoe.json is the app's ${id} example`, readFileSync(join(ROOT, 'examples', `${file}.aikidoe.json`), 'utf8') === serializeStudy(EXAMPLES.find(e => e.id === id).build()));
 }
 

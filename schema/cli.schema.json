@@ -3762,7 +3762,7 @@
     },
     "plot": {
       "type": "object",
-      "description": "doe plot (issue #88): where the runs sit, written as an SVG file",
+      "description": "doe plot (issues #88, #97): where the runs sit, the fitted response or the overall desirability, written as an SVG file",
       "required": [
         "kind",
         "plot",
@@ -3778,7 +3778,8 @@
             "pairs",
             "pv",
             "vdg",
-            "contour"
+            "contour",
+            "desirability"
           ]
         },
         "file": {
@@ -3831,6 +3832,30 @@
             "value",
             "inside",
             "eigenvalues"
+          ]
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--desirability: the fitted models (one per response with a goal)"
+        },
+        "at": {
+          "type": "object",
+          "description": "--desirability: the settings the other factors are held at (natural units)",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string"
+            ]
+          }
+        },
+        "beyondRuns": {
+          "description": "--desirability: as for optimise, whether the settings held lie beyond the runs",
+          "type": [
+            "object",
+            "null"
           ]
         }
       }

@@ -28,7 +28,7 @@ sites; **Design** — compare candidate designs (fractions, Plackett–Burman, f
 central composite, Box–Behnken, definitive screening, optimal) with their aliasing,
 projectivity, where the runs sit (every pair of factors, prediction variance over any two,
 variance dispersion; the fitted response over any two factors with its stationary point; `doe plot`
-writes SVG), prediction-variance and power diagnostics (power of each term for an effect Δ/σ), then create
+writes SVG, also of the desirability overlay), prediction-variance and power diagnostics (power of each term for an effect Δ/σ), then create
 one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
 printable sheet; **Optimise** — desirability goals for the responses, the best settings, a prediction profiler and a two-factor overlay with the runs on it, and a warning when the best settings lie beyond the runs.
 

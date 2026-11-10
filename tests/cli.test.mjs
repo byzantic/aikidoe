@@ -311,8 +311,17 @@ try {
   check('… --contour needs the model', r.code === 1 && /--model/.test(r.err));
   r = run('report', 'pl.aikidoe.json', '--out', 'pl.html', '--model', 'y ~ quadratic');
   check('report: the fitted response over the two largest effects, with the stationary point', r.code === 0 && /Fitted response over A and B/.test(readFileSync(join(dir, 'pl.html'), 'utf8')) && /Stationary point: a maximum/.test(readFileSync(join(dir, 'pl.html'), 'utf8')));
+  // the overall desirability (issue #97), the other factors at the best settings or at --at
+  r = run('goal', 'pl.aikidoe.json', 'y', '--maximize', '--lower', '55', '--target', '61');
+  o = js('plot', 'pl.aikidoe.json', '--desirability', 'A,B');
+  check('plot --desirability A,B: D over A and B, C at the best settings, the runs in the ranges', o.plot === 'desirability' && o.max > 0 && o.max <= 1 && o.models[0] === 'y ~ quadratic' && o.at.C >= 0 && o.at.C <= 10 && o.beyondRuns === null
+    && (readFileSync(join(dir, 'pl-desirability.svg'), 'utf8').match(/class="run"/g) ?? []).length === 16, JSON.stringify(o));
+  o = js('plot', 'pl.aikidoe.json', '--desirability', 'A,B', '--at', 'C=0');
+  check('… --at C=0 (natural units): held there', o.at.C === 0 && o.max > 0);
+  r = run('plot', 'pl.aikidoe.json', '--desirability', 'A,A');
+  check('… two different factors', r.code === 1 && /different/.test(r.err), r.out + r.err);
   r = run('plot', 'pl.aikidoe.json');
-  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B, --vdg or --contour A,B/.test(r.err));
+  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B, --vdg, --contour A,B or --desirability A,B/.test(r.err));
   // projectivity (issue #79): alias and recommend report it
   r = run('init', 'pj.aikidoe.json', '--factor', 'A:0:1', '--factor', 'B:0:1', '--factor', 'C:0:1', '--factor', 'D:0:1', '--factor', 'E:0:1', '--factor', 'F:0:1', '--factor', 'G:0:1', '--response', 'y', '--seed', '1');
   r = run('design', 'pj.aikidoe.json', '--pb');
