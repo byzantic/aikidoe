@@ -12,6 +12,8 @@ import { fitCountMixedModel, randomGroupOf, glmmTests } from '../model/glmm.js';
 import { defaultFormula } from '../model/defaults.js';
 import { checkConfirmation } from '../design/augment.js';
 import { serializeStudy } from '../study.js';
+import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../model/surface.js';
+import { contourSVG, viridis } from './svg-space.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const tbl = (head, rows, cls = '') => `<table class="${cls}"><thead><tr>${head.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td${typeof c === 'number' ? ' class="n"' : ''}>${typeof c === 'number' ? esc(num(c)) : esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
@@ -36,6 +38,29 @@ export function scatterSVG(points, { xLabel = '', yLabel = '', w = 320, h = 240,
   return `<svg class="plot" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}">${g.join('')}</svg>`;
 }
 
+/**
+ * The fitted response over the two continuous factors with the largest effects (issue #88): an
+ * <h3>, the contour SVG with the runs and the stationary point, and a caption — '' when the model
+ * has fewer than two continuous factors.
+ */
+function contourHTML(study, fit, r) {
+  try {
+    const inModel = new Set((fit.model?.terms ?? []).flatMap(t => t.comps.flatMap(c => (c.f !== undefined ? [c.f] : Object.keys(c.I ?? {})))));
+    const cont = study.factors.filter(f => f.type !== 'categorical' && inModel.has(f.id)).map(f => f.id);
+    if (cont.length < 2 || study.mixture) return '';
+    const size = (id) => { const c = fit.columns.indexOf(id); return c >= 0 ? Math.abs(fit.coef[c]) : 0; };
+    const [a, b] = cont.slice().sort((u, v) => size(v) - size(u));
+    const sl = responseSlice(study, fit, { x: a, y: b, n: 31 }), runs = runsOnSlice(study, fit, { x: a, y: b }), sp = stationaryPoint(study, fit);
+    const onSl = sp && sp.factors.includes(a) && sp.factors.includes(b);
+    const svg = contourSVG({ xs: sl.xs, ys: sl.ys, z: sl.z, xLabel: `${a} (coded)`, yLabel: `${b} (coded)`, valueLabel: `${r.name}${r.units ? ` (${r.units})` : ''}`, digits: 4, width: 340,
+      runs: runs.map(q => ({ x: q.x, y: q.y, fade: Math.min(1, q.distance / 1.5), title: `run ${q.run}: ${num(q.observed, 4)}`, fill: Number.isFinite(q.observed) ? viridis(sl.max > sl.min ? (q.observed - sl.min) / (sl.max - sl.min) : 0.5) : undefined })),
+      best: onSl ? { x: sp.x[a], y: sp.x[b], title: `stationary point (${sp.kind})` } : null, axes: canonicalAxesOn(sp, a, b) });
+    const others = cont.filter(id => id !== a && id !== b);
+    return [`<h3>Fitted response over ${esc(a)} and ${esc(b)}</h3>`, `<div class="plots">${svg}</div>`,
+      `<p class="stats">${others.length ? `${esc(others.join(', '))} at the centre; runs at other settings faded. ` : ''}Each run is filled with its own result on the same scale.${sp ? ` Stationary point: a ${esc(sp.kind)} at ${esc(sp.factors.map(id => `${id} = ${num(sp.settings[id], 4)}`).join(', '))}, fitted ${esc(num(sp.value, 4))}${sp.inside ? '' : ' — outside the runs (an extrapolation)'}.` : ''}</p>`].join('');
+  } catch { return ''; }
+}
+
 function responseSection(study, r, formula) {
   const out = [`<h2 id="response-${esc(r.id)}">${esc(r.name)}${r.units ? ` (${esc(r.units)})` : ''}</h2>`];
   let mixed = false;
@@ -47,6 +72,7 @@ function responseSection(study, r, formula) {
       out.push('<h3>Variance components</h3>', tbl(['source', 'variance', 'std. dev.', '95% CI (variance)'], m.varcomp.map(v => [v.name, v.variance, v.sd, v.boundary ? 'on the boundary (0)' : `${num(v.lower)} … ${num(v.upper)}`])));
       out.push('<h3>Fixed effects</h3>', tbl(['term', 'estimate', 'std. error', 'df', 't', 'p', ''], m.columns.map((c, j) => [c, m.coef[j], m.seKR[j], m.dfKR[j], m.t[j], pval(m.pKR[j]), stars(m.pKR[j])]).filter(x => Number.isFinite(x[1]))));
       out.push('<h3>Tests of model terms</h3>', tbl(['term', 'F', 'ndf', 'ddf', 'p', 'tested in'], m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block).map(t => [t.term, t.FKR, t.df, t.ddfKR, pval(t.pKR), t.stratum ?? ''])));
+      out.push(contourHTML(study, m, r));
     } else if (r.distribution && ['poisson', 'negbin', 'binomial', 'bernoulli'].includes(r.distribution) && randomGroupOf(study)) {
       // counts and proportions in a split-plot: the GLMM with a random whole-plot intercept
       const fit = fitCountMixedModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;
@@ -57,6 +83,7 @@ function responseSection(study, r, formula) {
       for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
       const rows = glmmTests(fit, 1), F = rows.some(x => x.F !== undefined);
       out.push('<h3>Likelihood-ratio tests (type I)</h3>', tbl(['source', 'df', 'χ²', ...(F ? ['F'] : []), 'p'], rows.map(x => [x.term, x.df, x.chi2, ...(F ? [x.F ?? ''] : []), pval(x.p)])));
+      out.push(contourHTML(study, fit, r));
     } else if (r.distribution) {
       // counts and proportions: the generalised linear model
       const fit = fitModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;
@@ -66,6 +93,7 @@ function responseSection(study, r, formula) {
       for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
       const rows = anova(fit, 1), F = rows.some(x => x.F !== undefined);
       out.push(`<h3>Analysis of deviance (type I)</h3>`, tbl(['source', 'df', 'deviance', F ? 'F' : 'χ²', 'p'], rows.map(x => [x.term, x.df, x.deviance ?? '', (F ? x.F : x.chi2) ?? '', x.p === undefined ? '' : pval(x.p)])));
+      out.push(contourHTML(study, fit, r));
     } else {
       const fit = fitModel(study, formula);
       out.push(`<p>Model: <code>${esc(formula)}</code> — least squares on ${fit.n} runs${fit.rows.some(x => x.n > 1) ? ' (per-run means)' : ''}; coefficients in coded units (−1 … +1).${fit.aliased.length ? ` Aliased (not estimable): ${esc(fit.aliased.join(', '))}.` : ''}</p>`);
@@ -79,6 +107,7 @@ function responseSection(study, r, formula) {
           scatterSVG(fit.fitted.map((f, i) => ({ x: f, y: fit.rows[i].y })), { xLabel: 'predicted', yLabel: 'observed', diagonal: true }),
           scatterSVG(fit.rows.map((x, i) => ({ x: study.design.runs.find(q => q.run === x.run)?.order ?? i + 1, y: fit.rstandard[i] })).filter(p => Number.isFinite(p.y)), { xLabel: 'run order', yLabel: 'standardised residual', zero: true }),
           '</div>');
+        out.push(contourHTML(study, fit, r));
       } else out.push('<p>No residual degrees of freedom: the model is saturated (judge the effects with Lenth’s method in aikidoe).</p>');
     }
   } catch (e) { out.push(`<p class="note">Not fitted: ${esc(e.message)}</p>`); }
@@ -121,7 +150,7 @@ h1{font-size:26px;margin:0 0 4px}h2{font-size:20px;margin:28px 0 8px;border-top:
 .meta{color:#6b6f78;margin-top:0}table{border-collapse:collapse;margin:8px 0;font-size:13px}th,td{padding:3px 8px;border-bottom:1px solid #e7e5df;text-align:left;vertical-align:top}
 th{font-weight:600;border-bottom:1px solid #9a9ea6}td.n{text-align:right;font-variant-numeric:tabular-nums}code{font-family:ui-monospace,monospace;font-size:13px;background:#f4f3ef;padding:1px 4px;border-radius:4px}
 .wide{overflow-x:auto}.stats{font-size:13px}.plots{display:flex;flex-wrap:wrap;gap:12px}svg.plot{font-size:10px;fill:#1b1d21}svg.plot .grid{stroke:#e7e5df}svg.plot .ref{stroke:#9a9ea6;stroke-dasharray:4 3}
-svg.plot circle{fill:#0f6f78}.note{color:#b3261e}footer{margin-top:32px;color:#6b6f78;font-size:12px}@media print{.wide{overflow:visible}}`;
+svg.plot:not(.contour):not(.pairs) circle{fill:#0f6f78}.note{color:#b3261e}footer{margin-top:32px;color:#6b6f78;font-size:12px}@media print{.wide{overflow:visible}}`;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(study.name)} · aikidoe report</title>
 <meta name="generator" content="aikidoe"><style>${css}</style></head>

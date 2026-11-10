@@ -297,8 +297,19 @@ try {
   check('plot --pv A,B --at C=7.5: the quadratic\'s variance over A and B, the file named after the study', o.plot === 'pv' && o.model === 'quadratic' && o.min > 0 && o.max > o.min && o.file === 'pl-pv.svg');
   o = js('plot', 'pl.aikidoe.json', '--vdg', '--model', '2fi');
   check('plot --vdg --model 2fi: the curves', o.plot === 'vdg' && o.model === '2fi' && o.curves.length === 21 && o.curves.every(c => c.min <= c.mean + 1e-9 && c.mean <= c.max + 1e-9));
+  {
+    const st = JSON.parse(readFileSync(join(dir, 'pl.aikidoe.json'), 'utf8'));
+    st.observations = st.design.runs.map(rr => { const c = (id) => (rr.settings[id] - 5) / 5; return { run: rr.run, response: 'y', value: 60 + 3 * c('A') - 2 * c('B') - 2.5 * c('A') ** 2 - 2 * c('B') ** 2 + c('A') * c('B') + 0.5 * c('C') - c('C') ** 2 + 0.2 * Math.sin(rr.run) }; });
+    writeFileSync(join(dir, 'pl.aikidoe.json'), JSON.stringify(st));
+  }
+  o = js('plot', 'pl.aikidoe.json', '--contour', 'A,B', '--model', 'y ~ quadratic', '--colour', 'residual');
+  check('plot --contour A,B --model: the fitted surface, its stationary point (a maximum, inside the runs)', o.plot === 'contour' && o.stationary.kind === 'maximum' && o.stationary.inside && o.stationary.eigenvalues.every(v => v < 0) && /<svg xmlns=/.test(readFileSync(join(dir, 'pl-contour.svg'), 'utf8')), JSON.stringify(o.stationary));
+  r = run('plot', 'pl.aikidoe.json', '--contour', 'A,B');
+  check('… --contour needs the model', r.code === 1 && /--model/.test(r.err));
+  r = run('report', 'pl.aikidoe.json', '--out', 'pl.html', '--model', 'y ~ quadratic');
+  check('report: the fitted response over the two largest effects, with the stationary point', r.code === 0 && /Fitted response over A and B/.test(readFileSync(join(dir, 'pl.html'), 'utf8')) && /Stationary point: a maximum/.test(readFileSync(join(dir, 'pl.html'), 'utf8')));
   r = run('plot', 'pl.aikidoe.json');
-  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B or --vdg/.test(r.err));
+  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B, --vdg or --contour A,B/.test(r.err));
   // projectivity (issue #79): alias and recommend report it
   r = run('init', 'pj.aikidoe.json', '--factor', 'A:0:1', '--factor', 'B:0:1', '--factor', 'C:0:1', '--factor', 'D:0:1', '--factor', 'E:0:1', '--factor', 'F:0:1', '--factor', 'G:0:1', '--response', 'y', '--seed', '1');
   r = run('design', 'pj.aikidoe.json', '--pb');

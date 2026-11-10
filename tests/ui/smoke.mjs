@@ -156,6 +156,11 @@ try {
   await settle();
   await page.click('[data-step="analyse"]'); await settle();
   check('default model for CCD-by-stages is the quadratic', /~ quadratic/.test(await page.inputValue('#formula')), await page.inputValue('#formula'));
+  // the fitted response over two factors (issue #88)
+  const nFit = (await state()).study.design.runs.filter(r => r.kind !== 'confirm').length;
+  check(`the fitted response: a contour with all ${nFit} runs, and the stationary point described`, await page.locator('#surface-contour svg').count() === 1 && (await page.getAttribute('#surface-contour', 'data-runs')) === String(nFit) && await page.locator('#stationary').count() === 1 && /Stationary point of the fitted surface: a (maximum|minimum|saddle)/.test(await page.textContent('#stationary')));
+  await page.selectOption('select[aria-label="surface run colour"]', 'residual'); await settle();
+  check('… runs coloured by residual', /#0072B2|#E69F00/.test(await page.innerHTML('#surface-contour')));
   check('Block (1 df) in the ANOVA', (await page.$$eval('section.panel table.data tr', trs => trs.map(t => t.textContent))).some(t => /^Block1\d/.test(t)));
   check('prediction with intervals shown', /95% PI/.test(await page.textContent('#prediction')));
   await page.click('#add-confirm'); await settle();
