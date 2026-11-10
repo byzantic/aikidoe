@@ -71,6 +71,13 @@ Backward elimination, always keeping the model hierarchical (A stays while A:B o
 - **by AICc**: drop the term whose removal lowers the corrected Akaike criterion most, while it
   does.
 
+For counts and proportions the p-value is the likelihood-ratio (deviance) test of dropping the
+term, and AICc comes from the model's likelihood; with a random whole-plot or block effect, each
+candidate is refitted with σ re-estimated, and a term that changes only between whole plots is
+judged by an F on the whole-plot degrees of freedom, as in its
+[tests](#random-effects-for-counts-and-proportions). Mixed models for measurements use
+Kenward–Roger p-values, or AICc of maximum-likelihood fits ([mixed models](#mixed-models)).
+
 The result is a suggestion: every step is shown, and any term can be kept (`--keep`) or put back.
 `doe fit … --reduce p` or `--reduce aicc`; the Analyse step's reduce buttons.
 
@@ -300,8 +307,12 @@ doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
 - **Predictions** are for a *typical* whole plot (its shift 0) and, because the link scale is
   not linear, also **averaged over whole plots** (larger, for counts); the prediction interval for
   one new run allows for a new whole plot's shift.
+- **Model reduction** works on this model too ([model reduction](#model-reduction)): each
+  candidate term is dropped and the model refitted (σ re-estimated), and judged by the same
+  likelihood-ratio test as in the table, an F for terms that change only between whole plots.
+  Each step refits the model several times, so on the Analyse step it runs in the background.
 - Not available with a random effect: the negative binomial and quasi models (the random effect
-  already takes up the extra variation between whole plots), Firth's method and model reduction.
+  already takes up the extra variation between whole plots) and Firth's method.
   Power for a split-plot with counts or proportions takes the whole-plot σ
   ([power](concepts.md#power)); without it, power treats the runs as independent and overstates
   it for hard-to-change factors.

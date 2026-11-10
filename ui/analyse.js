@@ -34,13 +34,22 @@ function background(msg, onDone) {
 
 function reduction(r, response, undoTo, close) {
   if (!r || r.response !== response) return null;
-  if (r.running) return h('div', { class: 'msg', id: 'reduction' }, `Reducing the mixed model (${r.method === 'p' ? 'Kenward–Roger p-values' : 'AICc of maximum-likelihood fits'}); each step refits the model…`);
+  if (r.running) return h('div', { class: 'msg', id: 'reduction' }, r.glmm ? `Reducing the model with a random ${r.group} effect (${r.method === 'p' ? 'likelihood-ratio tests' : 'AICc'}); each step refits it without each term in turn…`
+    : `Reducing the mixed model (${r.method === 'p' ? 'Kenward–Roger p-values' : 'AICc of maximum-likelihood fits'}); each step refits the model…`);
   if (r.error) return h('div', { class: 'msg warning', id: 'reduction' }, r.error, ' ', h('button', { class: 'btn small', onclick: close }, 'ok'));
   return h('div', { class: 'msg', id: 'reduction' },
-    h('div', {}, h('b', {}, `Reduced ${r.mixed ? 'the mixed model ' : ''}${r.method === 'p' ? `by ${r.mixed ? 'Kenward–Roger ' : ''}p-value (drop while p > 0.10)` : r.mixed ? 'by AICc (maximum likelihood)' : 'by AICc'}`), ', hierarchy kept: ',
+    h('div', {}, h('b', {}, r.glmm ? `Reduced the model with a random ${r.group} effect by ${r.method === 'p' ? 'likelihood-ratio p-value (drop while p > 0.10)' : 'AICc'}`
+      : `Reduced ${r.mixed ? 'the mixed model ' : ''}${r.method === 'p' ? `by ${r.mixed ? 'Kenward–Roger ' : ''}p-value (drop while p > 0.10)` : r.mixed ? 'by AICc (maximum likelihood)' : 'by AICc'}`), ', hierarchy kept: ',
       r.steps.length ? r.steps.map((st, i) => [i ? ', ' : '', h('span', { class: 'mono' }, st.drop), r.method === 'p' ? ` (p ${pval(st.p)})` : '']) : 'nothing to remove', '.'),
     h('div', { class: 'row small', style: 'margin-top:6px' }, 'This is a suggestion: edit the formula to put a term back.',
       h('button', { class: 'btn small', onclick: () => undoTo(r.start) }, 'undo'), h('button', { class: 'btn small', onclick: close }, 'hide')));
+}
+
+// counts and proportions: the random intercept the analysis uses ('wholePlot', 'block' or 'none')
+function countRandomChoice(study, resp, ui) {
+  const can = (id) => { try { return !!randomGroupOf(study, id); } catch { return false; } };
+  const hasWP = can('wholePlot'), hasB = can('block');
+  return { hasWP, hasB, choice: ui.countRandom ?? (hasWP && ['poisson', 'binomial', 'bernoulli'].includes(resp.distribution) ? 'wholePlot' : 'none') };
 }
 
 export function render(ctx) {
@@ -66,7 +75,19 @@ export function render(ctx) {
       ['p', 'aicc'].map(m => h('button', { class: 'btn', id: `reduce-${m}`, title: m === 'p' ? 'backward elimination: drop the least significant term while p > 0.10, keeping the model hierarchical' : 'backward elimination by AICc, keeping the model hierarchical',
         onclick: () => {
           try {
-            let mixed = false; try { mixed = !ui.ols && randomEffects(observationTable(study, resp.id)).length > 0; } catch { /* no */ }
+            const countRandom = resp.distribution && !ui.firth ? countRandomChoice(study, resp, ui).choice : 'none';
+            if (countRandom !== 'none') {
+              // counts and proportions with a random effect: each step refits several GLMMs, so in the worker
+              const group = countRandom === 'wholePlot' ? 'whole plot' : 'block';
+              set({ reduce: { response: resp.id, method: m, start: formula, running: true, glmm: true, group } });
+              background({ reduce: { study, formula, method: m, glmm: { random: countRandom } } }, (res) => {
+                const cur = state.ui.analyse ?? {};
+                if (!res.ok) { setUI({ analyse: { ...cur, reduce: { response: resp.id, error: res.error } } }); return; }
+                setUI({ analyse: { ...cur, reduce: { response: resp.id, method: m, start: formula, steps: res.steps, glmm: true, group }, formulas: { ...(cur.formulas ?? {}), [resp.id]: res.formula } } });
+              });
+              return;
+            }
+            let mixed = false; try { mixed = !resp.distribution && !ui.ols && randomEffects(observationTable(study, resp.id)).length > 0; } catch { /* no */ }
             if (mixed) {
               // mixed models: each step refits by REML (and ML for AICc), so run it in the worker
               set({ reduce: { response: resp.id, method: m, start: formula, running: true, mixed: true } });
@@ -90,9 +111,7 @@ export function render(ctx) {
   // counts and proportions: a generalised linear model, with a random intercept per whole plot (a
   // split-plot, automatically) or per block (when asked)
   if (resp.distribution) {
-    const can = (id) => { try { return !!randomGroupOf(study, id); } catch { return false; } };
-    const hasWP = can('wholePlot'), hasB = can('block');
-    const choice = ui.countRandom ?? (hasWP && ['poisson', 'binomial', 'bernoulli'].includes(resp.distribution) ? 'wholePlot' : 'none');
+    const { hasWP, hasB, choice } = countRandomChoice(study, resp, ui);
     const picker = hasWP || hasB ? h('div', { class: 'row small', id: 'count-random' }, h('label', { class: 'inline' }, 'random effect',
       select([...(hasWP ? [{ value: 'wholePlot', label: 'whole plots' }] : []), ...(hasB ? [{ value: 'block', label: 'blocks' }] : []), { value: 'none', label: 'none (runs independent)' }], choice,
         (v) => set({ countRandom: v, reduce: null }), { 'aria-label': 'random effect' })),

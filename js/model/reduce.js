@@ -13,10 +13,13 @@
 //            n log(2π) + n log(RSS/n) + n + 2k with k = rank + 1 (σ counts, as R's AIC);
 //            AICc = AIC + 2k(k+1)/(n − k − 1). The candidate giving the lowest AICc is dropped
 //            if that is lower than the current model's.
+// reduceMixed does the same for REML mixed models (Kenward–Roger p, or AICc of ML fits), and
+// reduceGLMM for counts and proportions with a random intercept (likelihood-ratio p, or AICc).
 import { fitModel } from './fit.js';
 import { fitMixedModel, fitMixedML } from './mixed.js';
 import { hierarchyViolations } from './formula.js';
 import { noiseOf } from './noise.js';
+import { fitCountMixedModel, glmmDropTest } from './glmm.js';
 
 /** AICc of a fit (Infinity when n − k − 1 ≤ 0). */
 export function aicc(fit) {
@@ -113,4 +116,51 @@ export function reduceMixed(study, formula, { method = 'p', alphaOut = 0.10, kee
     steps.push({ ...pick, formula: curFormula });
   }
   return { method, mixed: true, start, steps, formula: curFormula, fit };
+}
+
+/** AICc of a GLMM fit: k = estimable coefficients + σ, n = observations (rows). */
+export function glmmAicc(fit) {
+  const n = fit.n, k = fit.rank + 1;
+  return fit.aic + (n - k - 1 > 0 ? 2 * k * (k + 1) / (n - k - 1) : Infinity);
+}
+
+/**
+ * Backward elimination for counts and proportions with a random intercept (issue #78): a
+ * GLMM (fitCountMixedModel) refitted without each candidate term, hierarchy kept.
+ *   p:    the test of dropping the term (glmmDropTest: the likelihood ratio with σ re-estimated,
+ *         χ² — or F on (df, m − q) for a term that varies only between groups); the candidate
+ *         with the largest p is dropped while p > alphaOut;
+ *   aicc: the candidate giving the lowest AICc (glmmAicc) is dropped while that is lower.
+ * opts: as reduceModel, and fitCountMixedModel's (random, nAGQ, noise, link). The random effect
+ * stays as chosen for the starting model. Returns as reduceModel, with fit the final GLMM.
+ */
+export function reduceGLMM(study, formula, { method = 'p', alphaOut = 0.10, keep = [], hierarchy = true, ...opts } = {}) {
+  if (method !== 'p' && method !== 'aicc') throw new Error(`method must be "p" or "aicc", not "${method}"`);
+  let fit = fitCountMixedModel(study, formula, opts);
+  const fo = { ...opts, random: fit.random.id };
+  const own = (f) => f.model.terms.filter(t => !t.block);
+  const start = { formula: formulaOf(fit.response, fit.model, own(fit).map(t => t.label)), aicc: glmmAicc(fit) };
+  const steps = [];
+  for (;;) {
+    const labels = own(fit).map(t => t.label);
+    const before = new Set(hierarchyViolations({ terms: own(fit) }).map(v => v.term));
+    const cands = labels.filter(l => !keep.includes(l)).filter(l => !hierarchy || hierarchyViolations({ terms: own(fit).filter(t => t.label !== l) }).every(v => before.has(v.term)));
+    if (!cands.length) break;
+    const trials = cands.map(l => {
+      const g = fitCountMixedModel(study, formulaOf(fit.response, fit.model, labels.filter(x => x !== l)), fo);
+      return { drop: l, fit: g, ...glmmDropTest(fit, g, l), aicc: glmmAicc(g) };
+    });
+    let pick;
+    if (method === 'p') {
+      pick = trials.reduce((a, c) => (c.p > a.p ? c : a));
+      if (!(pick.p > alphaOut)) break;
+    } else {
+      pick = trials.reduce((a, c) => (c.aicc < a.aicc ? c : a));
+      if (!(pick.aicc < glmmAicc(fit))) break;
+    }
+    fit = pick.fit;
+    steps.push({ drop: pick.drop, df: pick.df, chi2: pick.chi2, ...(pick.F !== undefined ? { F: pick.F, ddf: pick.ddf } : {}), p: pick.p, aicc: pick.aicc, sigma: fit.sigma,
+      formula: formulaOf(fit.response, fit.model, own(fit).map(t => t.label)) });
+  }
+  return { method, glmm: true, start, steps, formula: formulaOf(fit.response, fit.model, own(fit).map(t => t.label)), fit };
 }

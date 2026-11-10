@@ -4,7 +4,8 @@
 // Gauss–Hermite quadrature (nAGQ = 25) and the Laplace approximation (nAGQ = 1); then the
 // boundary, the likelihood-ratio tests, study fits with random whole plots and blocks, and by
 // simulation the coverage of the intervals for a whole-plot factor and of the prediction interval
-// for a new run in a new whole plot.
+// for a new run in a new whole plot; and model reduction (issue #78) against backward elimination
+// of glmer fits (tests/ref/reduce_glmm_r.R).
 import { readFileSync } from 'node:fs';
 import { section, check, near, throws, done } from './lib/check.mjs';
 import { fitGLMM, glmmTests, glmmCompare, glmmPredict, glmmLoglikAt, glmmConfint, fitCountMixedModel, predictCountMixed, randomGroupOf } from '../js/model/glmm.js';
@@ -16,6 +17,7 @@ import { splitPlotFull } from '../js/design/splitplot.js';
 import { toStudyDesign, fullFactorial } from '../js/design/factorial.js';
 import { runVirtual, hashUniform, countQuantile } from '../js/learn/process.js';
 import { normal } from '../js/dist.js';
+import { reduceGLMM } from '../js/model/reduce.js';
 
 const F = JSON.parse(readFileSync(new URL('./fixtures/glmm-r.json', import.meta.url), 'utf8'));
 const fs3 = ['A', 'B', 'C'].map(id => ({ id, type: 'continuous', low: -1, high: 1, transform: 'none' }));
@@ -150,6 +152,33 @@ section('by simulation: whole-plot factors and new whole plots, with the small-s
     && Math.abs(f.se[1] / f.seWald[1] - Math.sqrt(1.2)) < 1e-12 && f.se[2] === f.seWald[2]);
   const t = glmmTests(f, 2);
   check('… its likelihood-ratio test is χ²/df as an F on (1, 10); B\'s a χ²', t[0].term === 'T' && t[0].ddf === 10 && Math.abs(t[0].F - t[0].chi2) < 1e-12 && t[1].F === undefined);
+}
+
+section('model reduction against backward elimination of lme4::glmer fits');
+// glmer's AIC for nAGQ > 1 leaves out a constant (lme4 1.x) or not (2.x): AICc is compared as the
+// change from the starting model's, which both share.
+const R = JSON.parse(readFileSync(new URL('./fixtures/reduce-glmm-r.json', import.meta.url), 'utf8'));
+const studyOfCase = (c) => {
+  const d = c.input.data, ids = Object.keys(d).filter(k => k.length === 1 && k !== 'g' && k !== 'y');
+  const runs = d.y.map((_, i) => ({ run: i + 1, settings: Object.fromEntries(ids.map(id => [id, d[id][i]])), [c.input.group]: d.g[i] }));
+  return createStudy({ aikidoe: 1, seed: 1, factors: ids.map(id => ({ id, low: -1, high: 1 })),
+    responses: [{ id: 'y', distribution: c.input.distribution, ...(c.input.trials ? { trials: c.input.trials } : {}) }],
+    design: { runs }, observations: d.y.map((v, i) => ({ run: i + 1, response: 'y', value: v })) });
+};
+for (const c of R.cases) {
+  const st = studyOfCase(c), r = reduceGLMM(st, c.input.formula, { method: c.input.method, alphaOut: c.input.alphaOut, random: c.input.group });
+  const want = c.output.steps;
+  check(`${c.name}: the same terms dropped in the same order (${want.map(s => s.drop).join(', ')})`, JSON.stringify(r.steps.map(s => s.drop)) === JSON.stringify(want.map(s => s.drop)), r.steps.map(s => s.drop).join(', '));
+  check(`${c.name}: the same final model`, JSON.stringify(r.fit.model.terms.map(t => t.label)) === JSON.stringify(c.output.final));
+  if (r.steps.length !== want.length) continue;
+  check(`${c.name}: whole-plot or block-level terms as F tests on the same df`, r.steps.every((s, i) => (s.F === undefined) === (want[i].F === undefined) && (s.ddf ?? 0) === (want[i].ddf ?? 0) && s.df === want[i].df));
+  near(`${c.name}: each step's χ², p and change in AICc`, r.steps.map(s => [s.chi2, s.p, s.aicc - r.start.aicc]), want.map(s => [s.chi2, s.p, s.daicc]), { rel: 2e-4, abs: 2e-4 });
+}
+{
+  const c = R.cases[0], st = studyOfCase(c);
+  const k = reduceGLMM(st, c.input.formula, { keep: ['B'] });
+  check('keep: B stays (and so the reduction stops short of it)', k.fit.model.terms.some(t => t.label === 'B') && !k.steps.some(s => s.drop === 'B'));
+  throws('unknown method', () => reduceGLMM(st, 'y ~ A', { method: 'bic' }), /method must be/);
 }
 
 done();
