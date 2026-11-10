@@ -59,6 +59,29 @@ are drawn on it as open circles, faded when their other factors differ from the 
 (the filled circle); for a mixture, the triangle shows each run's shares of the three components.
 A sweet spot with no runs near it rests on the model alone. The robustness map over two control
 factors shows the runs the same way.
+`doe plot STUDY --desirability A,B` draws it as SVG, the other factors at the best settings.
+
+For the conversion study (one of the app's examples: maximise conversion, at least 74 %, and keep
+the by-product low, at most 6 %), the goals pull apart — the by-product rises with temperature —
+so the best settings sit below the conversion maximum:
+
+```console
+$ doe optimise examples/conversion-ccd.aikidoe.json
+models: conv ~ quadratic; bypr ~ quadratic
+region: cube
+
+best settings: T=161.316, time=51.5617
+overall desirability D = 0.6532
+response  predicted  95% CI         goal                d
+--------  ---------  -------------  -------------  ------
+conv          78.72  77.74 … 79.71  max (74 → 80)  0.7868
+bypr          3.831  3.556 … 4.106  min (2 ← 6)    0.5423
+$ doe plot examples/conversion-ccd.aikidoe.json --desirability T,time --out conv-overlay.svg
+overall desirability over T and time: up to 0.653; 9 runs drawn; ✚ the best settings (D = 0.653)
+wrote conv-overlay.svg
+```
+
+![The overall desirability over temperature and time (coded): zero where the conversion is below 74 % or the by-product above 6 %, highest at the best settings (✚), with the nine runs inside the factor ranges.](img/conv-overlay.svg)
 
 ## Robust design
 

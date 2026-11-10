@@ -1,0 +1,318 @@
+{
+  "aikidoe": 1,
+  "name": "Conversion optimisation",
+  "description": "Rotatable CCD, two factors; simulated data with a maximum inside the region.",
+  "seed": 21,
+  "factors": [
+    {
+      "id": "T",
+      "name": "Temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": false,
+      "low": 150,
+      "high": 170,
+      "transform": "none"
+    },
+    {
+      "id": "time",
+      "name": "Time",
+      "type": "continuous",
+      "units": "min",
+      "htc": false,
+      "low": 20,
+      "high": 80,
+      "transform": "log"
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "conv",
+      "name": "Conversion",
+      "units": "%",
+      "goal": "maximize",
+      "target": 80,
+      "lower": 74,
+      "levels": [
+        "run"
+      ]
+    },
+    {
+      "id": "bypr",
+      "name": "By-product",
+      "units": "%",
+      "goal": "minimize",
+      "target": 2,
+      "upper": 6,
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "ccd",
+    "params": {
+      "alpha": 1.414213562373095,
+      "alphaRule": "rotatable",
+      "inscribed": false,
+      "cubeRuns": 4,
+      "cubeGenerators": [],
+      "centrePoints": 5,
+      "seed": 21
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 5,
+        "kind": "factorial",
+        "settings": {
+          "T": 150,
+          "time": 20
+        }
+      },
+      {
+        "run": 2,
+        "order": 8,
+        "kind": "factorial",
+        "settings": {
+          "T": 170,
+          "time": 20
+        }
+      },
+      {
+        "run": 3,
+        "order": 2,
+        "kind": "factorial",
+        "settings": {
+          "T": 150,
+          "time": 80
+        }
+      },
+      {
+        "run": 4,
+        "order": 11,
+        "kind": "factorial",
+        "settings": {
+          "T": 170,
+          "time": 80
+        }
+      },
+      {
+        "run": 5,
+        "order": 13,
+        "kind": "centre",
+        "settings": {
+          "T": 160,
+          "time": 40
+        }
+      },
+      {
+        "run": 6,
+        "order": 3,
+        "kind": "centre",
+        "settings": {
+          "T": 160,
+          "time": 40
+        }
+      },
+      {
+        "run": 7,
+        "order": 9,
+        "kind": "centre",
+        "settings": {
+          "T": 160,
+          "time": 40
+        }
+      },
+      {
+        "run": 8,
+        "order": 10,
+        "kind": "centre",
+        "settings": {
+          "T": 160,
+          "time": 40
+        }
+      },
+      {
+        "run": 9,
+        "order": 6,
+        "kind": "centre",
+        "settings": {
+          "T": 160,
+          "time": 40
+        }
+      },
+      {
+        "run": 10,
+        "order": 7,
+        "kind": "axial",
+        "settings": {
+          "T": 145.85786437626905,
+          "time": 40
+        }
+      },
+      {
+        "run": 11,
+        "order": 4,
+        "kind": "axial",
+        "settings": {
+          "T": 174.14213562373095,
+          "time": 40
+        }
+      },
+      {
+        "run": 12,
+        "order": 1,
+        "kind": "axial",
+        "settings": {
+          "T": 160,
+          "time": 15.008569089859279
+        }
+      },
+      {
+        "run": 13,
+        "order": 12,
+        "kind": "axial",
+        "settings": {
+          "T": 160,
+          "time": 106.60576570760895
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 12,
+      "response": "conv",
+      "value": 70.4
+    },
+    {
+      "run": 12,
+      "response": "bypr",
+      "value": 2.89
+    },
+    {
+      "run": 3,
+      "response": "conv",
+      "value": 67.44
+    },
+    {
+      "run": 3,
+      "response": "bypr",
+      "value": 2.58
+    },
+    {
+      "run": 6,
+      "response": "conv",
+      "value": 78.66
+    },
+    {
+      "run": 6,
+      "response": "bypr",
+      "value": 3.48
+    },
+    {
+      "run": 11,
+      "response": "conv",
+      "value": 76.36
+    },
+    {
+      "run": 11,
+      "response": "bypr",
+      "value": 6.94
+    },
+    {
+      "run": 1,
+      "response": "conv",
+      "value": 66.04
+    },
+    {
+      "run": 1,
+      "response": "bypr",
+      "value": 1.75
+    },
+    {
+      "run": 9,
+      "response": "conv",
+      "value": 76.31
+    },
+    {
+      "run": 9,
+      "response": "bypr",
+      "value": 3.81
+    },
+    {
+      "run": 10,
+      "response": "conv",
+      "value": 65.41
+    },
+    {
+      "run": 10,
+      "response": "bypr",
+      "value": 2.53
+    },
+    {
+      "run": 2,
+      "response": "conv",
+      "value": 72.26
+    },
+    {
+      "run": 2,
+      "response": "bypr",
+      "value": 5.36
+    },
+    {
+      "run": 7,
+      "response": "conv",
+      "value": 77.38
+    },
+    {
+      "run": 7,
+      "response": "bypr",
+      "value": 3.78
+    },
+    {
+      "run": 8,
+      "response": "conv",
+      "value": 77.67
+    },
+    {
+      "run": 8,
+      "response": "bypr",
+      "value": 3.23
+    },
+    {
+      "run": 4,
+      "response": "conv",
+      "value": 79.03
+    },
+    {
+      "run": 4,
+      "response": "bypr",
+      "value": 5.59
+    },
+    {
+      "run": 13,
+      "response": "conv",
+      "value": 76.4
+    },
+    {
+      "run": 13,
+      "response": "bypr",
+      "value": 3.98
+    },
+    {
+      "run": 5,
+      "response": "conv",
+      "value": 78.64
+    },
+    {
+      "run": 5,
+      "response": "bypr",
+      "value": 3.26
+    }
+  ],
+  "history": []
+}

@@ -4,11 +4,15 @@
 //   node tools/gen-manual.mjs              regenerate the reference pages (CLI, study format), in the
 //                                          manual and in the agent skill (skills/aikidoe/references)
 //   node tools/gen-manual.mjs --outputs    also re-run every console block and write its output
-//                                          into the page (review the diff before committing)
+//                                          into the page (review the diff before committing), and
+//                                          save the pictures the page shows (issue #97): a page's
+//                                          ![…](img/NAME.svg) is the file NAME.svg its console
+//                                          blocks wrote (doe plot … --out NAME.svg), kept in
+//                                          docs/manual/img/
 //
 // The tests (tests/manual.test.mjs) use the same functions without writing: generated pages must
 // match, and every console block's output must match what the page shows.
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, cpSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, cpSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -150,6 +154,10 @@ ${s.$defs.constraint.description}: a string, or \`{ "expr": …, "units": "natur
 
 // ---------------------------------------------------------------- console blocks
 
+/** The pictures a page shows: the NAME.svg of each ![…](img/NAME.svg). */
+export const pictureRefs = (md) => [...new Set([...md.matchAll(/!\[[^\]]*\]\(img\/([\w.-]+\.svg)\)/g)].map(m => m[1]))];
+export const IMG = join(MANUAL, 'img');
+
 /** The console blocks and file blocks of a page, in order. */
 export function blocksOf(md) {
   return parse(md).filter(b => b.type === 'code' && (b.lang === 'console' || b.lang === 'file'));
@@ -171,7 +179,8 @@ export function outputMatches(expected, actual) {
 
 /**
  * Run a page's blocks in a fresh directory (with examples/ copied in). Returns
- * [{ block, commands: [{ cmd, expected, actual, code }] }].
+ * [{ block, commands: [{ cmd, expected, actual, code }] }], with .pictures: { NAME.svg: the file
+ * the blocks wrote, for each picture the page shows }.
  */
 export function runPage(md) {
   const dir = mkdtempSync(join(tmpdir(), 'aikidoe-manual-'));
@@ -193,6 +202,7 @@ export function runPage(md) {
       }
       results.push({ block: b, commands: cmds });
     }
+    results.pictures = Object.fromEntries(pictureRefs(md).filter(f => existsSync(join(dir, f))).map(f => [f, readFileSync(join(dir, f), 'utf8')]));
   } finally { rmSync(dir, { recursive: true, force: true }); }
   return results;
 }
@@ -211,8 +221,7 @@ export function shellWords(s) {
 }
 
 /** Rewrite a page with the actual outputs of its console blocks (keeping "…" elisions out). */
-export function withOutputs(md) {
-  const res = runPage(md);
+export function withOutputs(md, res = runPage(md)) {
   let out = md;
   for (const { block, commands } of res) {
     const text = commands.map(c => `$ ${c.cmd}\n${c.actual}`.replace(/\n$/, '')).join('\n');
@@ -233,8 +242,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     for (const dir of [MANUAL, SKILL, SKILL_REFS]) for (const f of readdirSync(dir).filter(f => f.endsWith('.md') && (!only.length || only.includes(f.replace(/\.md$/, ''))))) {
       const md = readFileSync(join(dir, f), 'utf8');
       if (!blocksOf(md).some(b => b.lang === 'console')) continue;
-      const next = withOutputs(md);
+      const res = runPage(md), next = withOutputs(md, res);
       if (next !== md) { writeFileSync(join(dir, f), next); console.log(`updated outputs in ${f}`); }
+      for (const [name, svg] of Object.entries(res.pictures)) {
+        mkdirSync(IMG, { recursive: true });
+        const path = join(IMG, name);
+        if (!existsSync(path) || readFileSync(path, 'utf8') !== svg) { writeFileSync(path, svg); console.log(`updated picture img/${name}`); }
+      }
     }
   }
 }

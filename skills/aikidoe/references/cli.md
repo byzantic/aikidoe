@@ -132,6 +132,9 @@ Commands
        variance dispersion graph
   plot STUDY --contour A,B --model "y ~ …" [--at "C=0.5,…"] [--colour response|residual|none] [--out FILE.svg]
        the fitted response over two factors, the runs on it, the stationary point of a quadratic
+  plot STUDY --desirability A,B [--model "y ~ …" …] [--at "C=150,…"] [--out FILE.svg]
+       the overall desirability over two factors (the others at --at, natural units, else at the
+       best settings), with the runs on it, as the Optimise step's overlay
   info STUDY
 
 Every command takes --json: one JSON object on stdout ({ schema: "aikidoe-cli/1", command, ok,

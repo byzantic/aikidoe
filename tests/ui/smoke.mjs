@@ -357,6 +357,9 @@ try {
   check('manual: links between pages stay in the viewer', (await mp.textContent('#page h1')) === 'Formula syntax' && (await mp.locator('#page table').count()) >= 1);
   await mp.goto(url + 'docs/manual/index.html?p=example-screening'); await mp.waitForSelector('#page h1');
   check('manual: console blocks and file blocks render', (await mp.locator('#page pre.lang-console').count()) >= 5 && (await mp.locator('#page pre.lang-file .file-name').count()) === 1);
+  await mp.goto(url + 'docs/manual/index.html?p=analysis'); await mp.waitForSelector('#page figure.picture svg');
+  check('manual: pictures inline (no <img> left), captioned, following the theme', (await mp.locator('#page figure.picture svg').count()) >= 1 && (await mp.locator('#page img').count()) === 0
+    && (await mp.locator('#page figure.picture figcaption').count()) >= 1 && (await mp.getAttribute('#page figure.picture svg', 'color')) === null);
   if (shots) await mp.screenshot({ path: `${shots}/15-manual.png`, fullPage: false });
   await mp.close();
   await page.goto(url); await page.waitForTimeout(300);

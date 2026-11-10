@@ -201,6 +201,25 @@ distance  min    mean   max
 wrote vp-vdg.svg
 ```
 
+![The variance dispersion graph of the rotatable CCD: one line, as it is the same in every direction, low out to about a coded distance of 1 and rising beyond. The dashed lines mark the faces (1) and the corners (√3) of the cube.](img/vp-vdg.svg)
+
+The same design pair by pair, and its prediction variance over temperature and pressure with the
+concentration at its centre: low and even over the middle, rising towards the axial points and
+beyond the corners of the cube, where no runs are.
+
+```console
+$ doe plot vp.aikidoe.json --pairs
+every pair of temp, P, C: 20 runs (factorial, centre, axial)
+wrote vp-pairs.svg
+$ doe plot vp.aikidoe.json --pv temp,P
+scaled prediction variance for quadratic over temp and P, the other factors at their centre: 3.209 … 43.17
+wrote vp-pv.svg
+```
+
+![Every pair of the three factors of the CCD, in coded units: the cube's corners (each twice: the third factor at its low and high level), the axial points on the axes, and in the middle 8 runs: the six centre runs and the third factor's two axial points.](img/vp-pairs.svg)
+
+![The scaled prediction variance of the CCD for the full quadratic over temperature and pressure, with concentration at its centre, and the runs projected onto that plane.](img/vp-pv.svg)
+
 ## Hierarchy
 
 A model is **hierarchical** if, whenever it contains an interaction (A:B) or a power (A²), it
