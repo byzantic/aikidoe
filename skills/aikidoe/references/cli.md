@@ -59,7 +59,7 @@ Commands
        to try another than the response's
        counts and proportions in a split-plot (or with blocks): a GLMM with a random intercept per
        whole plot (automatic) or block [--random wholePlot|block|none] [--nagq 25 (1: Laplace)];
-       likelihood-ratio tests, σ of the random effect and its test
+       likelihood-ratio tests, σ of the random effect and its test; --reduce works on it too
        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]

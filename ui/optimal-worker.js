@@ -2,13 +2,14 @@
 import { optimalDesign } from '../js/design/optimal.js';
 import { optimalAugment } from '../js/design/augment.js';
 import { optimalSplitPlot } from '../js/design/splitplot.js';
-import { reduceMixed } from '../js/model/reduce.js';
+import { reduceMixed, reduceGLMM } from '../js/model/reduce.js';
 self.onmessage = (e) => {
   const { study, opts, id, augment, splitPlot, reduce } = e.data;
   try {
-    if (reduce) {                          // mixed-model reduction (#15 follow-up)
-      const r = reduceMixed(reduce.study, reduce.formula, { method: reduce.method });
-      self.postMessage({ id, ok: true, formula: r.formula, steps: r.steps.map(s => ({ drop: s.drop, p: s.p, F: s.F, ddf: s.ddf, aicc: s.aicc })) });
+    if (reduce) {                          // mixed-model reduction (#15 follow-up), and for counts and proportions with a random effect (#78)
+      const r = reduce.glmm ? reduceGLMM(reduce.study, reduce.formula, { method: reduce.method, random: reduce.glmm.random })
+        : reduceMixed(reduce.study, reduce.formula, { method: reduce.method });
+      self.postMessage({ id, ok: true, formula: r.formula, steps: r.steps.map(s => ({ drop: s.drop, p: s.p, F: s.F, ddf: s.ddf, chi2: s.chi2, df: s.df, aicc: s.aicc })) });
       return;
     }
     if (splitPlot) { self.postMessage({ id, ok: true, design: optimalSplitPlot(study, opts) }); return; }

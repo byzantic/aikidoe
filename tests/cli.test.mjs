@@ -301,8 +301,10 @@ try {
   check('… --nagq 1: the Laplace approximation', o.kind === 'glmm' && o.nAGQ === 1);
   o = js('predict', 'jg.aikidoe.json', 'n ~ T + D', '--at', 'T=37,D=10', '--exposure', '100');
   check('predict --json (GLMM): a typical whole plot, the average over them, a new run in a new whole plot', o.kind === 'glmm' && o.predictions[0].marginal > o.predictions[0].fit && o.predictions[0].predLower < o.predictions[0].lower && o.predictions[0].predUpper > o.predictions[0].upper);
-  r = run('fit', 'jg.aikidoe.json', 'n ~ T + D', '--reduce');
-  check('… --reduce is refused for the GLMM', r.code === 1 && /drop terms by hand/.test(r.err));
+  r = run('fit', 'jg.aikidoe.json', 'n ~ T * D', '--reduce');
+  check('… --reduce: backward elimination of the GLMM, then its fit', r.code === 0 && /model reduction with a random whole plot effect \(backward, likelihood-ratio/.test(r.out) && /drop T:D/.test(r.out) && /reduced model: n ~ (T \+ )?D\s/.test(r.out) && /random intercept per whole plot/.test(r.out), r.out + r.err);
+  o = js('fit', 'jg.aikidoe.json', 'n ~ T * D', '--reduce', 'aicc');
+  check('… --json --reduce aicc: the steps, then the reduced GLMM', o.kind === 'glmm' && o.reduction.method === 'aicc' && o.reduction.steps.every(st => Number.isFinite(st.aicc)) && o.formula === `n ~ ${o.reduction.formula.split('~')[1].trim()}`, JSON.stringify(o.reduction));
   r = run('fit', 'jg.aikidoe.json', 'n ~ T + D');
   check('fit (GLMM): the table, σ and its test, the small-sample note', r.code === 0 && /random intercept per whole plot/.test(r.out) && /whole plot σ = .* on the log scale/.test(r.out) && /t on 10 − 2 = 8 df/.test(r.out), r.out + r.err);
   o = js('power', 'jg.aikidoe.json', '--model', 'T + D', '--response', 'n', '--baseline', '20', '--ratio', '1.5', '--sigma-wp', '0.3');

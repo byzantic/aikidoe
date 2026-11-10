@@ -2119,6 +2119,54 @@
                   }
                 }
               }
+            },
+            "reduction": {
+              "type": "object",
+              "description": "--reduce: backward elimination by likelihood-ratio tests (F on the group df for terms that vary only between groups) or AICc",
+              "required": [
+                "method",
+                "from",
+                "formula",
+                "steps"
+              ],
+              "properties": {
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "drop",
+                      "df",
+                      "chi2",
+                      "p",
+                      "aicc"
+                    ],
+                    "properties": {
+                      "drop": {
+                        "type": "string"
+                      },
+                      "df": {
+                        "type": "integer"
+                      },
+                      "chi2": {
+                        "type": "number"
+                      },
+                      "F": {
+                        "type": "number"
+                      },
+                      "ddf": {
+                        "type": "integer"
+                      },
+                      "p": {
+                        "type": "number"
+                      },
+                      "aicc": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         }

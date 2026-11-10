@@ -33,7 +33,7 @@ counts and proportions (Poisson, negative binomial, quasi-Poisson, binomial, pas
 exposure offsets and trials; rate and odds ratios with profile intervals, analysis of deviance,
 overdispersion and separation checks, Firth: `doe init --response count@poisson`, `doe fit
 [--distribution …] [--firth]`; in a split-plot (or with `--random block`) a GLMM with a random
-whole-plot or block intercept; power for a rate or odds ratio: `doe power --response R --baseline b
+whole-plot or block intercept (`--reduce` by its likelihood-ratio tests); power for a rate or odds ratio: `doe power --response R --baseline b
 --ratio r [--simulate N]`, in a split-plot with `--sigma-wp σ` for the whole-plot shift);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.

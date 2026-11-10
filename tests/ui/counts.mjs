@@ -13,6 +13,7 @@ import { splitPlotFull } from '../../js/design/splitplot.js';
 import { toStudyDesign } from '../../js/design/factorial.js';
 import { runVirtual } from '../../js/learn/process.js';
 import { fitCountMixedModel } from '../../js/model/glmm.js';
+import { reduceGLMM } from '../../js/model/reduce.js';
 import { num } from '../../js/format.js';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -152,6 +153,14 @@ try {
     check('none: the GLM, with the split-plot warning and the way back', await page.locator('#glm-tests').count() === 1 && await page.locator('#glm-splitplot').count() === 1);
     await page.click('#use-glmm'); await settle();
     check('… one click back to the random whole-plot effect', await page.locator('#glmm-fit').count() === 1);
+    // model reduction with the random effect (issue #78), in the worker
+    const want = reduceGLMM(sp, 'n ~ T * D', { random: 'wholePlot' });
+    await page.fill('#formula', 'n ~ T * D'); await page.keyboard.press('Tab'); await settle();
+    await page.click('#reduce-p');
+    await page.waitForFunction(() => /Reduced the model with a random whole plot effect/.test(document.querySelector('#reduction')?.textContent ?? ''), null, { timeout: 30000 });
+    await settle();
+    check(`reduce (p): the GLMM's backward elimination, run in the background (${want.formula})`, (await page.inputValue('#formula')) === want.formula && /likelihood-ratio/.test(await page.textContent('#reduction'))
+      && await page.locator('#glmm-fit').count() === 1, await page.textContent('#reduction'));
   }
 
   section('Design: power in a split-plot, with the whole-plot σ');

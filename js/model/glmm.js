@@ -300,6 +300,19 @@ export function glmmTests(fit, type = 2) {
   return rows;
 }
 
+/**
+ * The test of dropping one term from a GLMM: big the fit with it, small the refit without it (σ
+ * re-estimated). As glmmTests: χ² on df, or F = χ²/df on (df, m − q) when the term's columns vary
+ * only between groups (and big's σ is not 0). A term with no estimable columns has df 0 and p 1.
+ */
+export function glmmDropTest(big, small, term) {
+  const ti = big.model.terms.findIndex(t => t.label === term);
+  if (ti < 0) throw new Error(`${term} is not a term of the model`);
+  const cols = big.columns.map((_, j) => j).filter(j => big.assign[j] === ti && !big.aliased.includes(big.columns[j]));
+  if (!cols.length) return { df: 0, chi2: 0, p: 1 };
+  return lrTerm(big, cols, big, small);
+}
+
 /** Likelihood-ratio test of nested GLMM fits (small without some of big's terms): { df, chi2, p }. */
 export function glmmCompare(big, small) {
   const r = lrRow(big, small);

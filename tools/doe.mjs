@@ -47,7 +47,7 @@
 //        to try another than the response's
 //        counts and proportions in a split-plot (or with blocks): a GLMM with a random intercept per
 //        whole plot (automatic) or block [--random wholePlot|block|none] [--nagq 25 (1: Laplace)];
-//        likelihood-ratio tests, σ of the random effect and its test
+//        likelihood-ratio tests, σ of the random effect and its test; --reduce works on it too
 //        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
 //        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
 //        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
@@ -142,7 +142,7 @@ import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
 import { foldover, axialPoints, optimalAugment, confirmationRuns, appendStage, sequentialAliases, checkConfirmation } from '../js/design/augment.js';
 import { hierarchyViolations, parseFormula, modelMatrix } from '../js/model/formula.js';
 import { studyPower, detectableEffect, detectableRatio, simulatePower } from '../js/model/power.js';
-import { reduceModel, reduceMixed } from '../js/model/reduce.js';
+import { reduceModel, reduceMixed, reduceGLMM } from '../js/model/reduce.js';
 import { fitMixedModel, observationTable, randomEffects, predictMixed, runMeanWeights } from '../js/model/mixed.js';
 import { fitCountMixedModel, randomGroupOf, glmmTests, glmmConfint, predictCountMixed } from '../js/model/glmm.js';
 import { studyGlmmPower, studyGlmmMatrix, simulateGlmmPower, detectableGlmmRatio } from '../js/model/power-glmm.js';
@@ -559,8 +559,10 @@ function countRandomOf(study, opt, distribution) {
 }
 
 /** A GLMM (counts, proportions with a random whole-plot or block intercept): coefficients, σ, tests. */
+const glmmOpts = (random, opt) => ({ random, ...(opt.nagq !== undefined ? { nAGQ: int(opt.nagq, 'nagq') } : {}), ...(opt.distribution ? { noise: String(opt.distribution) } : {}), ...(opt.link ? { link: String(opt.link) } : {}) });
+
 function printGLMM(study, formula, random, opt) {
-  const fo = { random, ...(opt.nagq !== undefined ? { nAGQ: int(opt.nagq, 'nagq') } : {}), ...(opt.distribution ? { noise: String(opt.distribution) } : {}), ...(opt.link ? { link: String(opt.link) } : {}) };
+  const fo = glmmOpts(random, opt);
   const fit = fitCountMixedModel(study, formula, fo);
   const nm = noiseOf(fit), ratioName = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null, gs = `${fit.random.name}s`;
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'} + a random intercept per ${fit.random.name}`);
@@ -605,9 +607,20 @@ function cmdFit({ pos, opt }) {
   if (glmResp && !opt.ols) {
     const g = countRandomOf(study, opt, glmResp);
     if (g) {
-      if (opt.reduce) fail('--reduce: model reduction of a model with a random effect for counts is not available; drop terms by hand, using its likelihood-ratio tests');
       if (opt.firth) fail('--firth: Firth\'s penalised likelihood is for fixed-effect models; with separated proportions, try --random none --firth');
-      return printGLMM(study, formula, g, opt);
+      let f = formula;
+      if (opt.reduce) {
+        const method = opt.reduce === true ? 'p' : String(opt.reduce);
+        const r = reduceGLMM(study, formula, { method, ...glmmOpts(g, opt), ...(opt['alpha-out'] !== undefined ? { alphaOut: Number(opt['alpha-out']) } : {}), keep: list(opt.keep).flatMap(k => String(k).split(',')).filter(Boolean) });
+        const gs = `${r.fit.random.name}s`;
+        out(`model reduction with a random ${r.fit.random.name} effect (${method === 'p' ? `backward, likelihood-ratio p > ${opt['alpha-out'] ?? 0.1}; terms that vary only between ${gs} as F` : 'backward, AICc'}; hierarchy kept), from ${r.start.formula}:`);
+        if (!r.steps.length) out('  nothing to remove');
+        for (const st of r.steps) out(`  drop ${st.drop.padEnd(12)} ${st.F !== undefined ? `F = ${num(st.F, 4)} on (${st.df}, ${st.ddf}) df` : `χ² = ${num(st.chi2, 4)} on ${st.df} df`}, p = ${pval(st.p)}  AICc → ${num(st.aicc, 6)}`);
+        out(`reduced model: ${r.formula}   (a suggestion: put a term back by editing the formula)\n`);
+        put({ reduction: { method, from: r.start.formula, formula: r.formula, steps: r.steps.map(st => ({ drop: st.drop, df: st.df, chi2: st.chi2, ...(st.F !== undefined ? { F: st.F, ddf: st.ddf } : {}), p: st.p, aicc: st.aicc })) } });
+        f = r.formula;
+      }
+      return printGLMM(study, f, g, opt);
     }
   }
   if (!opt.ols && !glmResp) {
