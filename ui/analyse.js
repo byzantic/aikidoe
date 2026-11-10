@@ -34,11 +34,11 @@ function background(msg, onDone) {
 
 function reduction(r, response, undoTo, close) {
   if (!r || r.response !== response) return null;
-  if (r.running) return h('div', { class: 'msg', id: 'reduction' }, r.glmm ? `Reducing the model with a random ${r.group} effect (${r.method === 'p' ? 'likelihood-ratio tests' : 'AICc'}); each step refits it without each term in turn…`
+  if (r.running) return h('div', { class: 'msg', id: 'reduction' }, r.glmm ? `Reducing the model with ${r.nested ? `random ${r.group} effects` : `a random ${r.group} effect`} (${r.method === 'p' ? 'likelihood-ratio tests' : 'AICc'}); each step refits it without each term in turn…`
     : `Reducing the mixed model (${r.method === 'p' ? 'Kenward–Roger p-values' : 'AICc of maximum-likelihood fits'}); each step refits the model…`);
   if (r.error) return h('div', { class: 'msg warning', id: 'reduction' }, r.error, ' ', h('button', { class: 'btn small', onclick: close }, 'ok'));
   return h('div', { class: 'msg', id: 'reduction' },
-    h('div', {}, h('b', {}, r.glmm ? `Reduced the model with a random ${r.group} effect by ${r.method === 'p' ? 'likelihood-ratio p-value (drop while p > 0.10)' : 'AICc'}`
+    h('div', {}, h('b', {}, r.glmm ? `Reduced the model with ${r.nested ? `random ${r.group} effects` : `a random ${r.group} effect`} by ${r.method === 'p' ? 'likelihood-ratio p-value (drop while p > 0.10)' : 'AICc'}`
       : `Reduced ${r.mixed ? 'the mixed model ' : ''}${r.method === 'p' ? `by ${r.mixed ? 'Kenward–Roger ' : ''}p-value (drop while p > 0.10)` : r.mixed ? 'by AICc (maximum likelihood)' : 'by AICc'}`), ', hierarchy kept: ',
       r.steps.length ? r.steps.map((st, i) => [i ? ', ' : '', h('span', { class: 'mono' }, st.drop), r.method === 'p' ? ` (p ${pval(st.p)})` : '']) : 'nothing to remove', '.'),
     h('div', { class: 'row small', style: 'margin-top:6px' }, 'This is a suggestion: edit the formula to put a term back.',
@@ -46,10 +46,19 @@ function reduction(r, response, undoTo, close) {
 }
 
 // counts and proportions: the random intercept the analysis uses ('wholePlot', 'block' or 'none')
+// (and the choices: each grouping the design has, and each nested combination of them)
+const GROUP_LABEL = { block: 'blocks', wholePlot: 'whole plots', run: 'runs (repeated plates)' };
 function countRandomChoice(study, resp, ui) {
   const can = (id) => { try { return !!randomGroupOf(study, id); } catch { return false; } };
-  const hasWP = can('wholePlot'), hasB = can('block');
-  return { hasWP, hasB, choice: ui.countRandom ?? (hasWP && ['poisson', 'negbin', 'binomial', 'bernoulli'].includes(resp.distribution) ? 'wholePlot' : 'none') };
+  const ids = ['block', 'wholePlot', 'run'].filter(can), hasWP = ids.includes('wholePlot');
+  const options = [];
+  for (let mask = 1; mask < 1 << ids.length; mask++) {
+    const sub = ids.filter((_, i) => mask & (1 << i));
+    let g; try { g = randomGroupOf(study, sub.join(',')); } catch { continue; }
+    options.push({ value: g.id, label: (g.levels ?? [g]).map(l => GROUP_LABEL[l.id]).join(' ⊃ ') + (sub.length > 1 ? ' (nested)' : '') });
+  }
+  options.sort((a, b) => a.value.split(',').length - b.value.split(',').length);
+  return { options, choice: ui.countRandom ?? (hasWP && ['poisson', 'negbin', 'binomial', 'bernoulli'].includes(resp.distribution) ? 'wholePlot' : 'none') };
 }
 
 export function render(ctx) {
@@ -78,12 +87,12 @@ export function render(ctx) {
             const countRandom = resp.distribution && !ui.firth ? countRandomChoice(study, resp, ui).choice : 'none';
             if (countRandom !== 'none') {
               // counts and proportions with a random effect: each step refits several GLMMs, so in the worker
-              const group = countRandom === 'wholePlot' ? 'whole plot' : 'block';
-              set({ reduce: { response: resp.id, method: m, start: formula, running: true, glmm: true, group } });
+              const g0 = randomGroupOf(study, countRandom), group = (g0.levels ?? [g0]).map(l => l.name).join(' and '), nested = !!g0.levels;
+              set({ reduce: { response: resp.id, method: m, start: formula, running: true, glmm: true, group, nested } });
               background({ reduce: { study, formula, method: m, glmm: { random: countRandom } } }, (res) => {
                 const cur = state.ui.analyse ?? {};
                 if (!res.ok) { setUI({ analyse: { ...cur, reduce: { response: resp.id, error: res.error } } }); return; }
-                setUI({ analyse: { ...cur, reduce: { response: resp.id, method: m, start: formula, steps: res.steps, glmm: true, group }, formulas: { ...(cur.formulas ?? {}), [resp.id]: res.formula } } });
+                setUI({ analyse: { ...cur, reduce: { response: resp.id, method: m, start: formula, steps: res.steps, glmm: true, group, nested }, formulas: { ...(cur.formulas ?? {}), [resp.id]: res.formula } } });
               });
               return;
             }
@@ -111,9 +120,9 @@ export function render(ctx) {
   // counts and proportions: a generalised linear model, with a random intercept per whole plot (a
   // split-plot, automatically) or per block (when asked)
   if (resp.distribution) {
-    const { hasWP, hasB, choice } = countRandomChoice(study, resp, ui);
-    const picker = hasWP || hasB ? h('div', { class: 'row small', id: 'count-random' }, h('label', { class: 'inline' }, 'random effect',
-      select([...(hasWP ? [{ value: 'wholePlot', label: 'whole plots' }] : []), ...(hasB ? [{ value: 'block', label: 'blocks' }] : []), { value: 'none', label: 'none (runs independent)' }], choice,
+    const { options, choice } = countRandomChoice(study, resp, ui);
+    const picker = options.length ? h('div', { class: 'row small', id: 'count-random' }, h('label', { class: 'inline' }, 'random effect',
+      select([...options, { value: 'none', label: 'none (runs independent)' }], choice,
         (v) => set({ countRandom: v, reduce: null }), { 'aria-label': 'random effect' })),
       help('analysis', 'random-effects-for-counts-and-proportions')) : null;
     if (choice !== 'none' && !ui.firth) {

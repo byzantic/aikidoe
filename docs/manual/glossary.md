@@ -74,6 +74,10 @@ independently. See [mixture designs](designs-mixture.md).
 **Mixed model** — a model with fixed effects (the factors) and random effects (whole plots, runs,
 wafers) for nested sources of variation.
 
+**Nested random effects** — groupings inside groupings, each with its own random shift: whole
+plots within days, plates within runs. Each factor is judged against the variation at the level
+where it changes ([random effects for counts](analysis.md#random-effects-for-counts-and-proportions)).
+
 **Odds ratio** — with a logit link, e^b: the factor by which the odds of success change per coded unit.
 
 **Overdispersion** — counts or proportions varying more than the Poisson or binomial allows
@@ -123,6 +127,9 @@ there are infinite; Firth's penalised likelihood gives finite estimates.
 
 **Split-plot** — a design in which hard-to-change factors are set once per whole plot and the
 others vary within it.
+
+**Stratum** — the level of a design at which a factor changes (between days, between whole plots
+within a day, within whole plots), and so the variation it is judged against.
 
 **Surrogate** — a model fitted to a simulator's runs, used in its place for fast prediction.
 

@@ -85,6 +85,49 @@ for (const c of F.cases) {
   }
 }
 
+section('nested groupings: days ⊃ whole plots');
+{
+  // as tests/ref/power_glmm_nested_r.R: runs fastest, then whole plots, then days
+  const layout = (days, wpd, k) => {
+    const rows = [], day = [], wp = []; let i = 0;
+    for (let dd = 1; dd <= days; dd++) for (let w = 1; w <= wpd; w++) for (let r = 1; r <= k; r++) { const W = (dd - 1) * wpd + w; rows.push({ D: dd % 2 ? -1 : 1, T: W % 2 ? -1 : 1, B: i++ % 2 ? 1 : -1 }); day.push(dd); wp.push(W); }
+    const fs3 = ['D', 'T', 'B'].map(id => ({ id, type: 'continuous', low: -1, high: 1, transform: 'none' }));
+    return { mm: modelMatrix(parseFormula('D + T + B', fs3), fs3, rows), levels: [{ name: 'day', labels: day }, { name: 'whole plot', labels: wp }] };
+  };
+  const { mm, levels } = layout(6, 4, 2), o = { distribution: 'poisson', baseline: 15, ratio: { D: 2.2, T: 1.6, B: 1.25 }, sigma: [0.35, 0.3] };
+  const p = glmmPowerFromMatrix(mm, levels, o);
+  check('strata: D between days (F on 6 − 2), T between whole plots within days (F on (24 − 6) − 1), B by χ²', p.terms[0].ddf === 4 && p.terms[0].level === 'day' && p.terms[1].ddf === 17 && p.terms[1].level === 'whole plot' && p.terms[2].test === 'chi2');
+  // λ for T against the full V = W⁻¹ + σ_day² ZZᵀ + σ_wp² (18/17) ZZᵀ, inverted whole
+  const b = ratioCoefficient('poisson', 'log', 15, 1.6), X = mm.X, n = X.length, mu = X.map(r => 15 * Math.exp(r[2] * b));
+  const s2d = 0.35 ** 2, s2w = 0.3 ** 2 * 18 / 17, dl = levels[0].labels, wl = levels[1].labels;
+  const Vm = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => (i === j ? 1 / mu[i] : 0) + (dl[i] === dl[j] ? s2d : 0) + (wl[i] === wl[j] ? s2w : 0)));
+  const inv = (A) => { const m = A.length, M = A.map((r, i) => [...r, ...A.map((_, j) => (i === j ? 1 : 0))]);
+    for (let c = 0; c < m; c++) { let q = c; for (let r = c + 1; r < m; r++) if (Math.abs(M[r][c]) > Math.abs(M[q][c])) q = r; [M[c], M[q]] = [M[q], M[c]];
+      const d = M[c][c]; for (let k = 0; k < 2 * m; k++) M[c][k] /= d; for (let r = 0; r < m; r++) if (r !== c) { const f = M[r][c]; for (let k = 0; k < 2 * m; k++) M[r][k] -= f * M[c][k]; } }
+    return M.map(r => r.slice(m)); };
+  const Vi = inv(Vm), XtVX = [0, 1, 2, 3].map(a => [0, 1, 2, 3].map(c => X.reduce((s, ra, i) => s + ra[a] * X.reduce((t, rc, j) => t + Vi[i][j] * rc[c], 0), 0)));
+  near('λ for the whole-plot factor from the full V, its σ² widened by 18/17', p.terms[1].lambda, b * b / inv(XtVX)[2][2], { rel: 1e-9 });
+  const det = detectableGlmmRatio(p, { power: 0.8 });
+  near('the detectable ratios have 80 % power', det.map(x => p.powerOf(1, p.lambdaAt(x.term, x.ratio), x.term)), [0.8, 0.8, 0.8], { abs: 1e-6 });
+  throws('crossed groupings are refused', () => glmmPowerFromMatrix(mm, [{ name: 'day', labels: dl }, { name: 'run', labels: mm.X.map(r => r[3]) }], { ...o }), /not nested/);
+  throws('a σ for each grouping', () => glmmPowerFromMatrix(mm, levels, { ...o, sigma: 0.3 }), /1 σ's for 2 groupings/);
+  const NF = JSON.parse(readFileSync(new URL('./fixtures/power-glmm-nested-r.json', import.meta.url), 'utf8'));
+  for (const c of NF.cases) {
+    const L = layout(c.input.days, c.input.wholePlotsPerDay, c.input.perWholePlot);
+    const a = glmmPowerFromMatrix(L.mm, L.levels, { distribution: 'poisson', baseline: c.input.baseline, ratio: c.input.ratio, sigma: [c.input.sigma.day, c.input.sigma.wp], alpha: c.input.alpha });
+    c.output.terms.forEach((t, i) => {
+      const x = a.terms.find(y => y.term === t), r = c.output.power[i], tol = Math.max(0.06, 3 * c.output.se[i]);
+      check(`${c.name}, ${t} (${x.level ?? 'runs'}): approximation ${x.power.toFixed(3)}, glmer simulation ${r.toFixed(3)} ± ${c.output.se[i].toFixed(3)}`, x.power - r <= tol && r - x.power <= (x.level ? 0.08 : tol));
+    });
+  }
+  {
+    const c = NF.cases[0], L = layout(c.input.days, c.input.wholePlotsPerDay, c.input.perWholePlot);
+    const s = simulateGlmmPower(L.mm, L.levels, { distribution: 'poisson', baseline: c.input.baseline, ratio: c.input.ratio, sigma: [c.input.sigma.day, c.input.sigma.wp], nsim: 60, seed: 4 });
+    const x = s.find(y => y.term === 'T'), i = c.output.terms.indexOf('T'), z = (x.power - c.output.power[i]) / Math.hypot(x.se, c.output.se[i]);
+    check(`${c.name}, T: simulated with fitGLMM (nested, Laplace) ${x.power.toFixed(3)} ± ${x.se.toFixed(3)}, with glmer ${c.output.power[i].toFixed(3)} (z = ${z.toFixed(2)})`, Math.abs(z) < 3 && x.nsim >= 55);
+  }
+}
+
 section('studies and errors');
 {
   const s0 = createStudy({ name: 'sp', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'B', low: 0, high: 1 }], responses: [{ id: 'n', distribution: 'poisson' }] });

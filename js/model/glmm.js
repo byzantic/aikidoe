@@ -38,7 +38,8 @@
 //   glmmCompare(big, small)       likelihood-ratio test of nested fits
 //   glmmPredict(fit, X, o)        predictions for a typical group, and averaged over groups
 //   fitCountMixedModel(study, formula, o)   a study's count or proportion response, with random
-//                                 blocks or whole plots; predictCountMixed(fit, settings, o)
+//                                 blocks, whole plots or runs (or several, nested: issue #78);
+//                                 predictCountMixed(fit, settings, o)
 import { qr, eigSym, chol, cholInverse } from '../linalg.js';
 import { normal as N, chi2, fDist, studentT, lgamma } from '../dist.js';
 import { LINKS, DISTRIBUTIONS, canonicalLink, family, fitGLM, predictiveInterval } from './glm.js';
@@ -151,8 +152,16 @@ function solveSPD(A, b) {
  * proportions for the binomial; groups: a label per row (block, whole plot). o: distribution
  * ('poisson', 'binomial' or 'bernoulli'), link, weights (binomial trials), offset (log exposure),
  * nAGQ (25; 1 is the Laplace approximation), group (its name, for messages: 'block', 'whole plot').
+ * groups may instead be a list [{ name, labels }] of nested groupings, outermost first: a random
+ * intercept for each (fitNested below; the Laplace approximation). Every fit has randoms: one entry
+ * per grouping, { name, m, sigma, sigmaSE, boundary, test, modes, coefficients, df, smallSample }.
  */
 export function fitGLMM(mm, y, groupLabels, o = {}) {
+  // several groupings ([{ name, labels }], outermost first): nested random intercepts
+  if (groupLabels.length && groupLabels[0] && typeof groupLabels[0] === 'object' && 'labels' in groupLabels[0]) {
+    if (groupLabels.length === 1) return fitGLMM(mm, y, groupLabels[0].labels, { ...o, group: groupLabels[0].name ?? o.group });
+    return fitNested(mm, y, groupLabels, o);
+  }
   const { X: X0, columns, assign, model } = mm, n = X0.length;
   if (y.length !== n || groupLabels.length !== n) throw new Error(`${y.length} responses and ${groupLabels.length} group labels for ${n} rows`);
   const noise = o.distribution ?? 'poisson', distribution = noise === 'bernoulli' ? 'binomial' : noise;
@@ -257,10 +266,222 @@ export function fitGLMM(mm, y, groupLabels, o = {}) {
     groupLevel: columns.filter((_, j) => level[j]), dfGroups: dfG, smallSample: kG,
     sigmaTest: { chi2: lr, df: 1, p: lr > 0 ? 0.5 * chi2.sf(lr, 1) : 1 },
     modes: Object.fromEntries(groups.names.map((g, i) => [g, modes[i]])),
+    // the same, as the list every fit has (one entry here; outermost first for nested fits)
+    randoms: [{ name: gname, m: groups.m, sigma, sigmaSE, boundary, test: { chi2: lr, df: 1, p: lr > 0 ? 0.5 * chi2.sf(lr, 1) : 1 },
+      modes: Object.fromEntries(groups.names.map((g, i) => [g, modes[i]])), coefficients: columns.filter((_, j) => level[j] && !boundary), df: boundary ? undefined : dfG, smallSample: kG, labels: groupLabels.map(String) }],
     loglik: final.ll, k, aic: -2 * final.ll + 2 * k, deviance: -2 * final.ll,
     fitted: mu, linear: eta, residuals: y.map((v, i) => v - mu[i]), pearson, overdispersion,
     converged, iter: it, warnings, glm,
     X0, y, weights: w, offset: off, dfRes: n - p - 1,
+  };
+}
+
+// ---------------------------------------------------------------- nested random intercepts (issue #78)
+//
+//   η_i = x_iβ + o_i + Σ_k σ_k u_{k, g_k(i)},   u ~ N(0, I)
+//
+// for groupings k = 1 … K, each nested in the one before (whole plots within blocks, plates within
+// runs within days). The likelihood factorises over the outermost groups; within one, the integral
+// over all its random effects (one for the group, one for each group of every inner grouping in it)
+// is by the Laplace approximation, as lme4::glmer does for several random effects: h(u) = Σ log f −
+// |u|²/2 at its mode û (Fisher scoring), and log ∫ ≈ h(û) − ½ log det H, H = I + Λ Zᵀ W Z Λ with the
+// Fisher weights W at û. (Adaptive quadrature stays for one random effect, as in lme4.)
+//
+// Small-sample correction, per stratum: each coefficient belongs to the outermost grouping (among
+// those whose σ is not 0) within whose groups it is constant, or to the runs. Stratum t of the active
+// groupings has u_t units (its groups, less those of the grouping outside it: whole plots within
+// blocks) and q_t coefficients; those coefficients get standard errors × √(u_t/(u_t − q_t)) and t
+// on u_t − q_t df, and likelihood-ratio tests of terms in the stratum F on that df — for one random
+// effect, the m − q above. σ_k = 0 is tested by dropping grouping k (σ re-estimated in the others),
+// against ½χ²₀ + ½χ²₁.
+
+/** The Laplace log-likelihood of (β, σ_1 … σ_K) for nested groupings, and the modes per cluster. */
+function loglikNested(data, beta, sigmas, uStart) {
+  const { X, y, w, off, fam, clusters } = data, L = fam.link, K = sigmas.length;
+  const eta0 = X.map((r, i) => { let s = off[i]; for (let j = 0; j < r.length; j++) s += r[j] * beta[j]; return s; });
+  let ll = 0;
+  const modes = new Array(clusters.length);
+  for (let c = 0; c < clusters.length; c++) {
+    const { rows, r, eff } = clusters[c];     // eff[a][k]: the local index of row rows[a]'s effect at grouping k
+    let u = uStart?.[c] ? uStart[c].slice() : new Array(r).fill(0);
+    const etaAt = (a, uu) => { let e = eta0[rows[a]]; for (let k = 0; k < K; k++) e += sigmas[k] * uu[eff[a][k]]; return e; };
+    const h = (uu) => { let s = 0; for (const v of uu) s -= v * v / 2; for (let a = 0; a < rows.length; a++) { const i = rows[a]; s += logf(fam, y[i], L.inv(etaAt(a, uu)), w[i]); } return s; };
+    const curvature = (uu) => {
+      const H = Array.from({ length: r }, (_, i) => Array.from({ length: r }, (__, j) => (i === j ? 1 : 0))), g = uu.map(v => -v);
+      for (let a = 0; a < rows.length; a++) {
+        const i = rows[a], e = etaAt(a, uu), mu = L.inv(e), d = L.deriv(e), v = fam.variance(mu), Wt = w[i] * d * d / v, sc = w[i] * (y[i] - mu) * d / v;
+        for (let k = 0; k < K; k++) {
+          const x = eff[a][k]; g[x] += sigmas[k] * sc;
+          for (let l = 0; l < K; l++) H[x][eff[a][l]] += Wt * sigmas[k] * sigmas[l];
+        }
+      }
+      return { H, g };
+    };
+    let hu = h(u);
+    for (let it = 0; it < 100; it++) {
+      const { H, g } = curvature(u);
+      const step = solveSPD(H, g);
+      if (!step || !step.every(Number.isFinite)) break;
+      let t = 1, un = u.map((v, j) => v + step[j]), hn = h(un);
+      for (let k = 0; k < 30 && !(hn >= hu - 1e-12); k++) { t /= 2; un = u.map((v, j) => v + t * step[j]); hn = h(un); }
+      const done = Math.max(...step.map((v, j) => Math.abs(t * v) / (1 + Math.abs(u[j])))) < 1e-10;
+      u = un; hu = hn;
+      if (done) break;
+    }
+    const { H } = curvature(u);
+    const Lc = chol(H).L;
+    let ld = 0; for (let j = 0; j < r; j++) ld += 2 * Math.log(Lc[j][j]);
+    ll += hu - ld / 2;
+    modes[c] = u;
+  }
+  return { ll, modes };
+}
+
+/** Nested groupings → clusters (by the outermost), with each row's local effect indices. Throws if not nested. */
+function nestClusters(levels, n) {
+  const idx = levels.map(l => indexGroups(l.labels));
+  // nesting: each group of grouping k lies within one group of grouping k − 1
+  for (let k = 1; k < levels.length; k++) {
+    const outer = new Map();
+    for (let i = 0; i < n; i++) {
+      const g = idx[k].idx[i], o = idx[k - 1].idx[i];
+      if (outer.has(g) && outer.get(g) !== o) throw new Error(`the ${levels[k].name}s are not nested within the ${levels[k - 1].name}s (${levels[k].name} ${idx[k].names[g]} is in more than one ${levels[k - 1].name}): crossed random effects are not available`);
+      outer.set(g, o);
+    }
+    if (idx[k].m <= idx[k - 1].m) throw new Error(`each ${levels[k - 1].name} has only one ${levels[k].name}: the two random effects cannot be told apart`);
+  }
+  const clusters = idx[0].rows.map(rows => {
+    const local = new Map(), key = (k, g) => `${k}:${g}`, at = (k, g) => { if (!local.has(key(k, g))) local.set(key(k, g), local.size); return local.get(key(k, g)); };
+    const eff = rows.map(i => levels.map((_, k) => at(k, idx[k].idx[i])));
+    return { rows, r: local.size, eff, local };
+  });
+  return { idx, clusters };
+}
+
+function fitNested(mm, y, levels, o) {
+  const { X: X0, columns, assign, model } = mm, n = X0.length, K = levels.length;
+  for (const l of levels) if (l.labels.length !== n) throw new Error(`${l.labels.length} ${l.name} labels for ${n} rows`);
+  const noise = o.distribution ?? 'poisson', distribution = noise === 'bernoulli' ? 'binomial' : noise;
+  if (!['poisson', 'binomial', 'negbin'].includes(distribution)) throw new Error(`random effects are available for Poisson and negative binomial counts, binomial proportions and pass/fail results, not ${noise}`);
+  const nAGQ = o.nAGQ ?? 1;
+  if (nAGQ !== 1) throw new Error('adaptive quadrature (nAGQ > 1) is for one random effect; with several, the fit is by the Laplace approximation (nAGQ 1), as lme4::glmer');
+  const link = o.link ?? canonicalLink(distribution), nb = distribution === 'negbin';
+  const famOf = nb ? (() => { const c = new Map(); return (th) => { if (!c.has(th)) { if (c.size > 64) c.clear(); c.set(th, family('negbin', link, th)); } return c.get(th); }; })() : () => family(distribution, link);
+  const w = o.weights ?? y.map(() => 1), off = o.offset ?? y.map(() => 0);
+  const { idx, clusters } = nestClusters(levels, n);
+  const names = levels.map(l => l.name), gname = names.join(' / ');
+  idx.forEach((g, k) => { if (g.m < 2) throw new Error(`a random ${names[k]} effect needs at least two ${names[k]}s`); });
+  if (idx[K - 1].m >= n) throw new Error(`every row is its own ${names[K - 1]}: a random ${names[K - 1]} effect needs ${names[K - 1]}s of more than one row`);
+  const warnings = [];
+  if (idx[0].m < 5) warnings.push(`the ${names[0]} σ is estimated from only ${idx[0].m} ${names[0]}s, so it is uncertain (and the tests that rest on it are rough)`);
+  const f = qr(X0, { tol: 1e-11 }), keep = columns.map((_, j) => j).filter(j => !f.aliased.includes(j));
+  const X = X0.map(r => keep.map(j => r[j])), p = keep.length;
+  const glm = fitGLM({ ...mm, X, columns: keep.map(j => columns[j]), assign: keep.map(j => assign[j]) }, y, { distribution, link, weights: w, offset: off });
+  const data = { X, y, w, off, clusters, fam: famOf(glm.theta) };
+  const dataAt = (th) => (nb ? { ...data, fam: famOf(Math.exp(th[p + K])) } : data);
+  let us = null;
+  const negll = (th) => -loglikNested(dataAt(th), th.slice(0, p), th.slice(p, p + K), us).ll;
+  // start: the GLM's β (and θ); each σ from a coarse grid, the others at 0.3
+  let th = [...glm.coef, ...levels.map(() => 0.3), ...(nb ? [Math.log(glm.theta)] : [])];
+  for (let k = 0; k < K; k++) {
+    let best = Infinity, bs = 0.3;
+    for (const s of [0.05, 0.15, 0.3, 0.6, 1, 1.6]) { const t2 = th.slice(); t2[p + k] = s; const v = negll(t2); if (v < best) { best = v; bs = s; } }
+    th[p + k] = bs;
+  }
+  const steps = () => th.map((v, j) => 1e-4 * Math.max(j >= p && j < p + K ? 0.1 : 0.5, Math.abs(v)));
+  let converged = false, it = 0;
+  for (it = 1; it <= 80; it++) {
+    us = loglikNested(dataAt(th), th.slice(0, p), th.slice(p, p + K)).modes;
+    const { f0, g, H } = hessian(negll, th, steps());
+    let d = solveSPD(H, g.map(v => -v));
+    if (!d) d = g.map(v => -v * 1e-2);
+    let t = 1, next, fn;
+    for (let k = 0; k < 40; k++) { next = th.map((v, j) => v + t * d[j]); fn = negll(next); if (fn <= f0 + 1e-12) break; t /= 2; }
+    const change = Math.max(...d.map((v, j) => Math.abs(t * v) / (1 + Math.abs(th[j]))));
+    if (!(fn <= f0 + 1e-12)) { converged = Math.max(...g.map(Math.abs)) < 1e-4; break; }
+    th = next;
+    if (change < 1e-8 || f0 - fn < 1e-12 * (1 + Math.abs(f0))) { converged = true; break; }
+  }
+  if (!converged) warnings.push(`the fit did not converge in ${it} iterations`);
+  // σ's at the boundary (each likelihood is even in its σ): set to 0 when that is no worse
+  for (let k = 0; k < K; k++) th[p + k] = Math.abs(th[p + k]);
+  const zero = levels.map(() => false);
+  for (let k = 0; k < K; k++) if (th[p + k] < 1e-4) { const t0 = th.slice(); t0[p + k] = 0; if (negll(t0) <= negll(th) + 1e-7) { th = t0; zero[k] = true; } }
+  const beta = th.slice(0, p), sigmas = th.slice(p, p + K), theta = nb ? Math.exp(th[p + K]) : undefined, fam = famOf(theta);
+  us = null;
+  const final = loglikNested(dataAt(th), beta, sigmas);
+  // covariance: the inverse Hessian over the free parameters (σ's at 0 held there)
+  const free = th.map((_, j) => j).filter(j => !(j >= p && j < p + K && zero[j - p]));
+  let covK, sigmaSE = levels.map(() => NaN), thetaSE;
+  if (zero.every(Boolean)) { covK = glm.cov; thetaSE = nb ? glm.thetaSE : undefined; }
+  else {
+    us = final.modes;
+    const sub = (x) => { const t2 = th.slice(); free.forEach((j, a) => { t2[j] = x[a]; }); return negll(t2); };
+    const st = steps();
+    const { H } = hessian(sub, free.map(j => th[j]), free.map(j => st[j]));
+    const V = cholInverse(chol(H.map((r, i) => r.map((v, j) => (v + H[j][i]) / 2))).L);
+    covK = V.slice(0, p).map(r => r.slice(0, p));
+    free.forEach((j, a) => { if (j >= p && j < p + K) sigmaSE[j - p] = Math.sqrt(V[a][a]); if (nb && j === p + K) thetaSE = theta * Math.sqrt(V[a][a]); });
+    us = null;
+  }
+  if (nb && theta > 1e3) warnings.push(`θ is very large (${theta.toPrecision(3)}): the counts vary no more than Poisson within ${names[K - 1]}s, so the Poisson model is the simpler choice`);
+  // strata: the active groupings, outermost first
+  const active = levels.map((_, k) => k).filter(k => !zero[k]);
+  const constantIn = (k, j) => idx[k].rows.every(I => I.every(i => X0[i][j] === X0[I[0]][j]));
+  const levelOf = columns.map((_, j) => (keep.includes(j) ? active.find(k => constantIn(k, j)) : undefined));
+  const strata = active.map((k, t) => {
+    const units = idx[k].m - (t ? idx[active[t - 1]].m : 0), q = columns.filter((_, j) => levelOf[j] === k).length, dfS = units - q;
+    if (dfS < 1) warnings.push(`${q} coefficients vary only between ${names[k]}s${t ? ` within ${names[active[t - 1]]}s` : ''}, and there are ${units} such ${names[k]}s: nothing is left to test them against`);
+    return { k, units, q, df: dfS, scale: dfS >= 1 ? units / dfS : 1 };
+  });
+  const stratumOf = (j) => strata.find(st => st.k === levelOf[j]);
+  const scale = columns.map((_, j) => (stratumOf(j) ? Math.sqrt(stratumOf(j).scale) : 1));
+  const coef = columns.map(() => NaN), covW = columns.map(() => columns.map(() => NaN));
+  keep.forEach((j, a) => { coef[j] = beta[a]; keep.forEach((k, b) => { covW[j][k] = covK[a][b]; }); });
+  const cov = covW.map((r, i) => r.map((v, j) => v * scale[i] * scale[j]));
+  const seWald = coef.map((b, j) => (Number.isNaN(b) ? NaN : Math.sqrt(covW[j][j])));
+  const se = coef.map((b, j) => (Number.isNaN(b) ? NaN : Math.sqrt(cov[j][j])));
+  const df = columns.map((_, j) => (stratumOf(j) ? (stratumOf(j).df >= 1 ? stratumOf(j).df : NaN) : Infinity));
+  const z = coef.map((b, j) => b / se[j]);
+  const pv = z.map((v, j) => (!Number.isFinite(v) ? NaN : df[j] === Infinity ? 2 * N.sf(Math.abs(v)) : Number.isFinite(df[j]) ? 2 * studentT.sf(Math.abs(v), df[j]) : NaN));
+  // the effects of each grouping's groups (σ_k û, link scale), and the conditional fitted values
+  const modes = levels.map((_, k) => Object.fromEntries(idx[k].names.map((nm, g) => {
+    const c = clusters.findIndex(cl => cl.local.has(`${k}:${g}`));
+    return [nm, sigmas[k] * final.modes[c][clusters[c].local.get(`${k}:${g}`)]];
+  })));
+  const eta = X.map((r, i) => r.reduce((s, v, j) => s + v * beta[j], off[i]) + levels.reduce((s, _, k) => s + modes[k][idx[k].names[idx[k].idx[i]]], 0));
+  const mu = eta.map(e => fam.link.inv(e));
+  const pearson = y.map((v, i) => (v - mu[i]) * Math.sqrt(w[i] / fam.variance(mu[i])));
+  let overdispersion = null;
+  if (distribution === 'poisson' && n - p - K >= 1) {
+    const X2 = sum(pearson.map(r => r * r)), dfo = n - p - K, ratio = X2 / dfo, po = chi2.sf(X2, dfo);
+    overdispersion = { pearson: X2, df: dfo, ratio, p: po, detected: ratio > 1.5 && po < 0.05 };
+    if (overdispersion.detected) warnings.push(`overdispersion within ${names[K - 1]}s: Pearson χ²/df = ${ratio.toFixed(2)} (p = ${po < 1e-4 ? po.toExponential(1) : po.toFixed(4)}); the negative binomial allows for it`);
+  }
+  // σ_k = 0: the fit without grouping k (the others re-estimated), ½χ²₀ + ½χ²₁
+  const tests = levels.map((_, k) => {
+    if (o.sigmaTests === false) return null;
+    if (zero[k]) return { chi2: 0, df: 1, p: 1 };
+    const rest = levels.filter((__, l) => l !== k);
+    const without = fitGLMM({ ...mm, X: X0 }, y, rest, { distribution: noise, link, weights: w, offset: off, nAGQ: 1, group: rest.length === 1 ? rest[0].name : undefined, sigmaTests: false });
+    const lr = Math.max(0, 2 * (final.ll - without.loglik));
+    return { chi2: lr, df: 1, p: lr > 0 ? 0.5 * chi2.sf(lr, 1) : 1 };
+  });
+  const k = p + K + (nb ? 1 : 0);
+  const randoms = levels.map((l, kk) => {
+    const st = strata.find(x => x.k === kk);
+    return { name: l.name, m: idx[kk].m, sigma: sigmas[kk], sigmaSE: sigmaSE[kk], boundary: zero[kk], test: tests[kk], modes: modes[kk],
+      coefficients: columns.filter((_, j) => levelOf[j] === kk), ...(st ? { df: st.df, units: st.units, smallSample: st.scale } : { smallSample: 1 }), labels: l.labels.map(String) };
+  });
+  return {
+    kind: 'glmm', model, columns, assign, n, rank: p, aliased: f.aliased.map(j => columns[j]),
+    noise, distribution, link, nAGQ: 1, group: gname, ...(nb ? { theta, thetaSE } : {}),
+    coef, se, cov, z, p: pv, df, statistic: 'z', seWald, covWald: covW, randoms,
+    boundary: zero.every(Boolean), groupLevel: columns.filter((_, j) => levelOf[j] !== undefined),
+    loglik: final.ll, k, aic: -2 * final.ll + 2 * k, deviance: -2 * final.ll,
+    fitted: mu, linear: eta, residuals: y.map((v, i) => v - mu[i]), pearson, overdispersion,
+    converged, iter: it, warnings, glm,
+    X0, y, weights: w, offset: off, dfRes: n - p - K,
   };
 }
 
@@ -270,7 +491,8 @@ export function fitGLMM(mm, y, groupLabels, o = {}) {
 function refit(fit, cols) {
   const mm = { X: fit.X0.map(r => cols.map(j => r[j])), columns: cols.map(j => fit.columns[j]), assign: cols.map(j => fit.assign[j]), model: fit.model };
   if (!cols.length) mm.X = fit.X0.map(() => []);
-  const r = cols.length ? fitGLMM(mm, fit.y, fit.groups.labels, { distribution: fit.noise, link: fit.link, weights: fit.weights, offset: fit.offset, nAGQ: fit.nAGQ, group: fit.group })
+  const groups = fit.randoms.length > 1 ? fit.randoms.map(r => ({ name: r.name, labels: r.labels })) : fit.groups.labels;
+  const r = cols.length ? fitGLMM(mm, fit.y, groups, { distribution: fit.noise, link: fit.link, weights: fit.weights, offset: fit.offset, nAGQ: fit.nAGQ, group: fit.group, sigmaTests: false })
     : null;
   return r ? { loglik: r.loglik, rank: r.rank } : { loglik: NaN, rank: 0 };
 }
@@ -278,11 +500,14 @@ function refit(fit, cols) {
 const lrRow = (big, small) => { const df = big.rank - small.rank, x = Math.max(0, 2 * (big.loglik - small.loglik)); return { df, chi2: x, p: df > 0 ? chi2.sf(x, df) : NaN }; };
 // a term whose columns all vary only between groups: F = χ²/df on (df, m − q) — the likelihood ratio
 // re-estimates σ in each model, so it needs only the denominator df, not the √(m/(m − q)) scaling
+// (with nested groupings: a term whose columns all belong to one stratum, F on that stratum's df)
 const lrTerm = (fit, cols, big, small) => {
   const r = lrRow(big, small);
-  if (fit.boundary || !cols.length || !cols.every(j => fit.groupLevel.includes(fit.columns[j]))) return r;
+  if (!cols.length || cols.some(j => fit.df[j] === Infinity)) return r;
+  const ddf = fit.df[cols[0]];
+  if (!cols.every(j => Object.is(fit.df[j], ddf))) return r;
   const F = r.chi2 / r.df;
-  return { ...r, F, ddf: fit.dfGroups, p: fit.dfGroups >= 1 && r.df > 0 ? fDist.sf(F, r.df, fit.dfGroups) : NaN };
+  return { ...r, F, ddf, p: ddf >= 1 && r.df > 0 ? fDist.sf(F, r.df, ddf) : NaN };
 };
 
 /**
@@ -349,8 +574,11 @@ export function glmmCompare(big, small) {
 export function glmmPredict(fit, X, { level = 0.95, exposure = 1, trials, n = 1, group = 'new' } = {}) {
   const L = LINKS[fit.link], nodes = gaussHermite(30), zq = N.ppf(1 - (1 - level) / 2);
   // with the small-sample correction: t on the groups' df (every prediction involves the intercept)
-  const corrected = !fit.boundary && fit.smallSample > 1 && fit.dfGroups >= 1;
-  const c = corrected ? studentT.ppf(1 - (1 - level) / 2, fit.dfGroups) : zq;
+  // (nested groupings: the outermost stratum with variation, where the intercept is judged)
+  const top = fit.randoms.find(r => !r.boundary);
+  const corrected = !!top && top.smallSample > 1 && top.df >= 1;
+  const c = corrected ? studentT.ppf(1 - (1 - level) / 2, top.df) : zq;
+  const s2all = sum(fit.randoms.map(r => r.sigma ** 2)), s2new = sum(fit.randoms.map(r => r.sigma ** 2 * (r.boundary ? 1 : r.smallSample)));
   const asGlm = { link: fit.link, distribution: fit.distribution, dispersionEstimated: false, dispersion: 1, weights: fit.weights, theta: fit.theta, thetaSE: fit.thetaSE };
   return X.map(x => {
     let e = 0, v = 0;
@@ -360,8 +588,8 @@ export function glmmPredict(fit, X, { level = 0.95, exposure = 1, trials, n = 1,
       for (let j = 0; j < x.length; j++) if (!Number.isNaN(fit.coef[j])) v += x[i] * fit.cov[i][j] * x[j];
     }
     const s = Math.sqrt(v), m = L.inv(e);
-    const marginal = fit.sigma > 0 ? sum(nodes.map(({ t, w }) => w * L.inv(e + Math.SQRT2 * fit.sigma * t))) / Math.sqrt(Math.PI) : m;
-    const sPred = Math.sqrt(v + (group === 'new' ? fit.sigma ** 2 * fit.smallSample : 0)) * c / zq;
+    const marginal = s2all > 0 ? sum(nodes.map(({ t, w }) => w * L.inv(e + Math.SQRT2 * Math.sqrt(s2all) * t))) / Math.sqrt(Math.PI) : m;
+    const sPred = Math.sqrt(v + (group === 'new' ? s2new : 0)) * c / zq;
     const pi = predictiveInterval(asGlm, e, sPred, { level, exposure, trials, n });
     return { fit: m, se: s * Math.abs(L.deriv(e)), lower: L.inv(e - c * s), upper: L.inv(e + c * s), marginal, predLower: pi.lower, predUpper: pi.upper, link: e, seLink: s };
   });
@@ -383,31 +611,71 @@ export function glmmConfint(fit, { level = 0.95 } = {}) {
 
 // ---------------------------------------------------------------- studies
 
-const GROUPINGS = { block: { name: 'block', label: (run) => run.block }, wholePlot: { name: 'whole plot', label: (run) => run.wholePlot } };
+// the groupings a random intercept can be for; run: the repeated observations of one run (plates,
+// fields), a grouping of the observations rather than of the design's runs
+const GROUPINGS = { block: { name: 'block', label: (run) => run.block }, wholePlot: { name: 'whole plot', label: (run) => run.wholePlot }, run: { name: 'run', label: (run) => run.run, observations: true } };
 
 /**
- * The grouping a count or proportion response's random intercept can be for: 'block' or
- * 'wholePlot' as asked, or 'auto' — the whole plots of a split-plot design, else null (blocks are
- * fixed unless asked for: a random block effect needs enough blocks to estimate σ). Returns
- * { id, name, m (groups) } or null; throws when the grouping asked for is not in the design.
+ * The groupings a count or proportion response's random intercepts are for, outermost first:
+ * requested 'auto' — the whole plots of a split-plot design, else null (blocks are fixed unless
+ * asked for: a random block effect needs enough blocks to estimate σ) — or one or more of 'block',
+ * 'wholePlot' and 'run' (an array, or a comma list), each nested in the one before. Returns
+ * [{ id, name, m (groups) }] or null; throws when a grouping asked for is not in the design, or the
+ * groupings are crossed rather than nested.
  */
-export function randomGroupOf(study, requested = 'auto') {
+export function randomGroupsOf(study, requested = 'auto') {
   const runs = (study.design?.runs ?? []).filter(r => r.kind !== 'confirm');
-  const ids = requested === 'auto' ? ['wholePlot'] : [requested];
+  const auto = requested === 'auto';
+  const ids = auto ? ['wholePlot'] : (Array.isArray(requested) ? requested : String(requested).split(',')).map(x => x.trim()).filter(Boolean);
+  if (new Set(ids).size !== ids.length) throw new Error(`a random effect is asked for twice (${ids.join(', ')})`);
+  const out = [];
   for (const id of ids) {
     const G = GROUPINGS[id];
-    if (!G) throw new Error(`unknown random effect "${id}" for counts and proportions (use block or wholePlot)`);
+    if (!G) throw new Error(`unknown random effect "${id}" for counts and proportions (use block, wholePlot or run)`);
+    if (G.observations) {
+      const per = new Map();
+      for (const o of study.observations ?? []) if (o.value !== null && o.value !== undefined) { const k = `${o.response}\u0000${o.run}`; per.set(k, (per.get(k) ?? 0) + 1); }
+      const ok = [...per.values()].some(v => v > 1);
+      if (ok) { out.push({ id, name: G.name, m: new Set([...per.keys()].map(k => k.split('\u0000')[1])).size }); continue; }
+      if (!auto) throw new Error('random runs: no run has more than one observation (several plates or fields per run)');
+      continue;
+    }
     const labels = runs.map(G.label);
-    const ok = labels.every(l => l !== undefined) && new Set(labels.map(String)).size >= 2 && new Set(labels.map(String)).size < runs.length;
-    if (ok) return { id, name: G.name, m: new Set(labels.map(String)).size };
-    if (requested !== 'auto') throw new Error(id === 'block' ? 'random blocks: the design needs at least two blocks, each of more than one run' : 'random whole plots: the design has no whole plots of more than one run');
+    const m = new Set(labels.map(String)).size;
+    if (labels.every(l => l !== undefined) && m >= 2 && m < runs.length) { out.push({ id, name: G.name, m }); continue; }
+    if (!auto) throw new Error(id === 'block' ? 'random blocks: the design needs at least two blocks, each of more than one run' : 'random whole plots: the design has no whole plots of more than one run');
   }
-  return null;
+  if (!out.length) return null;
+  // outermost first (fewest groups; runs innermost), and each nested in the one before
+  out.sort((a, b) => (a.id === 'run') - (b.id === 'run') || a.m - b.m);
+  for (let k = 1; k < out.length; k++) {
+    if (out[k].id === 'run') continue;                       // a run lies in one block and one whole plot
+    const outer = new Map(), G0 = GROUPINGS[out[k - 1].id], G1 = GROUPINGS[out[k].id];
+    for (const r of runs) {
+      const g = String(G1.label(r)), o = String(G0.label(r));
+      if (outer.has(g) && outer.get(g) !== o) throw new Error(`the ${out[k].name}s are not nested within the ${out[k - 1].name}s (${out[k].name} ${g} is in more than one ${out[k - 1].name}): crossed random effects are not available`);
+      outer.set(g, o);
+    }
+  }
+  return out;
+}
+
+/**
+ * The grouping (or groupings) of a count or proportion response's random intercept: as
+ * randomGroupsOf, as one { id, name, m } — for several, id the comma list, name joined with ' / ',
+ * and levels the list.
+ */
+export function randomGroupOf(study, requested = 'auto') {
+  const L = randomGroupsOf(study, requested);
+  if (!L) return null;
+  if (L.length === 1) return L[0];
+  return { id: L.map(x => x.id).join(','), name: L.map(x => x.name).join(' / '), m: L[L.length - 1].m, levels: L };
 }
 
 /**
  * A GLMM fit of a formula to a study's count or proportion response, with a random intercept for
- * its blocks or whole plots. opts: random ('auto' | 'block' | 'wholePlot'), nAGQ, noise (a
+ * its blocks, whole plots or runs, or several of them nested. opts: random ('auto', 'block',
+ * 'wholePlot', 'run', or a list of them: randomGroupsOf), nAGQ, noise (a
  * distribution other than the response's), link, includeConfirm. A random block effect replaces the
  * fixed Block term; with whole plots, a fixed Block term stays when the design also has blocks.
  * Returns the fitGLMM result plus { response, model, factors, rows, random: { id, name, m } }.
@@ -424,11 +692,13 @@ export function fitCountMixedModel(study, formula, opts = {}) {
   let rows = responseTable(study, response, { perObservation: true });
   if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
   if (!rows.length) throw new Error(`no results for ${response} yet`);
-  const b = withBlockTerm(study, parsed, rows, { ...opts, ...(random.id === 'block' ? { blocks: false } : {}) });
+  const levels = random.levels ?? [random];
+  const b = withBlockTerm(study, parsed, rows, { ...opts, ...(levels.some(l => l.id === 'block') ? { blocks: false } : {}) });
   const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   const data = noise.prepare(b.rows);
-  const labels = b.rows.map(r => String(GROUPINGS[random.id].label(runs.get(r.run))));
-  const fit = fitGLMM(mm, data.y, labels, { distribution: noise.id, link: noise.link.name, weights: data.weights, offset: data.offset, nAGQ: opts.nAGQ, group: random.name });
+  const labelsOf = (id) => b.rows.map(r => String(GROUPINGS[id].label(runs.get(r.run))));
+  const groups = levels.length === 1 ? labelsOf(random.id) : levels.map(l => ({ name: l.name, labels: labelsOf(l.id) }));
+  const fit = fitGLMM(mm, data.y, groups, { distribution: noise.id, link: noise.link.name, weights: data.weights, offset: data.offset, nAGQ: opts.nAGQ, group: random.name });
   return { ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random };
 }
 

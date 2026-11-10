@@ -284,6 +284,8 @@ Analyse step's *random effect* choice), and `--random none` fits the ordinary mo
 ```text
 doe fit STUDY "colonies ~ T + M + D"              # a split-plot: a random whole-plot intercept
 doe fit STUDY "germinated ~ A + B" --random block
+doe fit STUDY "colonies ~ T + M + D" --random block,wholePlot   # days ⊃ whole plots, nested
+doe fit STUDY "colonies ~ A + B" --random run     # several plates counted per run
 doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
 ```
 
@@ -315,6 +317,22 @@ doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
 - **Predictions** are for a *typical* whole plot (its shift 0) and, because the link scale is
   not linear, also **averaged over whole plots** (larger, for counts); the prediction interval for
   one new run allows for a new whole plot's shift.
+- **Several random effects, nested.** A split-plot run over several days has two levels of
+  shared variation: whole plots within a day, and days. Plates counted in duplicate add a third:
+  plates within a run. `--random block,wholePlot` (or `block,run`, `wholePlot,run`, all three; any
+  order — aikidoe puts the outermost first and checks that each is nested in the one before), or
+  the Analyse step's *random effect* choice, fits a random intercept at each level, each with its
+  own σ. `run` is the grouping of repeated observations of one run (several plates or fields
+  counted per run). With several random effects the fit is by the **Laplace approximation** over
+  all of them (as `lme4::glmer`; quadrature is for one random effect). Each σ is tested by the fit
+  without that level. Coefficients are judged in their **stratum**: one that changes only between
+  days against the days (t on days − such coefficients), one that changes only between whole plots
+  within a day against the whole plots within days (t on whole plots − days − such coefficients),
+  the others against the runs. In simulated Poisson split-plots over 4, 6 and 8 days (4 whole
+  plots a day), the 95 % interval for a day-level factor covered in 91.5, 92.5 and 94.5 % with this
+  correction and in 73.5, 81.5 and 87 % with lme4's Wald z; its test under no effect rejected in
+  7.5, 6.5 and 4.8 % by the F, and in 19.5, 13.3 and 10.3 % by χ². Checked against `lme4::glmer`
+  for two and three levels, Poisson, binomial and negative binomial.
 - **Model reduction** works on this model too ([model reduction](#model-reduction)): each
   candidate term is dropped and the model refitted (σ re-estimated), and judged by the same
   likelihood-ratio test as in the table, an F for terms that change only between whole plots.

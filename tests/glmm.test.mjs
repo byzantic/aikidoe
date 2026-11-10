@@ -6,10 +6,12 @@
 // simulation the coverage of the intervals for a whole-plot factor and of the prediction interval
 // for a new run in a new whole plot; and model reduction (issue #78) against backward elimination
 // of glmer fits (tests/ref/reduce_glmm_r.R); negative binomial counts with a random intercept
-// against the likelihood integrated directly, lme4's Laplace and glmmTMB (tests/ref/glmm_nb_r.R).
+// against the likelihood integrated directly, lme4's Laplace and glmmTMB (tests/ref/glmm_nb_r.R);
+// nested random intercepts (blocks and whole plots, days, runs and plates) against glmer's Laplace
+// fits (tests/ref/glmm_nested_r.R).
 import { readFileSync } from 'node:fs';
 import { section, check, near, throws, done } from './lib/check.mjs';
-import { fitGLMM, glmmTests, glmmCompare, glmmPredict, glmmLoglikAt, glmmConfint, fitCountMixedModel, predictCountMixed, randomGroupOf } from '../js/model/glmm.js';
+import { fitGLMM, glmmTests, glmmCompare, glmmPredict, glmmLoglikAt, glmmConfint, fitCountMixedModel, predictCountMixed, randomGroupOf, randomGroupsOf } from '../js/model/glmm.js';
 import { fitGLM } from '../js/model/glm.js';
 import { fitModel } from '../js/model/fit.js';
 import { parseFormula, modelMatrix } from '../js/model/formula.js';
@@ -119,6 +121,39 @@ section('studies: random whole plots and random blocks');
   throws('a measurement has the REML mixed model instead', () => fitCountMixedModel({ ...done, responses: [{ id: 'k' }] }, 'k ~ A', { random: 'block' }), /measurement/);
 }
 
+section('studies: nested groupings (blocks and whole plots; runs with several plates)');
+{
+  const s0 = createStudy({ name: 'bsp', seed: 3, factors: [{ id: 'T', low: 20, high: 30, htc: true }, { id: 'B', low: 0, high: 1 }], responses: [{ id: 'n', distribution: 'poisson' }] });
+  const sd = createStudy({ ...s0, design: toStudyDesign(s0, splitPlotFull([2, 2], [true, false], { replicates: 8 }), { seed: 3 }) });
+  const wps = [...new Set(sd.design.runs.map(r => r.wholePlot))].sort((a, b) => a - b);
+  const blockOf = (wp) => 1 + Math.floor(wps.indexOf(wp) / 4);       // 4 days of 4 whole plots
+  const blocked = createStudy({ ...sd, design: { ...sd.design, runs: sd.design.runs.map(r => ({ ...r, block: blockOf(r.wholePlot) })) } });
+  const st = createStudy(runVirtual({ seed: 6, factors: s0.factors, responses: [{ id: 'n', distribution: 'poisson', truth: { intercept: Math.log(30), terms: { T: 0.2, B: -0.25 } } }], nuisance: { wholePlot: 0.3, block: 0.4 } }, blocked));
+  check('auto: still only the whole plots (blocks stay a fixed term unless asked for)', randomGroupOf(st).id === 'wholePlot');
+  const g = randomGroupsOf(st, 'wholePlot,block');
+  check('a list, in any order: blocks outermost, then whole plots', JSON.stringify(g.map(x => [x.id, x.m])) === '[["block",4],["wholePlot",16]]');
+  const f = fitCountMixedModel(st, 'n ~ T + B', { random: 'block,wholePlot' });
+  check('the fit: random blocks and whole plots, no fixed Block term; T judged on the whole plots within blocks (16 − 4 − 1 df)', f.randoms.length === 2 && f.random.id === 'block,wholePlot' && !f.columns.some(c => c.startsWith('Block'))
+    && f.df[f.columns.indexOf('T')] === 11 && f.df[0] === 3 && f.nAGQ === 1, JSON.stringify(f.df));
+  const nth = new Map();
+  const crossed = createStudy({ ...st, design: { ...st.design, runs: st.design.runs.map(r => { const k = nth.get(r.wholePlot) ?? 0; nth.set(r.wholePlot, k + 1); return { ...r, block: 1 + k }; }) } });
+  throws('blocks that cut across whole plots: crossed, refused', () => randomGroupsOf(crossed, 'block,wholePlot'), /not nested/);
+  // several plates per run: a random run effect (and, with blocks, runs within blocks)
+  const R = (() => { let x = 12345; return () => (x = (x * 16807) % 2147483647) / 2147483647; })();
+  const nrm = () => normal.ppf(Math.min(1 - 1e-12, Math.max(1e-12, R())));
+  const p0 = createStudy({ name: 'plates', seed: 1, factors: [{ id: 'A', low: -1, high: 1 }, { id: 'C', low: -1, high: 1 }], responses: [{ id: 'k', distribution: 'poisson' }] });
+  const pd = createStudy({ ...p0, design: toStudyDesign(p0, fullFactorial([2, 2], { replicates: 4 }), { seed: 1 }) });
+  const pdb = { ...pd.design, runs: pd.design.runs.map((r, i) => ({ ...r, block: 1 + Math.floor(i / 4) })) };   // each day a replicate
+  const runEff = new Map(pdb.runs.map(r => [r.run, 0.3 * nrm()])), dayEff = [0, 0.4 * nrm(), 0.4 * nrm(), 0.4 * nrm(), 0.4 * nrm()];
+  const obs = pdb.runs.flatMap(r => [0, 1, 2].map(() => ({ run: r.run, response: 'k', value: countQuantile('poisson', R(), Math.exp(Math.log(20) + 0.3 * r.settings.A + runEff.get(r.run) + dayEff[r.block])) })));
+  const ps = createStudy({ ...pd, design: pdb, observations: obs });
+  const fr = fitCountMixedModel(ps, 'k ~ A + C', { random: 'run' });
+  check('runs with three plates each: a random run effect (16 runs, the days a fixed Block term; A and C judged between runs, 16 − 6 df)', fr.random.id === 'run' && fr.random.m === 16 && fr.n === 48 && fr.columns.length === 6 && fr.df.every(v => v === 10), JSON.stringify(fr.df));
+  const fbr = fitCountMixedModel(ps, 'k ~ A + C', { random: 'run,block' });
+  check('… days (blocks) ⊃ runs ⊃ plates: the intercept on 4 − 1 df, A and C on 16 − 4 − 2', fbr.randoms.map(r => r.name).join('/') === 'block/run' && fbr.df[0] === 3 && fbr.df[1] === 10, JSON.stringify(fbr.df));
+  throws('random runs without repeated observations', () => randomGroupsOf(st, 'run'), /no run has more than one observation/);
+}
+
 section('by simulation: whole-plot factors and new whole plots, with the small-sample correction');
 {
   // 12 whole plots of 2 runs, whole-plot σ 0.5 on the log scale. The GLM ignores the whole plots;
@@ -187,6 +222,43 @@ section('negative binomial counts with a random intercept');
   const pn = predictCountMixed(fn, [{ T: 30, B: 1 }], {})[0], pp = predictCountMixed(fitCountMixedModel(st, 'n ~ T + B'), [{ T: 30, B: 1 }], {})[0];
   check('… its prediction interval for one new run is wider than the Poisson\'s', pn.predUpper - pn.predLower > pp.predUpper - pp.predLower);
   throws('quasi models still have no likelihood to integrate', () => fitCountMixedModel(st, 'n ~ T', { noise: 'quasipoisson' }), /quasi model has no likelihood/);
+}
+
+section('nested random intercepts against lme4::glmer (Laplace)');
+{
+  const NR = JSON.parse(readFileSync(new URL('./fixtures/glmm-nested-r.json', import.meta.url), 'utf8'));
+  for (const c of NR.cases) {
+    const d = c.input.data, ids = Object.keys(d).filter(k => k !== 'y' && !c.input.levels.includes(k));
+    const fsN = ids.map(id => ({ id, type: 'continuous', low: -1, high: 1, transform: 'none' }));
+    const mmN = (f) => modelMatrix(parseFormula(f, fsN), fsN, d.y.map((_, i) => Object.fromEntries(ids.map(id => [id, d[id][i]]))));
+    const tr = c.input.trials, y = tr ? d.y.map(v => v / tr) : d.y, levels = c.input.levels.map(l => ({ name: l, labels: d[l] }));
+    const o = { distribution: c.input.distribution, ...(tr ? { weights: d.y.map(() => tr) } : {}) };
+    const f = fitGLMM(mmN(c.input.formula), y, levels, o), r = c.output;
+    check(`${c.name}: the same columns, converged`, JSON.stringify(f.columns) === JSON.stringify(r.names) && f.converged);
+    near(`${c.name}: β, σ of each grouping (${c.input.levels.join(' ⊃ ')}), log-likelihood${r.theta ? ', θ' : ''}`, [...f.coef, ...f.randoms.map(x => x.sigma), f.loglik, ...(r.theta ? [f.theta] : [])], [...r.coef, ...r.sigma, r.loglik, ...(r.theta ? [r.theta] : [])], { rel: 1e-4, abs: 1e-5 });
+    // the negative binomial: R's Hessian is at θ fixed, aikidoe's over θ as well
+    near(`${c.name}: standard errors (the Hessian of the Laplace deviance over σ's and β${r.theta ? '; θ held fixed in R' : ''})`, f.seWald, r.se, { rel: r.theta ? 1e-2 : 5e-4 });
+    near(`${c.name}: each σ = 0 tested by dropping its grouping`, f.randoms.map(x => x.test.chi2), r.sigmaTest.chisq, { rel: 1e-3, abs: 1e-4 });
+    check(`${c.name}: a σ estimated as 0 is on the boundary`, f.randoms.every((x, k) => x.boundary === (r.sigma[k] === 0)));
+    const g1 = f.randoms[0].modes;
+    near(`${c.name}: the ${c.input.levels[0]} effects (ranef)`, r.groups.map(gname => g1[gname]), r.modes, { rel: 1e-3, abs: 1e-4 });
+    const keep = f.columns.map((_, j) => j).filter(j => f.columns[j] !== c.input.drop), mm0 = mmN(c.input.formula);
+    const small = { ...mm0, X: mm0.X.map(row => keep.map(j => row[j])), columns: keep.map(j => mm0.columns[j]), assign: keep.map(j => mm0.assign[j]) };
+    near(`${c.name}: the likelihood-ratio test of ${c.input.drop}`, glmmCompare(f, fitGLMM(small, y, levels, { ...o, sigmaTests: false })).chi2, r.lr.chisq, { rel: 1e-3, abs: 2e-4 });
+  }
+  // the strata: case 1 — day-level D and the intercept on 6 − 2 days, whole-plot A on (24 − 6) − 1, B by z
+  const c = NR.cases[0], d = c.input.data, fsN = ['D', 'A', 'B'].map(id => ({ id, type: 'continuous', low: -1, high: 1, transform: 'none' }));
+  const mm1 = modelMatrix(parseFormula('D + A + B', fsN), fsN, d.y.map((_, i) => ({ D: d.D[i], A: d.A[i], B: d.B[i] })));
+  const f = fitGLMM(mm1, d.y, [{ name: 'day', labels: d.day }, { name: 'whole plot', labels: d.wp }], { distribution: 'poisson' });
+  check('strata: the intercept and D on 4 df (days), A on 17 (whole plots within days), B by z', JSON.stringify(f.df) === JSON.stringify([4, 4, 17, null].map(v => v ?? Infinity)) && f.se[1] > f.seWald[1] && f.se[3] === f.seWald[3]);
+  near('… standard errors × √(units/df): √(6/4) for days, √(18/17) for whole plots', [f.se[1] / f.seWald[1], f.se[2] / f.seWald[2]], [Math.sqrt(6 / 4), Math.sqrt(18 / 17)], { rel: 1e-12 });
+  const t = glmmTests(f, 2);
+  check('tests: D an F on 4 df, A on 17, B a χ²', t.find(x => x.term === 'D').ddf === 4 && t.find(x => x.term === 'A').ddf === 17 && t.find(x => x.term === 'B').F === undefined);
+  const pr = glmmPredict(f, [[1, 0, 0, 0]])[0], one = fitGLMM(mm1, d.y, d.wp, { distribution: 'poisson', nAGQ: 1 });
+  check('predictions: averaged over days and whole plots (exp((σ²_day + σ²_wp)/2) on the log scale)', Math.abs(pr.marginal / pr.fit - Math.exp((f.randoms[0].sigma ** 2 + f.randoms[1].sigma ** 2) / 2)) < 1e-6 && pr.predUpper > pr.upper);
+  check('the nested model fits better than whole plots alone (the day σ test is that comparison)', Math.abs(2 * (f.loglik - one.loglik) - f.randoms[0].test.chi2) < 1e-5);
+  throws('crossed groupings are refused', () => fitGLMM(mm1, d.y, [{ name: 'day', labels: d.day }, { name: 'run', labels: d.B }], { distribution: 'poisson' }), /not nested/);
+  throws('quadrature with several random effects is refused', () => fitGLMM(mm1, d.y, [{ name: 'day', labels: d.day }, { name: 'whole plot', labels: d.wp }], { distribution: 'poisson', nAGQ: 25 }), /Laplace/);
 }
 
 section('model reduction against backward elimination of lme4::glmer fits');

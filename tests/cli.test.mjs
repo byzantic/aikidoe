@@ -315,6 +315,28 @@ try {
   check('fit (negative binomial GLMM): θ printed, σ and θ re-estimated in the tests', r.code === 0 && /θ = .* within a whole plot, a count varies as μ \+ μ²\/θ/.test(r.out) && /σ and θ re-estimated/.test(r.out), r.out + r.err);
   o = js('power', 'jgn.aikidoe.json', '--model', 'T + D', '--response', 'n', '--baseline', '20', '--ratio', '1.5', '--theta', '2', '--sigma-wp', '0.3');
   check('power --json --sigma-wp for the negative binomial: θ in W', o.theta === 2 && o.wholePlots === 12 && o.terms[1].test === 'chi2' && o.terms[1].power < 0.95, JSON.stringify(o.terms));
+  // nested random effects (issue #78): days (blocks) ⊃ whole plots
+  {
+    const s0 = createStudy({ name: 'bsp', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'D', low: 1, high: 10 }], responses: [{ id: 'n', distribution: 'poisson' }] });
+    const sd = createStudy({ ...s0, design: toStudyDesign(s0, splitPlotFull([2, 2], [true, false], { replicates: 8 }), { seed: 3 }) });
+    const wps = [...new Set(sd.design.runs.map(r => r.wholePlot))].sort((x, y) => x - y);
+    const bd = createStudy({ ...sd, design: { ...sd.design, runs: sd.design.runs.map(r => ({ ...r, block: 1 + Math.floor(wps.indexOf(r.wholePlot) / 4) })) } });
+    writeFileSync(join(dir, 'jgb.aikidoe.json'), serializeStudy(createStudy(runVirtual({ seed: 2, factors: s0.factors, responses: [{ id: 'n', distribution: 'poisson', truth: { intercept: Math.log(25), terms: { T: 0.25, D: 0.3 } } }], nuisance: { wholePlot: 0.3, block: 0.4 } }, bd))));
+  }
+  o = js('fit', 'jgb.aikidoe.json', 'n ~ T + D', '--random', 'wholePlot,block');
+  check('fit --json --random wholePlot,block: nested, blocks outermost; T on (16 − 4) − 1 df, the intercept on 4 − 1', o.kind === 'glmm' && o.nAGQ === 1 && !o.random && JSON.stringify(o.randoms.map(x => [x.id, x.groups])) === '[["block",4],["wholePlot",16]]'
+    && o.coefficients.find(c => c.term === 'T').df === 11 && o.coefficients[0].df === 3 && o.coefficients.find(c => c.term === 'D').df === null, JSON.stringify(o.randoms).slice(0, 300));
+  r = run('fit', 'jgb.aikidoe.json', 'n ~ T + D', '--random', 'block,wholePlot');
+  check('fit (nested): σ per level and its test, the strata', r.code === 0 && /random intercepts per block and per whole plot \(nested\)/.test(r.out) && /4 blocks ⊃ 16 whole plots/.test(r.out) && /block σ = /.test(r.out) && /whole plot σ = /.test(r.out)
+    && /T vary only between whole plots within blocks: t on \(16 − 4\) − 1 = 11 df/.test(r.out), r.out + r.err);
+  r = run('fit', 'jgb.aikidoe.json', 'n ~ T + D', '--random', 'block,wholePlot', '--nagq', '25');
+  check('… quadrature is for one random effect', r.code === 1 && /Laplace/.test(r.err), r.err);
+  o = js('power', 'jgb.aikidoe.json', '--model', 'T + D', '--response', 'n', '--baseline', '20', '--ratio', '1.5', '--sigma-wp', '0.3', '--sigma-block', '0.4');
+  check('power --json --sigma-block --sigma-wp: blocks ⊃ whole plots, T an F on the whole plots within blocks (11 df)', o.blocks === 4 && o.wholePlots === 16 && o.sigmaBlock === 0.4 && o.levels.length === 2 && o.terms[0].test === 'F' && o.terms[0].ddf === 11 && o.terms[0].level === 'whole plot' && o.terms[1].test === 'chi2', JSON.stringify(o).slice(0, 300));
+  r = run('power', 'jg.aikidoe.json', '--model', 'T + D', '--response', 'n', '--baseline', '20', '--ratio', '1.5', '--sigma-block', '0.4');
+  check('… --sigma-block without blocks', r.code === 1 && /--sigma-block is for a design with blocks/.test(r.err), r.err);
+  r = run('fit', 'jgb.aikidoe.json', 'n ~ T + D', '--random', 'day');
+  check('… an unknown grouping', r.code === 1 && /use wholePlot, block, run/.test(r.err), r.err);
   r = run('fit', 'jg.aikidoe.json', 'n ~ T * D', '--reduce');
   check('… --reduce: backward elimination of the GLMM, then its fit', r.code === 0 && /model reduction with a random whole plot effect \(backward, likelihood-ratio/.test(r.out) && /drop T:D/.test(r.out) && /reduced model: n ~ (T \+ )?D\s/.test(r.out) && /random intercept per whole plot/.test(r.out), r.out + r.err);
   o = js('fit', 'jg.aikidoe.json', 'n ~ T * D', '--reduce', 'aicc');

@@ -126,7 +126,9 @@ the Design step's *whole-plot σ*. A factor that changes only between whole plot
 on (whole plots − such coefficients) df, as in the analysis; the others are χ² tests. The
 approximation, at the expected counts, is within a few points of `lme4::glmer` simulations of the
 analysis and a little conservative for whole-plot factors; `--simulate` fits the random-effect
-model to simulated experiments (slower: a few seconds per hundred). For negative binomial counts give θ as
+model to simulated experiments (slower: a few seconds per hundred). With blocks as well (days, each holding several
+whole plots), `--sigma-block` gives their σ, and power follows the analysis with random blocks
+and whole plots nested in them. For negative binomial counts give θ as
 well (`--theta`): extra scatter within whole plots costs mostly the factors that change within
 them. The approximation is then a little more conservative for hard-to-change factors (about 8
 points low in a check against simulation), so `--simulate` is worth running.
