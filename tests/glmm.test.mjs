@@ -5,7 +5,8 @@
 // boundary, the likelihood-ratio tests, study fits with random whole plots and blocks, and by
 // simulation the coverage of the intervals for a whole-plot factor and of the prediction interval
 // for a new run in a new whole plot; and model reduction (issue #78) against backward elimination
-// of glmer fits (tests/ref/reduce_glmm_r.R).
+// of glmer fits (tests/ref/reduce_glmm_r.R); negative binomial counts with a random intercept
+// against the likelihood integrated directly, lme4's Laplace and glmmTMB (tests/ref/glmm_nb_r.R).
 import { readFileSync } from 'node:fs';
 import { section, check, near, throws, done } from './lib/check.mjs';
 import { fitGLMM, glmmTests, glmmCompare, glmmPredict, glmmLoglikAt, glmmConfint, fitCountMixedModel, predictCountMixed, randomGroupOf } from '../js/model/glmm.js';
@@ -83,7 +84,6 @@ section('tests of the terms');
   // here each block is half a replicate with C fixed: C (and the intercept) vary only between blocks
   const jc = fit.columns.indexOf('C');
   check('C is constant within each block: a group-level coefficient, with a t interval on 12 − 2 = 10 df', fit.groupLevel.includes('C') && fit.df[jc] === 10 && ci[jc].method === 'wald-t');
-  throws('a negative binomial is refused (the random effect takes the variation between groups)', () => fitGLMM(mmOf('count ~ A', d), y, g, { distribution: 'negbin' }), /Poisson counts, binomial proportions and pass\/fail/);
   throws('one group is refused', () => fitGLMM(mmOf('count ~ A', d), y, g.map(() => 1), o), /at least two/);
 }
 
@@ -152,6 +152,41 @@ section('by simulation: whole-plot factors and new whole plots, with the small-s
     && Math.abs(f.se[1] / f.seWald[1] - Math.sqrt(1.2)) < 1e-12 && f.se[2] === f.seWald[2]);
   const t = glmmTests(f, 2);
   check('… its likelihood-ratio test is χ²/df as an F on (1, 10); B\'s a χ²', t[0].term === 'T' && t[0].ddf === 10 && Math.abs(t[0].F - t[0].chi2) < 1e-12 && t[1].F === undefined);
+}
+
+section('negative binomial counts with a random intercept');
+// direct: the marginal likelihood integrated by stats::integrate and maximised by optim — the
+// reference for adaptive quadrature; lme4: glmer's Laplace with negative.binomial(θ), maximised over
+// θ — the reference for nAGQ = 1.
+{
+  const NB = JSON.parse(readFileSync(new URL('./fixtures/glmm-nb-r.json', import.meta.url), 'utf8'));
+  const mmNB = (rhs, d) => mmOf(rhs, d);
+  for (const c of NB.cases) {
+    const d = c.input.data, o = { distribution: 'negbin', ...(d.exposure ? { offset: d.exposure.map(Math.log) } : {}) };
+    const f25 = fitGLMM(mmNB(c.input.formula, d), d.y, d.g, { ...o, nAGQ: 25 }), r = c.output.direct, bnd = r.sigma < 1e-4;
+    check(`${c.name}: the same columns`, JSON.stringify(f25.columns) === JSON.stringify(c.output.names));
+    near(`${c.name}, nAGQ 25 against the integral itself: β, log-likelihood, θ${bnd ? ' (σ = 0: the boundary)' : ', σ'}`, [...f25.coef, f25.loglik, f25.theta, f25.sigma], [...r.coef, r.loglik, r.theta, bnd ? 0 : r.sigma], { rel: 2e-4, abs: 2e-4 });
+    // on the boundary the standard errors are glm.nb's, which (as MASS's vcov) treat θ as known: within 1 % of the full Hessian's here
+    near(`${c.name}, nAGQ 25: standard errors of β (the Hessian over σ, θ and β) and of θ`, [...f25.seWald, f25.thetaSE], [...r.se, r.thetaSE], { rel: bnd ? 1e-2 : 3e-3 });
+    check(`${c.name}: ${bnd ? 'on the boundary, the fit is glm.nb\'s' : 'σ = 0 tested on ½χ²₀ + ½χ²₁'}`, bnd ? f25.boundary && f25.sigmaTest.p === 1 && Math.abs(f25.theta - f25.glm.theta) < 1e-9 : Math.abs(f25.sigmaTest.chi2 - r.sigmaTest.chisq) < 2e-3 && Math.abs(f25.sigmaTest.p / r.sigmaTest.p - 1) < 2e-3, `${f25.sigmaTest.chi2} vs ${r.sigmaTest.chisq}`);
+    const keep = f25.columns.map((_, j) => j).filter(j => f25.columns[j] !== c.input.drop);
+    const mm0 = { ...mmNB(c.input.formula, d) }; mm0.X = mm0.X.map(row => keep.map(j => row[j])); mm0.columns = keep.map(j => mm0.columns[j]); mm0.assign = keep.map(j => mm0.assign[j]);
+    const lr = glmmCompare(f25, fitGLMM(mm0, d.y, d.g, { ...o, nAGQ: 25 }));
+    near(`${c.name}: the likelihood-ratio test of ${c.input.drop} (θ and σ re-estimated)`, [lr.chi2, lr.df], [r.lr.chisq, r.lr.df], { rel: 1e-3, abs: 2e-4 });
+    const f1 = fitGLMM(mmNB(c.input.formula, d), d.y, d.g, { ...o, nAGQ: 1 }), l = c.output.laplace;
+    near(`${c.name}, nAGQ 1 against lme4's Laplace: β, σ, θ, log-likelihood`, [...f1.coef, f1.sigma, f1.theta, f1.loglik], [...l.coef, l.sigma, l.theta, l.loglik], { rel: 1e-4, abs: 1e-5 });
+    // glmmTMB's Laplace uses the observed curvature (the log link is not canonical for the negative
+    // binomial): between the two, as a cross-check of the references
+    const t = c.output.tmb;
+    check(`${c.name}: glmmTMB agrees with the direct fit to within 1 % on θ and σ`, Math.abs(t.theta / r.theta - 1) < 0.01 && (bnd ? t.sigma < 1e-3 : Math.abs(t.sigma / r.sigma - 1) < 0.01));
+  }
+  const st0 = splitPlotCounts();
+  const st = createStudy(runVirtual({ seed: 5, factors: st0.factors, responses: [{ id: 'n', distribution: 'negbin', theta: 3, truth: { intercept: Math.log(30), terms: { T: 0.2, B: -0.25 } } }], nuisance: { wholePlot: 0.5 } }, { ...st0, observations: [] }));
+  const fn = fitCountMixedModel(st, 'n ~ T + B', { noise: 'negbin' });
+  check(`a study: the negative binomial with random whole plots — θ (${fn.theta.toFixed(2)}, truth 3), and T judged between whole plots`, fn.distribution === 'negbin' && fn.theta > 1 && fn.theta < 10 && fn.groupLevel.includes('T') && fn.k === fn.rank + 2);
+  const pn = predictCountMixed(fn, [{ T: 30, B: 1 }], {})[0], pp = predictCountMixed(fitCountMixedModel(st, 'n ~ T + B'), [{ T: 30, B: 1 }], {})[0];
+  check('… its prediction interval for one new run is wider than the Poisson\'s', pn.predUpper - pn.predLower > pp.predUpper - pp.predLower);
+  throws('quasi models still have no likelihood to integrate', () => fitCountMixedModel(st, 'n ~ T', { noise: 'quasipoisson' }), /quasi model has no likelihood/);
 }
 
 section('model reduction against backward elimination of lme4::glmer fits');

@@ -17,3 +17,4 @@ drc
 numDeriv
 mixexp@1.2.7.1
 brglm2
+glmmTMB

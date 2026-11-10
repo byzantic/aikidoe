@@ -43,6 +43,10 @@ Books for learning and reference, and the papers behind specific methods in aiki
   are checked against its `glmer`.)
 - Box, G. E. P. & Wilson, K. B. (1951). On the experimental attainment of optimum conditions.
   *Journal of the Royal Statistical Society B* 13, 1–45.
+- Brooks, M. E., Kristensen, K., van Benthem, K. J., Magnusson, A., Berg, C. W., Nielsen, A.,
+  Skaug, H. J., Mächler, M. & Bolker, B. M. (2017). glmmTMB balances speed and flexibility among
+  packages for zero-inflated generalized linear mixed modeling. *The R Journal* 9(2), 378–400.
+  (A cross-check of the negative binomial with a random effect.)
 - Brideau, C., Gunter, B., Pikounis, B. & Liaw, A. (2003). Improved statistical methods for hit
   selection in high-throughput screening. *Journal of Biomolecular Screening* 8, 634–647. (B-scores:
   median polish of plate rows and columns; see [microplates](plates.md#analysis).)

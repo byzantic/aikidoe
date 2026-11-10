@@ -243,8 +243,8 @@ function countsPowerSection(study, d, cand, ui, set, model, alpha, controlsHead)
     prop && spec.distribution !== 'bernoulli' && r.trials === undefined ? numIn('trials', 'trials per run', 'the number of trials (cells, seeds …) in each run', spec.trials, { min: 1, step: 1 }) : null,
     spec.distribution === 'negbin' ? numIn('theta', 'θ', 'the overdispersion you expect: variance μ + μ²/θ (smaller θ, more variable)', spec.theta, { min: 0 }) : null,
     spec.distribution.startsWith('quasi') ? numIn('dispersion', 'dispersion', 'variance as a multiple of the Poisson or binomial variance', spec.dispersion, { min: 1 }) : null);
-  // a split-plot with Poisson, binomial or pass/fail results: the analysis's random whole-plot effect, with σ on the link scale
-  const wpSigma = d.wholePlot && ['poisson', 'binomial', 'bernoulli'].includes(spec.distribution) ? (c.sigmaWp ?? 0.3) : null;
+  // a split-plot with Poisson or negative binomial counts, binomial or pass/fail results: the analysis's random whole-plot effect, with σ on the link scale
+  const wpSigma = d.wholePlot && ['poisson', 'negbin', 'binomial', 'bernoulli'].includes(spec.distribution) ? (c.sigmaWp ?? 0.3) : null;
   if (wpSigma !== null) controls.append(numIn('sigmaWp', `whole-plot σ (${prop ? 'logit' : 'log'} scale)`, 'how much whole plots differ beyond the run-to-run variation, as the standard deviation of their shift on the link scale (0.3 on the log scale: whole plots about 30 % apart)', wpSigma, { min: 0, step: 0.05 }));
   let res, err = null;
   try {

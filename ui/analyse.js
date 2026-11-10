@@ -49,7 +49,7 @@ function reduction(r, response, undoTo, close) {
 function countRandomChoice(study, resp, ui) {
   const can = (id) => { try { return !!randomGroupOf(study, id); } catch { return false; } };
   const hasWP = can('wholePlot'), hasB = can('block');
-  return { hasWP, hasB, choice: ui.countRandom ?? (hasWP && ['poisson', 'binomial', 'bernoulli'].includes(resp.distribution) ? 'wholePlot' : 'none') };
+  return { hasWP, hasB, choice: ui.countRandom ?? (hasWP && ['poisson', 'negbin', 'binomial', 'bernoulli'].includes(resp.distribution) ? 'wholePlot' : 'none') };
 }
 
 export function render(ctx) {

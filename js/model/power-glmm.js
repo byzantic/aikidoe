@@ -15,7 +15,8 @@
 // analysis's: a term whose columns are all constant within every whole plot has λ divided by
 // m/(m − q) (the standard errors the analysis widens) and is an F on (df, m − q), m whole plots
 // and q such columns, the intercept among them; other terms are χ² on df. σ = 0 gives the GLM's
-// power for the coefficients that vary within whole plots, and the F on m − q for the others.
+// power for the coefficients that vary within whole plots, and the F on m − q for the others. For
+// the negative binomial, V(μ) = μ + μ²/θ in w, θ as anticipated (the analysis estimates it).
 //
 // By simulation: experiments are simulated from the GLMM (each whole plot's shift drawn), fitted
 // with fitGLMM with and without the term, and the analysis's likelihood-ratio test (F on m − q for
@@ -58,19 +59,20 @@ function groupsOf(labels) {
 /**
  * Power of a count or proportion response with a random intercept per whole plot (or block).
  * mm: model matrix (formula.js); groups: a label per run. opts: as glmPowerFromMatrix (distribution
- * poisson, binomial or bernoulli; link, baseline, ratio, trials, exposure, alpha) plus sigma, the
+ * poisson, negbin (with theta), binomial or bernoulli; link, baseline, ratio, trials, exposure, alpha) plus sigma, the
  * standard deviation of the whole-plot shift on the link scale. Returns { n, groups, dfGroups,
  * groupLevel, sigma, alpha, distribution, link, baseline, terms: [{ term, df, ratio, lambda, ddf?,
  * test: 'chi2' | 'F', power }], lambdaAt, powerOf }.
  */
-export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, sigma, alpha = 0.05 } = {}) {
+export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, theta, sigma, alpha = 0.05 } = {}) {
   const d = glmDistribution(distribution);
-  if (!['poisson', 'binomial'].includes(d)) throw new Error(`power with a random whole-plot effect is for Poisson counts, binomial proportions and pass/fail results, not ${distribution}`);
+  if (!['poisson', 'negbin', 'binomial'].includes(d)) throw new Error(`power with a random whole-plot effect is for Poisson and negative binomial counts, binomial proportions and pass/fail results, not ${distribution}`);
+  if (d === 'negbin' && !(theta > 0)) throw new Error('the negative binomial needs θ (within a whole plot the variance is μ + μ²/θ): give the θ you expect');
   if (!(sigma >= 0)) throw new Error('give σ of the whole-plot shift on the link scale (0 or more): how much whole plots differ beyond the counts\' own variation');
   const lk = link ?? canonicalLink(d), counts = GLM_DISTRIBUTIONS[d].counts;
   if (!(baseline > 0) || (!counts && !(baseline < 1))) throw new Error(counts ? 'the baseline mean count must be positive' : 'the baseline proportion must lie between 0 and 1');
   if (!(alpha > 0 && alpha < 1)) throw new Error('α must be between 0 and 1');
-  const fam = family(d, lk), L = fam.link;
+  const fam = family(d, lk, d === 'negbin' ? theta : undefined), L = fam.link;
   const { X, columns, assign, model } = mm, n = X.length;
   if (groupLabels.length !== n) throw new Error(`${groupLabels.length} whole-plot labels for ${n} runs`);
   const G = groupsOf(groupLabels);
@@ -126,7 +128,7 @@ export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, basel
     const lambda = lambdaFor(S, S.map(() => ratioCoefficient(d, lk, baseline, r)));
     return { term: t.label, df: S.length, ratio: r, lambda, test: wp ? 'F' : 'chi2', ...(wp ? { ddf: dfG } : {}), wholePlot: wp, power: powerOf(S.length, lambda, wp) };
   });
-  return { n, rank: est.filter(Boolean).length, dfRes: n - est.filter(Boolean).length, groups: G.m, dfGroups: dfG, groupLevel: columns.filter((_, j) => level[j]), sigma, alpha, distribution, link: lk, baseline, ratio, terms,
+  return { n, rank: est.filter(Boolean).length, dfRes: n - est.filter(Boolean).length, groups: G.m, dfGroups: dfG, groupLevel: columns.filter((_, j) => level[j]), sigma, alpha, distribution, link: lk, baseline, ratio, ...(d === 'negbin' ? { theta } : {}), terms,
     lambdaAt, powerOf: (df, lambda, term) => powerOf(df, lambda, terms.find(t => t.term === term)?.wholePlot) };
 }
 
@@ -153,7 +155,7 @@ const binomialDraw = (R, n, p) => { let k = 0; for (let i = 0; i < n; i++) if (R
  * Returns [{ term, power, se, nsim }].
  */
 export function simulateGlmmPower(mm, groupLabels, opts = {}) {
-  const { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, sigma, alpha = 0.05, nsim = 200, seed = 1, nAGQ = 25 } = opts;
+  const { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, theta, sigma, alpha = 0.05, nsim = 200, seed = 1, nAGQ = 25 } = opts;
   const approx = glmmPowerFromMatrix(mm, groupLabels, opts);
   const d = glmDistribution(distribution), lk = link ?? canonicalLink(d), counts = GLM_DISTRIBUTIONS[d].counts, L = LINKS[lk];
   const R = rng(seed), { X, columns, assign, model } = mm, G = groupsOf(groupLabels);
@@ -175,7 +177,8 @@ export function simulateGlmmPower(mm, groupLabels, opts = {}) {
       const shift = Array.from({ length: G.m }, () => sigma * normal.ppf(Math.min(1 - 1e-12, Math.max(1e-12, R.random()))));
       const y = eta.map((e, i) => {
         const mu = L.inv(e + shift[G.idx[i]]);
-        return counts ? _draw.poisson(R, mu * expo[i]) : binomialDraw(R, m[i], mu) / m[i];
+        // the negative binomial as a Poisson with a gamma-distributed mean (shape θ, mean 1); θ is estimated in the fits, as the analysis does
+        return counts ? _draw.poisson(R, mu * expo[i] * (d === 'negbin' ? _draw.gamma(R, theta) / theta : 1)) : binomialDraw(R, m[i], mu) / m[i];
       });
       try {
         const big = fitGLMM(mm, y, groupLabels, o), sm = fitGLMM(small, y, groupLabels, o);

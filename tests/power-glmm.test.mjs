@@ -20,7 +20,7 @@ const splitPlot = (W, k) => {
   for (let w = 0; w < W; w++) for (let i = 0; i < k; i++) { rows.push({ T: w % 2 ? 1 : -1, B: i % 2 ? 1 : -1 }); g.push(`wp${w + 1}`); }
   return { mm: modelMatrix(parseFormula('T + B', fs2), fs2, rows), g };
 };
-const optsOf = (c) => ({ distribution: c.input.distribution, baseline: c.input.baseline, ratio: c.input.ratio, sigma: c.input.sigma, trials: c.input.trials, alpha: c.input.alpha });
+const optsOf = (c) => ({ distribution: c.input.distribution, baseline: c.input.baseline, ratio: c.input.ratio, sigma: c.input.sigma, trials: c.input.trials, alpha: c.input.alpha, ...(c.input.theta ? { theta: c.input.theta } : {}) });
 
 section('the Wald approximation: its algebra');
 {
@@ -49,13 +49,16 @@ section('the Wald approximation: its algebra');
 
 section('against lme4::glmer simulations of the analysis');
 // The approximation ignores that a log-normal whole-plot shift also changes the counts' variance and
-// that σ is estimated; against 500 simulated experiments per term it is within a few points (and
-// tends to be slightly conservative for whole-plot factors).
+// that σ is estimated; against 500 simulated experiments per term it is within a few points for
+// terms that vary within whole plots, and conservative for whole-plot factors: 2–6 points low for
+// Poisson and binomial, 10 for the negative binomial (θ = 4), whose λ ÷ m/(m − q) also scales the
+// within-whole-plot scatter. So whole-plot terms may be up to 0.11 low, but no more than the usual
+// tolerance high.
 for (const c of F.cases) {
   const { mm, g } = splitPlot(c.input.wholePlots, c.input.perWholePlot), p = glmmPowerFromMatrix(mm, g, optsOf(c));
   c.output.terms.forEach((t, i) => {
-    const a = p.terms.find(x => x.term === t).power, r = c.output.power[i], tol = Math.max(0.06, 3 * c.output.se[i]);
-    check(`${c.name}, ${t}${c.input.wholePlotTerms.includes(t) ? ' (whole plot)' : ''}: approximation ${a.toFixed(3)}, glmer simulation ${r.toFixed(3)} ± ${c.output.se[i].toFixed(3)}`, Math.abs(a - r) <= tol);
+    const a = p.terms.find(x => x.term === t).power, r = c.output.power[i], tol = Math.max(0.06, 3 * c.output.se[i]), wp = c.input.wholePlotTerms.includes(t);
+    check(`${c.name}, ${t}${wp ? ' (whole plot)' : ''}: approximation ${a.toFixed(3)}, ${c.input.distribution === 'negbin' ? 'glmmTMB' : 'glmer'} simulation ${r.toFixed(3)} ± ${c.output.se[i].toFixed(3)}`, a - r <= tol && r - a <= (wp ? 0.11 : tol));
   });
   check(`${c.name}: the whole-plot terms and their df as the R generator`, JSON.stringify(p.terms.filter(t => t.wholePlot).map(t => t.term)) === JSON.stringify(c.input.wholePlotTerms) && p.dfGroups === c.input.dfGroups);
 }
@@ -69,6 +72,20 @@ for (const c of F.cases) {
   });
 }
 
+{
+  // the negative binomial: aikidoe's simulation (θ estimated in each fit) against glmmTMB's, for the
+  // subplot factor (where the extra scatter within whole plots matters most); Laplace fits, for speed,
+  // as glmmTMB's are
+  const c = F.cases.find(x => x.input.distribution === 'negbin');
+  check('the fixture has a negative binomial case', !!c);
+  if (c) {
+    const { mm, g } = splitPlot(c.input.wholePlots, c.input.perWholePlot);
+    const s = simulateGlmmPower(mm, g, { ...optsOf(c), nsim: 60, seed: 3, nAGQ: 1 }), i = c.output.terms.indexOf('B'), x = s.find(t => t.term === 'B');
+    const z = (x.power - c.output.power[i]) / Math.hypot(x.se, c.output.se[i]);
+    check(`${c.name}, B: simulated with fitGLMM ${x.power.toFixed(3)} ± ${x.se.toFixed(3)}, with glmmTMB ${c.output.power[i].toFixed(3)} (z = ${z.toFixed(2)})`, Math.abs(z) < 3 && x.nsim >= 55);
+  }
+}
+
 section('studies and errors');
 {
   const s0 = createStudy({ name: 'sp', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'B', low: 0, high: 1 }], responses: [{ id: 'n', distribution: 'poisson' }] });
@@ -76,7 +93,12 @@ section('studies and errors');
   const p = studyGlmmPower(st, { model: 'T + B', distribution: 'poisson', baseline: 20, ratio: 1.5, sigma: 0.3 });
   check('a study\'s split-plot: its 10 whole plots, T judged between them', p.groups === 10 && p.terms.find(t => t.term === 'T').wholePlot && p.terms.find(t => t.term === 'T').ddf === 8 && !p.terms.find(t => t.term === 'B').wholePlot);
   const { mm, g } = splitPlot(8, 4);
-  throws('a negative binomial is refused', () => glmmPowerFromMatrix(mm, g, { distribution: 'negbin', baseline: 5, theta: 3, sigma: 0.3 }), /Poisson counts, binomial proportions and pass\/fail/);
+  throws('the negative binomial needs θ', () => glmmPowerFromMatrix(mm, g, { distribution: 'negbin', baseline: 5, sigma: 0.3 }), /needs θ/);
+  throws('a quasi model is refused', () => glmmPowerFromMatrix(mm, g, { distribution: 'quasipoisson', baseline: 5, sigma: 0.3 }), /not quasipoisson/);
+  const pn = (th) => glmmPowerFromMatrix(mm, g, { distribution: 'negbin', baseline: 20, theta: th, ratio: 1.5, sigma: 0.3 }).terms.map(t => t.power), pp = glmmPowerFromMatrix(mm, g, { distribution: 'poisson', baseline: 20, ratio: 1.5, sigma: 0.3 }).terms.map(t => t.power);
+  const [n2, n1e6] = [pn(2), pn(1e6)];
+  check(`the negative binomial: less power than the Poisson, mostly for the subplot factor (B ${pp[1].toFixed(3)} → ${n2[1].toFixed(3)} at θ = 2; T ${pp[0].toFixed(3)} → ${n2[0].toFixed(3)}); θ → ∞ is the Poisson`,
+    n2[1] < pp[1] - 0.1 && pp[0] - n2[0] < pp[1] - n2[1] && Math.abs(n1e6[0] - pp[0]) < 1e-4 && Math.abs(n1e6[1] - pp[1]) < 1e-4);
   throws('σ is needed', () => glmmPowerFromMatrix(mm, g, { distribution: 'poisson', baseline: 5 }), /σ of the whole-plot shift/);
   throws('a design without whole plots', () => studyGlmmPower({ ...st, design: { ...st.design, runs: st.design.runs.map(({ wholePlot, ...r }) => r) } }, { distribution: 'poisson', baseline: 5, sigma: 0.3 }), /no whole plots/);
   const lk = LINKS.logit, pb = glmmPowerFromMatrix(mm, g, { distribution: 'binomial', baseline: 0.3, trials: 20, ratio: 2, sigma: 0.3 });

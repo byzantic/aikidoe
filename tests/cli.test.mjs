@@ -301,6 +301,20 @@ try {
   check('… --nagq 1: the Laplace approximation', o.kind === 'glmm' && o.nAGQ === 1);
   o = js('predict', 'jg.aikidoe.json', 'n ~ T + D', '--at', 'T=37,D=10', '--exposure', '100');
   check('predict --json (GLMM): a typical whole plot, the average over them, a new run in a new whole plot', o.kind === 'glmm' && o.predictions[0].marginal > o.predictions[0].fit && o.predictions[0].predLower < o.predictions[0].lower && o.predictions[0].predUpper > o.predictions[0].upper);
+  // negative binomial counts in a split-plot (issue #78): θ alongside σ; a Poisson GLMM of the same data flags the overdispersion
+  {
+    const s0 = createStudy({ name: 'sp nb', seed: 3, factors: [{ id: 'T', low: 30, high: 37, htc: true }, { id: 'D', low: 1, high: 10 }], responses: [{ id: 'n', distribution: 'negbin' }] });
+    const sd = createStudy({ ...s0, design: toStudyDesign(s0, splitPlotFull([2, 2], [true, false], { replicates: 6 }), { seed: 3 }) });
+    writeFileSync(join(dir, 'jgn.aikidoe.json'), serializeStudy(createStudy(runVirtual({ seed: 4, factors: s0.factors, responses: [{ id: 'n', distribution: 'negbin', theta: 2, truth: { intercept: Math.log(30), terms: { T: 0.25, D: 0.3 } } }], nuisance: { wholePlot: 0.4 } }, sd))));
+  }
+  o = js('fit', 'jgn.aikidoe.json', 'n ~ T + D');
+  check('fit --json (negative binomial, split-plot): the GLMM, automatically, with θ', o.kind === 'glmm' && o.distribution === 'negbin' && o.random.id === 'wholePlot' && o.theta > 0.5 && o.theta < 10 && o.thetaSE > 0, JSON.stringify(o).slice(0, 300));
+  o = js('fit', 'jgn.aikidoe.json', 'n ~ T + D', '--distribution', 'poisson');
+  check('… as Poisson: overdispersion within whole plots flagged', o.kind === 'glmm' && o.overdispersion.detected && o.warnings.some(w => /negative binomial with the random whole plot effect/.test(w)), JSON.stringify(o.overdispersion));
+  r = run('fit', 'jgn.aikidoe.json', 'n ~ T + D');
+  check('fit (negative binomial GLMM): θ printed, σ and θ re-estimated in the tests', r.code === 0 && /θ = .* within a whole plot, a count varies as μ \+ μ²\/θ/.test(r.out) && /σ and θ re-estimated/.test(r.out), r.out + r.err);
+  o = js('power', 'jgn.aikidoe.json', '--model', 'T + D', '--response', 'n', '--baseline', '20', '--ratio', '1.5', '--theta', '2', '--sigma-wp', '0.3');
+  check('power --json --sigma-wp for the negative binomial: θ in W', o.theta === 2 && o.wholePlots === 12 && o.terms[1].test === 'chi2' && o.terms[1].power < 0.95, JSON.stringify(o.terms));
   r = run('fit', 'jg.aikidoe.json', 'n ~ T * D', '--reduce');
   check('… --reduce: backward elimination of the GLMM, then its fit', r.code === 0 && /model reduction with a random whole plot effect \(backward, likelihood-ratio/.test(r.out) && /drop T:D/.test(r.out) && /reduced model: n ~ (T \+ )?D\s/.test(r.out) && /random intercept per whole plot/.test(r.out), r.out + r.err);
   o = js('fit', 'jg.aikidoe.json', 'n ~ T * D', '--reduce', 'aicc');

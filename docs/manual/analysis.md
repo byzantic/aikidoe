@@ -275,10 +275,10 @@ treats every run as independent judges the hard-to-change factors against the ru
 which is far too small for them. The same holds for blocks (days, batches) when there are enough
 of them to be treated as a sample.
 
-aikidoe then fits a **generalised linear mixed model** (GLMM): the Poisson or binomial model with
-a **random intercept** per whole plot (or block) — a shift on the log or logit scale, drawn from
-a normal distribution with standard deviation σ. It does so automatically for a split-plot with a
-Poisson, binomial or pass/fail response; blocks are random when asked (`--random block`, or the
+aikidoe then fits a **generalised linear mixed model** (GLMM): the Poisson, negative binomial or
+binomial model with a **random intercept** per whole plot (or block) — a shift on the log or logit
+scale, drawn from a normal distribution with standard deviation σ. It does so automatically for a
+split-plot with a Poisson, negative binomial, binomial or pass/fail response; blocks are random when asked (`--random block`, or the
 Analyse step's *random effect* choice), and `--random none` fits the ordinary model.
 
 ```text
@@ -290,7 +290,15 @@ doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
 - **The fit**: maximum likelihood, the integral over each whole plot's shift by **adaptive
   Gauss–Hermite quadrature** with 25 nodes (`--nagq`; `--nagq 1` is the Laplace approximation).
   Checked against R's `lme4::glmer` for Poisson counts with an exposure, binomial proportions
-  (logit and probit) and pass/fail results, and for a fit where σ comes out as 0.
+  (logit and probit) and pass/fail results, and for a fit where σ comes out as 0; the negative
+  binomial against its likelihood integrated directly in R, lme4's Laplace approximation and
+  `glmmTMB`.
+- **Counts that vary more than Poisson within a whole plot** — clumped colonies, cells counted in
+  uneven fields — are flagged (Pearson χ²/df of the residuals well above 1, *overdispersion within
+  whole plots*), with the negative binomial one click away (or `--distribution negbin`). Its **θ**
+  is estimated alongside σ: within a whole plot a count varies as μ + μ²/θ, and between whole
+  plots the mean shifts by σ on the log scale. Each takes up a different part of the variation,
+  so both are reported.
 - **σ** is reported on the link scale, with the likelihood-ratio test of σ = 0 (referred to
   ½χ²₀ + ½χ²₁, since σ cannot be negative). σ estimated as 0 means no variation between whole
   plots beyond the counts' own; the fit is then the ordinary one.
@@ -302,7 +310,7 @@ doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
   This is not in `lme4`, whose Wald z intervals for a hard-to-change factor covered the truth in
   only 82–89 % of simulated split-plots with 8–12 whole plots; with the correction, 92–95 %.
   Coefficients that change within whole plots keep the z tests.
-- **Tests** of the terms are likelihood ratios, σ re-estimated with and without the term (types
+- **Tests** of the terms are likelihood ratios, σ (and θ) re-estimated with and without the term (types
   I, II and III); for a term that changes only between whole plots, as F = χ²/df on m − q df.
 - **Predictions** are for a *typical* whole plot (its shift 0) and, because the link scale is
   not linear, also **averaged over whole plots** (larger, for counts); the prediction interval for
@@ -311,8 +319,8 @@ doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
   candidate term is dropped and the model refitted (σ re-estimated), and judged by the same
   likelihood-ratio test as in the table, an F for terms that change only between whole plots.
   Each step refits the model several times, so on the Analyse step it runs in the background.
-- Not available with a random effect: the negative binomial and quasi models (the random effect
-  already takes up the extra variation between whole plots) and Firth's method.
+- Not available with a random effect: the quasi models (they have no likelihood to integrate over
+  the whole plots; use the negative binomial for counts) and Firth's method.
   Power for a split-plot with counts or proportions takes the whole-plot σ
   ([power](concepts.md#power)); without it, power treats the runs as independent and overstates
   it for hard-to-change factors.

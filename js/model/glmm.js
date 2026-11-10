@@ -2,7 +2,8 @@
 // proportions whose runs fall in groups — blocks (days, batches) or the whole plots of a
 // split-plot — that shift the response on the link scale.
 //
-//   η_i = x_iβ + o_i + σ z_g(i),   z_g ~ N(0, 1),   y_i | z ~ Poisson or binomial (or pass/fail)
+//   η_i = x_iβ + o_i + σ z_g(i),   z_g ~ N(0, 1),   y_i | z ~ Poisson, negative binomial (variance
+//   μ + μ²/θ, θ estimated with β and σ; issue #78) or binomial (or pass/fail)
 //
 // The likelihood is a product over groups of one-dimensional integrals over z_g, each approximated
 // by adaptive Gauss–Hermite quadrature (nAGQ nodes, default 25) or the Laplace approximation
@@ -59,8 +60,9 @@ function gaussHermite(K) {
   return GH.get(K);
 }
 
-/** log f(y | μ) of one observation: Poisson count, or binomial proportion y of m trials. */
+/** log f(y | μ) of one observation: Poisson or negative binomial count, or binomial proportion y of m trials. */
 function logf(fam, y, mu, m) {
+  if (fam.distribution === 'negbin') { const th = fam.theta; return lgamma(y + th) - lgamma(th) - lgamma(y + 1) + th * Math.log(th / (th + mu)) + (y > 0 ? y * Math.log(mu / (th + mu)) : 0); }
   if (fam.D.counts) return (y > 0 ? y * Math.log(mu) : 0) - mu - lgamma(y + 1);
   const k = Math.round(m * y);
   return lchoose(m, k) + (k > 0 ? k * Math.log(mu) : 0) + (m - k > 0 ? (m - k) * Math.log(1 - mu) : 0);
@@ -154,8 +156,9 @@ export function fitGLMM(mm, y, groupLabels, o = {}) {
   const { X: X0, columns, assign, model } = mm, n = X0.length;
   if (y.length !== n || groupLabels.length !== n) throw new Error(`${y.length} responses and ${groupLabels.length} group labels for ${n} rows`);
   const noise = o.distribution ?? 'poisson', distribution = noise === 'bernoulli' ? 'binomial' : noise;
-  if (!['poisson', 'binomial'].includes(distribution)) throw new Error(`random effects are available for Poisson counts, binomial proportions and pass/fail results, not ${noise}${noise === 'negbin' || noise.startsWith('quasi') ? ': for counts or proportions that vary more than that within groups, the random effect already takes up the variation between groups' : ''}`);
-  const link = o.link ?? canonicalLink(distribution), fam = family(distribution, link);
+  if (!['poisson', 'binomial', 'negbin'].includes(distribution)) throw new Error(`random effects are available for Poisson and negative binomial counts, binomial proportions and pass/fail results, not ${noise}${noise.startsWith('quasi') ? ': a quasi model has no likelihood to integrate over the random effect (for counts that vary more than Poisson within groups, use the negative binomial)' : ''}`);
+  const link = o.link ?? canonicalLink(distribution), nb = distribution === 'negbin';
+  const famOf = nb ? (() => { const c = new Map(); return (th) => { if (!c.has(th)) { if (c.size > 64) c.clear(); c.set(th, family('negbin', link, th)); } return c.get(th); }; })() : () => family(distribution, link);
   const nAGQ = o.nAGQ ?? 25;
   if (!(Number.isInteger(nAGQ) && nAGQ >= 1 && nAGQ <= 50)) throw new Error('nAGQ must be a whole number from 1 (Laplace) to 50');
   const w = o.weights ?? y.map(() => 1), off = o.offset ?? y.map(() => 0);
@@ -168,16 +171,18 @@ export function fitGLMM(mm, y, groupLabels, o = {}) {
   const f = qr(X0, { tol: 1e-11 }), keep = columns.map((_, j) => j).filter(j => !f.aliased.includes(j));
   const X = X0.map(r => keep.map(j => r[j])), p = keep.length;
   const glm = fitGLM({ ...mm, X, columns: keep.map(j => columns[j]), assign: keep.map(j => assign[j]) }, y, { distribution, link, weights: w, offset: off });
-  const data = { X, y, w, off, groups, fam, nodes: nAGQ === 1 ? [{ t: 0, w: Math.sqrt(Math.PI) }] : gaussHermite(nAGQ) };
+  // the parameters: β, σ, and for the negative binomial log θ (its likelihood is integrated over the random effect for each θ)
+  const data = { X, y, w, off, groups, fam: famOf(glm.theta), nodes: nAGQ === 1 ? [{ t: 0, w: Math.sqrt(Math.PI) }] : gaussHermite(nAGQ) };
+  const dataAt = (th) => (nb ? { ...data, fam: famOf(Math.exp(th[p + 1])) } : data);
   let zs = null;
-  const negll = (th) => { const r = loglik(data, th.slice(0, p), th[p], zs); return -r.ll; };
-  // start: the GLM's β, and the best σ on a coarse grid
-  let th = [...glm.coef, 0.3];
-  { let best = Infinity; for (const s of [0.05, 0.15, 0.3, 0.6, 1, 1.6, 2.5]) { const v = negll([...glm.coef, s]); if (v < best) { best = v; th[p] = s; } } }
+  const negll = (th) => { const r = loglik(dataAt(th), th.slice(0, p), th[p], zs); return -r.ll; };
+  // start: the GLM's β (and θ), and the best σ on a coarse grid
+  let th = [...glm.coef, 0.3, ...(nb ? [Math.log(glm.theta)] : [])];
+  { let best = Infinity; for (const s of [0.05, 0.15, 0.3, 0.6, 1, 1.6, 2.5]) { const v = negll([...glm.coef, s, ...th.slice(p + 1)]); if (v < best) { best = v; th[p] = s; } } }
   let converged = false, it = 0, Hlast = null;
   const steps = () => th.map((v, j) => 1e-4 * Math.max(j === p ? 0.1 : 0.5, Math.abs(v)));
   for (it = 1; it <= 60; it++) {
-    zs = loglik(data, th.slice(0, p), th[p]).modes;
+    zs = loglik(dataAt(th), th.slice(0, p), th[p]).modes;
     const { f0, g, H } = hessian(negll, th, steps());
     Hlast = H;
     let d = solveSPD(H, g.map(v => -v));
@@ -192,15 +197,17 @@ export function fitGLMM(mm, y, groupLabels, o = {}) {
   }
   if (!converged) warnings.push(`the fit did not converge in ${it} iterations`);
   // the boundary: σ = 0 (the likelihood is even in σ)
-  let sigma = Math.abs(th[p]), beta = th.slice(0, p), boundary = false;
+  let sigma = Math.abs(th[p]), beta = th.slice(0, p), boundary = false, lth = th.slice(p + 1);
+  const atGLM = [...glm.coef, 0, ...(nb ? [Math.log(glm.theta)] : [])];
   if (sigma < 1e-4) {
-    const at0 = -loglik(data, glm.coef, 0).ll, here = negll([...beta, th[p]]);
-    if (at0 <= here + 1e-7) { boundary = true; sigma = 0; beta = glm.coef.slice(); }
+    const at0 = negll(atGLM), here = negll(th);
+    if (at0 <= here + 1e-7) { boundary = true; sigma = 0; beta = glm.coef.slice(); lth = atGLM.slice(p + 1); }
   }
-  th = [...beta, sigma];
-  const final = loglik(data, beta, sigma);
+  th = [...beta, sigma, ...lth];
+  const theta = nb ? Math.exp(lth[0]) : undefined, fam = famOf(theta);
+  const final = loglik(dataAt(th), beta, sigma);
   // covariance: the β-block of the inverse Hessian of −log L over (σ, β); the GLM's at the boundary
-  let covK, sigmaSE = NaN;
+  let covK, sigmaSE = NaN, thetaSE = nb && boundary ? glm.thetaSE : undefined;
   if (boundary) covK = glm.cov;
   else {
     zs = final.modes;
@@ -208,7 +215,9 @@ export function fitGLMM(mm, y, groupLabels, o = {}) {
     const L = chol(H.map((r, i) => r.map((v, j) => (v + H[j][i]) / 2))).L, V = cholInverse(L);
     covK = V.slice(0, p).map(r => r.slice(0, p));
     sigmaSE = Math.sqrt(V[p][p]);
+    if (nb) thetaSE = theta * Math.sqrt(V[p + 1][p + 1]);
   }
+  if (nb && theta > 1e3) warnings.push(`θ is very large (${theta.toPrecision(3)}): the counts vary no more than Poisson within ${gname}s, so the Poisson model with the random ${gname} effect is the simpler choice`);
   // the group-level columns (constant within every group) and the small-sample scaling for them
   const level = columns.map((_, j) => keep.includes(j) && groups.rows.every(I => I.every(i => X0[i][j] === X0[I[0]][j])));
   const q = level.filter(Boolean).length, dfG = groups.m - q;
@@ -229,18 +238,27 @@ export function fitGLMM(mm, y, groupLabels, o = {}) {
   const mu = eta.map(e => fam.link.inv(e));
   const pearson = y.map((v, i) => (v - mu[i]) * Math.sqrt(w[i] / fam.variance(mu[i])));
   // σ = 0 against σ > 0: the likelihood ratio, referred to ½χ²₀ + ½χ²₁
-  const ll0 = -negll([...glm.coef, 0]), lr = Math.max(0, 2 * (final.ll - ll0));
-  const k = p + 1;
+  // overdispersion within groups (Poisson): Pearson χ² of the residuals at the conditional modes on
+  // n − p − 1 df (σ counted), as the usual check for GLMMs; somewhat conservative, since the modes
+  // are fitted
+  let overdispersion = null;
+  if (distribution === 'poisson' && n - p - 1 >= 1) {
+    const X2 = sum(pearson.map(r => r * r)), df = n - p - 1, ratio = X2 / df, pv = chi2.sf(X2, df);
+    overdispersion = { pearson: X2, df, ratio, p: pv, detected: ratio > 1.5 && pv < 0.05 };
+    if (overdispersion.detected) warnings.push(`overdispersion within ${gname}s: Pearson χ²/df = ${ratio.toFixed(2)} (p = ${pv < 1e-4 ? pv.toExponential(1) : pv.toFixed(4)}); the negative binomial with the random ${gname} effect allows for it`);
+  }
+  const ll0 = -negll(atGLM), lr = Math.max(0, 2 * (final.ll - ll0));
+  const k = p + 1 + (nb ? 1 : 0);
   return {
     kind: 'glmm', model, columns, assign, n, rank: p, aliased: f.aliased.map(j => columns[j]),
-    noise, distribution, link, nAGQ, group: gname,
+    noise, distribution, link, nAGQ, group: gname, ...(nb ? { theta, thetaSE } : {}),
     groups: { names: groups.names, m: groups.m, labels: groupLabels.map(String) },
     coef, se, cov, z, p: pv, df, statistic: 'z', seWald, covWald: covW, sigma, sigmaSE, boundary,
     groupLevel: columns.filter((_, j) => level[j]), dfGroups: dfG, smallSample: kG,
     sigmaTest: { chi2: lr, df: 1, p: lr > 0 ? 0.5 * chi2.sf(lr, 1) : 1 },
     modes: Object.fromEntries(groups.names.map((g, i) => [g, modes[i]])),
     loglik: final.ll, k, aic: -2 * final.ll + 2 * k, deviance: -2 * final.ll,
-    fitted: mu, linear: eta, residuals: y.map((v, i) => v - mu[i]), pearson,
+    fitted: mu, linear: eta, residuals: y.map((v, i) => v - mu[i]), pearson, overdispersion,
     converged, iter: it, warnings, glm,
     X0, y, weights: w, offset: off, dfRes: n - p - 1,
   };
@@ -333,7 +351,7 @@ export function glmmPredict(fit, X, { level = 0.95, exposure = 1, trials, n = 1,
   // with the small-sample correction: t on the groups' df (every prediction involves the intercept)
   const corrected = !fit.boundary && fit.smallSample > 1 && fit.dfGroups >= 1;
   const c = corrected ? studentT.ppf(1 - (1 - level) / 2, fit.dfGroups) : zq;
-  const asGlm = { link: fit.link, distribution: fit.distribution, dispersionEstimated: false, dispersion: 1, weights: fit.weights };
+  const asGlm = { link: fit.link, distribution: fit.distribution, dispersionEstimated: false, dispersion: 1, weights: fit.weights, theta: fit.theta, thetaSE: fit.thetaSE };
   return X.map(x => {
     let e = 0, v = 0;
     for (let i = 0; i < x.length; i++) {
@@ -425,7 +443,7 @@ export function predictCountMixed(fit, settings, opts = {}) {
  */
 export function glmmLoglikAt(mm, y, groupLabels, o, beta, sigma) {
   const distribution = (o.distribution ?? 'poisson') === 'bernoulli' ? 'binomial' : (o.distribution ?? 'poisson');
-  const fam = family(distribution, o.link ?? canonicalLink(distribution)), nAGQ = o.nAGQ ?? 25;
+  const fam = family(distribution, o.link ?? canonicalLink(distribution), o.theta), nAGQ = o.nAGQ ?? 25;
   const data = { X: mm.X, y, w: o.weights ?? y.map(() => 1), off: o.offset ?? y.map(() => 0), groups: indexGroups(groupLabels), fam,
     nodes: nAGQ === 1 ? [{ t: 0, w: Math.sqrt(Math.PI) }] : gaussHermite(nAGQ) };
   return loglik(data, beta, sigma).ll;

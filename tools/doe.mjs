@@ -552,8 +552,8 @@ function printGLM(study, fit, opt) {
 function countRandomOf(study, opt, distribution) {
   const r = opt.random === undefined ? 'auto' : String(opt.random);
   if (r === 'none') return null;
-  // automatically only for the distributions a random effect is available for (a negative binomial or quasi model stays fixed)
-  if (r === 'auto' && !['poisson', 'binomial', 'bernoulli'].includes(distribution)) return null;
+  // automatically only for the distributions a random effect is available for (a quasi model stays fixed: it has no likelihood)
+  if (r === 'auto' && !['poisson', 'negbin', 'binomial', 'bernoulli'].includes(distribution)) return null;
   if (!['auto', 'block', 'wholePlot'].includes(r)) fail(`--random ${r}: for counts and proportions use wholePlot, block or none`);
   return randomGroupOf(study, r)?.id ?? null;
 }
@@ -568,6 +568,7 @@ function printGLMM(study, formula, random, opt) {
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'} + a random intercept per ${fit.random.name}`);
   out(`${nm.label}, ${fit.link} link; ${fit.nAGQ === 1 ? 'Laplace approximation' : `adaptive Gauss–Hermite quadrature (${fit.nAGQ} nodes)`}, maximum likelihood`);
   out(`${fit.n} observations in ${fit.random.m} ${gs}, ${fit.rank} fixed coefficients${fit.offset.some(v => v !== 0) ? '; exposure as an offset (rates per unit exposure)' : ''}`);
+  if (fit.theta !== undefined) out(`θ = ${num(fit.theta, 4)} (s.e. ${num(fit.thetaSE, 3)}): within a ${fit.random.name}, a count varies as μ + μ²/θ`);
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
   out('');
@@ -586,13 +587,14 @@ ${fit.random.name} σ = ${num(fit.sigma, 4)} on the ${fit.link} scale${fit.bound
   const type = opt.anova ? int(opt.anova, 'anova') : 1;
   const tests = glmmTests(fit, type);
   out(`
-likelihood-ratio tests (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'}; σ re-estimated in each model${tests.some(r => r.F !== undefined) ? `; terms that vary only between ${gs} as F = χ²/df on ${fit.dfGroups} df` : ''})`);
+likelihood-ratio tests (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'}; σ${fit.theta !== undefined ? ' and θ' : ''} re-estimated in each model${tests.some(r => r.F !== undefined) ? `; terms that vary only between ${gs} as F = χ²/df on ${fit.dfGroups} df` : ''})`);
   out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'chi2', label: 'χ²' }, { key: 'F', label: 'F', fmt: (v) => (v === undefined ? '' : num(v)) }, { key: 'p', label: 'p', fmt: pval }], tests));
   put({ kind: 'glmm', response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`, distribution: fit.noise, link: fit.link, nAGQ: fit.nAGQ,
     random: { id: fit.random.id, name: fit.random.name, groups: fit.random.m, sigma: fit.sigma, sigmaSE: fit.sigmaSE, boundary: fit.boundary, test: fit.sigmaTest, modes: fit.modes },
+    ...(fit.theta !== undefined ? { theta: fit.theta, thetaSE: fit.thetaSE } : {}),
     n: fit.n, rank: fit.rank, aliased: fit.aliased, units: 'coded', groupLevel: fit.groupLevel, dfGroups: fit.dfGroups,
     coefficients: rows.map(r => ({ term: r.term, estimate: r.est, se: r.se, seWald: fit.seWald[fit.columns.indexOf(r.term)], statistic: r.z, df: r.df === Infinity ? null : r.df, p: r.p, lower: r.ci.lower, upper: r.ci.upper, ...(r.ci.ratio ? { ratio: r.ci.ratio } : {}) })),
-    loglik: fit.loglik, aic: fit.aic, converged: fit.converged, warnings: fit.warnings, tests: { type, rows: tests } });
+    loglik: fit.loglik, aic: fit.aic, converged: fit.converged, ...(fit.overdispersion ? { overdispersion: fit.overdispersion } : {}), warnings: fit.warnings, tests: { type, rows: tests } });
 }
 
 function cmdFit({ pos, opt }) {
@@ -927,12 +929,12 @@ function printSplitPlotCountsPower(study, model, spec, { alpha, target, opt }) {
   const p = studyGlmmPower(study, { model, alpha, ...spec });
   const odds = String(spec.distribution).includes('binomial') || spec.distribution === 'bernoulli', rname = odds ? 'odds ratio' : 'rate ratio';
   const per = (v) => (Array.isArray(v) ? `${v.join(', ')} (cycled over the runs)` : v);
-  out(`power for ${model}, ${spec.distribution} (${p.link} link) with a random whole-plot intercept: ${p.n} runs in ${p.groups} whole plots; whole-plot σ = ${spec.sigma} on the ${p.link} scale; α = ${alpha}; baseline ${odds ? 'proportion' : 'mean count'} ${spec.baseline}${odds ? `, ${per(spec.trials)} trials per run` : spec.exposure !== 1 ? ` per unit exposure, exposure ${per(spec.exposure)}` : ''}`);
+  out(`power for ${model}, ${spec.distribution} (${p.link} link) with a random whole-plot intercept: ${p.n} runs in ${p.groups} whole plots; whole-plot σ = ${spec.sigma} on the ${p.link} scale; α = ${alpha}; baseline ${odds ? 'proportion' : 'mean count'} ${spec.baseline}${odds ? `, ${per(spec.trials)} trials per run` : spec.exposure !== 1 ? ` per unit exposure, exposure ${per(spec.exposure)}` : ''}${spec.theta ? `, θ = ${spec.theta} within whole plots` : ''}`);
   const det = Object.fromEntries(detectableGlmmRatio(p, { power: target }).map(d => [d.term, d.ratio]));
   let sim = null;
   if (opt.simulate) { const { mm, groups } = studyGlmmMatrix(study, model); sim = Object.fromEntries(simulateGlmmPower(mm, groups, { ...spec, alpha, nsim: int(opt.simulate, 'simulate'), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed }).map(s => [s.term, s])); }
   const rows = p.terms.filter(t => !t.block);
-  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, wholePlots: p.groups, dfGroups: p.dfGroups, sigmaWholePlot: spec.sigma, alpha, target, distribution: spec.distribution, link: p.link, baseline: spec.baseline, ratio: spec.ratio,
+  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, wholePlots: p.groups, dfGroups: p.dfGroups, sigmaWholePlot: spec.sigma, alpha, target, distribution: spec.distribution, link: p.link, baseline: spec.baseline, ratio: spec.ratio, ...(spec.theta ? { theta: spec.theta } : {}),
     terms: rows.map(t => ({ term: t.term, df: t.df, ...(t.ddf !== undefined ? { ddf: t.ddf } : {}), test: t.test, ratio: t.ratio, power: t.power, detectableRatio: det[t.term], ...(sim ? { simulated: sim[t.term].power, simulatedSE: sim[t.term].se } : {}) })) });
   out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'tested', label: 'tested against', align: 'left' }, { key: 'ratio', label: rname }, { key: 'power', label: 'power' }, ...(sim ? [{ key: 'sim', label: `simulated (${opt.simulate})`, align: 'left' }] : []), { key: 'det', label: `${rname} for ${target * 100}%` }],
     rows.map(t => ({ ...t, tested: t.wholePlot ? `whole plots (F, ${t.ddf} df)` : 'runs (χ²)', power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: Number.isFinite(det[t.term]) ? num(det[t.term], 4) : '> 1000', ...(sim ? { sim: `${num(sim[t.term].power, 3)} ± ${num(sim[t.term].se, 2)}` } : {}) }))));
