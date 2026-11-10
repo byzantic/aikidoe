@@ -14,19 +14,21 @@ $ doe init etch.aikidoe.json --name "Etch rate" --factor power:200:400:W --facto
 created etch.aikidoe.json: 5 factors, 1 responses, seed 101
 $ doe recommend etch.aikidoe.json --goal model --budget 16 --no-optimal
 goal: model — estimate main effects and two-factor interactions; model 2fi (16 terms); power at Δ = 2σ, α = 0.05; budget 16 runs
-#  design                runs  res.  D-eff %  min power
--  --------------------  ----  ----  -------  ---------
-1  2^(5−1) fraction        16  V         100
-2  Full factorial          32            100     0.9996
-3  Central composite       32          59.27     0.9633
-4  Box–Behnken             43          16.64     0.4876
-–  2^(5−2) fraction         8  III
-–  Plackett–Burman         12  III
+#  design                runs  res.  P  D-eff %  min power
+-  --------------------  ----  ----  -  -------  ---------
+1  2^(5−1) fraction        16  V     4      100
+2  Full factorial          32               100     0.9996
+3  Central composite       32             59.27     0.9633
+4  Box–Behnken             43             16.64     0.4876
+–  Plackett–Burman 12      12  3.67  3
+–  2^(5−2) fraction         8  III   2
 –  Definitive screening    13
+res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial
 
 1. 2^(5−1) fraction (16 runs)
    + estimates main effects and all two-factor interactions (16 terms) in 16 runs
    + resolution V: main effects and 2fis clear of each other
+   + projectivity 4: any 4 factors form a full 2⁴ — if only that many matter, their interactions come from these runs
    + fits the budget (16 of 16 runs)
    ! saturated: no residual degrees of freedom, so no test without pooling, Lenth or replication
 
@@ -41,7 +43,7 @@ goal: model — estimate main effects and two-factor interactions; model 2fi (16
    + power ≥ 0.8 for every term at Δ = 2σ (smallest 0.96)
    ! over budget: 32 runs, budget 16
 
-not suitable for 2fi: 2^(5−2) fraction (cannot estimate 2fi: the runs support 8 of its 16 coefficients); Plackett–Burman (cannot estimate 2fi: the runs support 12 of its 16 coefficients); Definitive screening (cannot estimate 2fi: the runs support 11 of its 16 coefficients)
+not suitable for 2fi: Plackett–Burman 12 (cannot estimate 2fi: the runs support 12 of its 16 coefficients); 2^(5−2) fraction (cannot estimate 2fi: the runs support 8 of its 16 coefficients); Definitive screening (cannot estimate 2fi: the runs support 11 of its 16 coefficients)
 ```
 
 Explain the top options to the user (run counts, resolution, what is aliased, power), agree one,

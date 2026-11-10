@@ -32,12 +32,18 @@ alias chains among main effects and two-factor interactions (see
 Resolution III fractions (8 runs for 4–7 factors) screen main effects only; a
 [fold-over](designs-sequential.md#fold-over) clears them of two-factor interactions later.
 
+A fraction of resolution R has **projectivity** R − 1: any R − 1 of its factors form a full
+factorial (any 3 in a resolution IV design), so if only that many turn out to matter, their
+interactions can be estimated from the same runs
+([projectivity](designs-screening.md#projectivity)).
+
 ```console
 $ doe alias --factors 7 --runs 16
 2^(7−3) design, 7 factors in 16 runs, resolution IV
 generators: E = ABC, F = ABD, G = ACD
 defining relation: I = ABCE = ABDF = ACDG = AEFG = BCFG = BDEG = CDEF
 word-length pattern (A3, A4, …): 0, 7, 0, 0, 0
+projectivity 3: any 3 factors form a full 2^3 (resolution IV → R − 1)
 
 alias chains among effects up to order 2:
   AB = CE = DF

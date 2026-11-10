@@ -1,6 +1,7 @@
 # R packages for the fixture generators (tests/ref/*.R), one per line. Add as issues need them.
 jsonlite
 FrF2
+DoE.base
 BsMD
 car
 rsm

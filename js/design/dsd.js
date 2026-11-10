@@ -75,7 +75,9 @@ export const dsdOrder = (k) => ORDERS.find(m => m >= k && m >= 4) ?? null;
 /**
  * Definitive screening design for k factors. opts:
  *   fake: extra columns in the conference matrix that are then dropped (Jones & Nachtsheim
- *         2013 recommend 2 for better estimation of second-order effects; default 0)
+ *         2013 recommend 2 for better estimation of second-order effects; default 0, but up to
+ *         order 6 for k = 3 or 4: the 9-run designs cannot fit the full quadratic in any 3 of
+ *         their factors, the 13-run ones can in all of them — issue #79)
  *   centre: number of centre runs (default 1)
  *   categorical: indices of two-level categorical factors (the DSD-augment idea of Jones &
  *         Nachtsheim 2013): their 0 entries in C and −C become +1 and −1, keeping the fold-over,
@@ -83,8 +85,9 @@ export const dsdOrder = (k) => ORDERS.find(m => m >= k && m >= 4) ?? null;
  *         to every second-order term (so main effects are unbiased by active interactions and
  *         curvature); a categorical main effect is correlated 1/(m−1) with each continuous one.
  */
-export function definitiveScreening(k, { fake = 0, centre = 1, categorical = [] } = {}) {
+export function definitiveScreening(k, { fake, centre = 1, categorical = [] } = {}) {
   if (!Number.isInteger(k) || k < 3) throw new Error('a definitive screening design needs at least 3 factors');
+  fake ??= k <= 4 ? 6 - k : 0;               // at least order 6 (13 runs): see above
   const m = dsdOrder(k + fake);
   if (!m) throw new Error(`definitive screening designs here go up to ${ORDERS[ORDERS.length - 1]} columns (k + fake)`);
   const C = conferenceMatrix(m).map(r => r.slice(0, k));

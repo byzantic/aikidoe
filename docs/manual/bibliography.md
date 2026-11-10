@@ -41,6 +41,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Bates, D., Mächler, M., Bolker, B. & Walker, S. (2015). Fitting linear mixed-effects models
   using lme4. *Journal of Statistical Software* 67(1), 1–48. (The GLMMs for counts and proportions
   are checked against its `glmer`.)
+- Box, G. E. P. & Tyssedal, J. (1996). Projective properties of certain orthogonal arrays.
+  *Biometrika* 83, 950–955. (Projectivity.)
 - Box, G. E. P. & Wilson, K. B. (1951). On the experimental attainment of optimum conditions.
   *Journal of the Royal Statistical Society B* 13, 1–45.
 - Brooks, M. E., Kristensen, K., van Benthem, K. J., Magnusson, A., Berg, C. W., Nielsen, A.,
@@ -52,6 +54,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   median polish of plate rows and columns; see [microplates](plates.md#analysis).)
 - Cox, D. R. (1971). A note on polynomial response functions for mixtures. *Biometrika* 58,
   155–159.
+- Deng, L.-Y. & Tang, B. (1999). Generalized resolution and minimum aberration criteria for
+  Plackett–Burman and other nonregular factorial designs. *Statistica Sinica* 9, 1071–1082.
+  (Generalised resolution of Plackett–Burman designs.)
 - Derringer, G. & Suich, R. (1980). Simultaneous optimization of several response variables.
   *Journal of Quality Technology* 12, 214–219.
 - Firth, D. (1993). Bias reduction of maximum likelihood estimates. *Biometrika* 80, 27–38.
@@ -75,6 +80,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Firth estimates are checked against.)
 - Lenth, R. V. (1989). Quick and easy analysis of unreplicated factorials. *Technometrics* 31,
   469–473.
+- Lin, D. K. J. & Draper, N. R. (1992). Projection properties of Plackett and Burman designs.
+  *Technometrics* 34, 423–428. (Projectivity 3 of the Plackett–Burman designs.)
 - Lin, D. K. J. & Tu, W. (1995). Dual response surface optimization. *Journal of Quality
   Technology* 27, 34–39.
 - Lawson, J. & Willden, C. (2016). Mixture experiments in R using mixexp. *Journal of Statistical

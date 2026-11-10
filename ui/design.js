@@ -3,6 +3,7 @@
 import { h, select, messages, dataTable, help } from './dom.js';
 import { plot } from './plot.js';
 import { num } from '../js/format.js';
+import { estimableProjections } from '../js/design/projectivity.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable, PB_RUNS } from '../js/design/pb.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
@@ -66,7 +67,7 @@ export function render(ctx) {
   if (study.mixture) return h('div', {}, study.design ? platePanel(ctx) : null, mixtureDesignPanel(ctx));
   const next = study.design && study.design.kind !== 'dose-response' ? nextStagePanel(ctx) : null;
   const ui = state.ui.design ??= {};
-  const cands = candidates(study);
+  const cands = candidates(study, { budget: ui.budget });
   if (!cands.length) return h('section', { class: 'panel' }, h('h2', {}, 'Design'), h('div', { class: 'msg warning' }, 'No design is available for these factors yet.'));
   const cand = cands.find(c => c.id === ui.id) ?? cands.find(c => (c.kind === 'fraction' || c.kind === 'sp-frac') && c.res >= 4) ?? cands[0];
   const set = (patch) => setUI({ design: { ...ui, ...patch } });
@@ -88,7 +89,8 @@ export function render(ctx) {
     dataTable([
       ...(rec ? [{ key: 'rank', label: '#', cls: 'n', fmt: (_, r) => recOf(r.id)?.rank ?? '—' }] : []),
       { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n', fmt: (v, r) => recOf(r.id)?.runs ?? v },
-      { key: 'res', label: 'resolution', fmt: (v, r) => (['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full', 'lhs'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) },
+      { key: 'res', label: 'resolution', fmt: (v, r) => (r.kind === 'pb' && r.gres !== null ? h('span', { title: 'generalised resolution (Deng & Tang): between III and IV — main effects only partially aliased with 2fis' }, num(r.gres, 3)) : ['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full', 'lhs'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) },
+      ...(rec ? [{ key: 'proj', label: 'P', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return h('span', { title: 'projectivity: any P factors form a full two-level factorial' }, o?.projectivity != null && o.projectivity < study.factors.length ? `${o.projectivity}${o.projectivityCapped ? '+' : ''}` : '—'); } }] : []),
       ...(rec ? [{ key: 'pw', label: 'min power', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return o?.minPower != null ? num(o.minPower, 2) : '—'; } }] : []),
       { key: 'note', label: '', fmt: (v, r) => { const o = recOf(r.id); if (!o) return v; return h('div', { class: 'small', 'data-reasons': r.id }, o.reasons.length ? h('div', {}, o.reasons.join('; ')) : null, o.warnings.length ? h('div', { class: 'warn-text' }, o.warnings.join('; ')) : null); } },
     ], rows, { rowAttrs: (r) => ({ class: `click ${r.id === cand.id ? 'sel' : ''} ${rec && !recOf(r.id)?.rank ? 'muted' : ''}`, 'data-design': r.id, onclick: () => {
@@ -97,7 +99,7 @@ export function render(ctx) {
       if (o && r.kind === 'sp-full' && o.runs > r.runs) patch.replicates = Math.round(o.runs / r.runs);
       set(patch);
     } }) }),
-    h('p', { class: 'muted small' }, 'Resolution III: main effects aliased with two-factor interactions; IV: main effects clear, 2fis aliased with each other; V: main effects and 2fis clear. Response-surface designs (central composite, Box–Behnken) estimate a full quadratic.'));
+    h('p', { class: 'muted small' }, 'Resolution III: main effects aliased with two-factor interactions; IV: main effects clear, 2fis aliased with each other; V: main effects and 2fis clear. Plackett–Burman designs sit between III and IV (generalised resolution, e.g. 3.67): their 2fis are spread thinly over the main effects. P (projectivity): any P factors form a full two-level factorial, so if only that many matter, their interactions can be estimated from the same runs. Response-surface designs (central composite, Box–Behnken) estimate a full quadratic.', help('designs-screening', 'projectivity')));
 
   // ---------------------------------------------------------------- options
   const isRSM = cand.kind === 'ccd' || cand.kind === 'bbd' || cand.kind === 'dsd' || cand.kind === 'optimal' || cand.kind === 'sp-optimal' || cand.kind === 'lhs';
@@ -110,7 +112,7 @@ export function render(ctx) {
     cand.kind === 'sp-frac' ? (() => { const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length; const ch = wholePlotChoices(k1, htc.length - k1, cand.opts.runs);
       return field('whole plots', select(ch.map(W => ({ value: W, label: `${W} of ${cand.opts.runs / W} runs` })), ui.wholePlots ?? defaultWholePlots(k1, htc.length - k1, cand.opts.runs), (v) => set({ wholePlots: Number(v) }), { 'aria-label': 'whole plots' })); })() : null,
     cand.kind === 'sp-optimal' ? optimalOptions(study, ui, set, true) : null,
-    cand.kind === 'dsd' ? field('fake factors', select([0, 1, 2, 3, 4], ui.fake ?? 0, (v) => set({ fake: Number(v) }), { 'aria-label': 'fake factors', title: 'extra conference-matrix columns, dropped; 2 improves estimation of second-order effects (Jones & Nachtsheim 2013)' })) : null,
+    cand.kind === 'dsd' ? field('fake factors', select([0, 1, 2, 3, 4], ui.fake ?? (study.factors.length <= 4 ? 6 - study.factors.length : 0), (v) => set({ fake: Number(v) }), { 'aria-label': 'fake factors', title: 'extra conference-matrix columns, dropped; 2 improves estimation of second-order effects (Jones & Nachtsheim 2013)' })) : null,
     cand.kind === 'optimal' ? optimalOptions(study, ui, set) : null,
     cand.kind === 'ccd' && ui.rsmBlocks ? field('in the axial block', numIn('centreAxial', { placeholder: 'same' })) : null,
     !isRSM && cand.kind !== 'pb' ? field('replicates', numIn('replicates', { min: 1, placeholder: '1' })) : null,
@@ -205,7 +207,7 @@ function diagnostics(study, d, modelFor) {
   if (d.kind === 'full-factorial' && !d.block) parts.push(h('p', { class: 'small' }, 'Every main effect and interaction can be estimated.'));
   if (d.kind === 'optimal' || d.kind === 'definitive-screening' || d.kind === 'lhs') {
     const g = d.diagnostics ?? diagnoseCoded(study, d.X, { model: modelFor });
-    if (d.kind === 'definitive-screening') parts.push(h('p', { class: 'small' }, `Built from a conference matrix of order ${d.params.order}${d.params.fake ? ` (${d.params.fake} column${d.params.fake > 1 ? 's' : ''} dropped)` : ''}. Main effects are orthogonal to each other${d.params.categorical ? ' (up to a small correlation with the categorical factors)' : ''} and to every two-factor interaction and quadratic term; no two second-order terms are completely aliased. With few active factors, the full quadratic in those factors can be fitted.`));
+    if (d.kind === 'definitive-screening') parts.push(h('p', { class: 'small' }, `Built from a conference matrix of order ${d.params.order}${d.params.fake ? ` (${d.params.fake} column${d.params.fake > 1 ? 's' : ''} dropped)` : ''}. Main effects are orthogonal to each other${d.params.categorical ? ' (up to a small correlation with the categorical factors)' : ''} and to every two-factor interaction and quadratic term; no two second-order terms are completely aliased. ${(() => { const cont = d.X[0].map((_, j) => j).filter(j => !(d.params.categorical ?? []).includes(j)); return cont.length < 3 ? '' : estimableProjections(d.X, 3, { columns: cont }).share === 1 ? 'The full quadratic in any 3 factors can be fitted from these runs (in 4 factors only with 12 or more factors, and then not in all sets).' : `In ${d.X.length} runs the full quadratic cannot be fitted in every 3 factors: choose ${Math.max(1, 6 - d.X[0].length)} or more fake factors.`; })()}`));
     parts.push(h('h3', {}, `Efficiency${d.kind === 'definitive-screening' || d.kind === 'lhs' ? ' for the full quadratic' : ` for ${d.params.model}`}`),
       h('div', { class: 'row small', 'data-efficiency': '' },
         h('span', { class: 'stat' }, 'D ', h('b', {}, `${num(g.dEfficiency, 4)}%`)), h('span', { class: 'stat' }, 'A ', h('b', {}, `${num(g.aEfficiency, 4)}%`)),

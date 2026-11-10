@@ -8,6 +8,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { serve } from '../../tools/serve.mjs';
 import { section, check, done } from '../lib/check.mjs';
+import { createStudy } from '../../js/study.js';
+import { toStudyDesign } from '../../js/design/factorial.js';
+import { plackettBurman } from '../../js/design/pb.js';
+import { runVirtual } from '../../js/learn/process.js';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const shots = process.argv.includes('--shots') ? process.argv[process.argv.indexOf('--shots') + 1] : null;
@@ -343,6 +347,24 @@ try {
       check(`${id}: ${step} renders`, !/Something went wrong/.test(await page.textContent('main')));
       if (id === 'ccd-results' && step === 'analyse') await shot('5-ccd-analyse');
     }
+  }
+  section('projectivity: the active factors fitted from the same runs (issue #79)');
+  {
+    const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    const s0 = createStudy({ name: 'pb', seed: 2, factors: ids.map(id => ({ id, low: -1, high: 1 })), responses: [{ id: 'y' }] });
+    const st = createStudy({ ...s0, design: toStudyDesign(s0, plackettBurman(8, { runs: 12 }), { seed: 2 }) });
+    const d = createStudy(runVirtual({ seed: 5, factors: s0.factors, responses: [{ id: 'y', sigma: 1, truth: { intercept: 20, terms: { A: 4, C: -3, E: 2.5, 'A:C': 0.6 } } }] }, st));
+    await page.evaluate((x) => window.aikidoe.setDoc(x), JSON.parse(JSON.stringify(d))); await settle();
+    await page.click('[data-step="analyse"]'); await settle();
+    await page.fill('#formula', 'y ~ A+B+C+D+E+F+G+H'); await page.keyboard.press('Tab'); await settle();
+    check('PB12 with A, C, E active: the offer to fit them with their interactions', await page.locator('#projection').count() === 1 && /full 2³/.test(await page.textContent('#projection')));
+    await page.click('#fit-projection'); await settle();
+    check('… one click: (A + C + E)^2 from the same 12 runs', (await page.inputValue('#formula')) === 'y ~ (A + C + E)^2' && await page.locator('#projection').count() === 0);
+    await page.click('[data-step="design"]'); await settle();
+    await page.click('#recommend-btn'); await page.waitForTimeout(300); await settle();
+    const head = await page.$$eval('#main th', ths => ths.map(t => t.textContent));
+    const pbRow = await page.locator('tr[data-design="pb-12"]').textContent();
+    check('the Design step, ranked: a P column; Plackett–Burman 12 with generalised resolution 3.67 and P 3', head.includes('P') && /3\.67/.test(pbRow) && /projectivity 3/.test(pbRow), pbRow.slice(0, 200));
   }
   check('no page errors', errors.length === 0, errors.join(' | '));
 } finally { await browser.close(); server.close(); }

@@ -72,7 +72,8 @@ for (const c of fx.filter(c => c.input.kind === 'dsd')) {
   const { m, c: nc } = c.input, o = c.output;
   if (o.error) { check(`${c.name}: reference generated`, false, o.error); continue; }
   const k = m + nc;
-  const ours = definitiveScreening(k, nc ? { categorical: [...Array(nc).keys()].map(i => m + i) } : {});
+  // (fake: 0 — the published tables have none; aikidoe adds 2 by default for k = 4, issue #79)
+  const ours = definitiveScreening(k, { fake: 0, ...(nc ? { categorical: [...Array(nc).keys()].map(i => m + i) } : {}) });
   if (nc) { check(`${c.name}: ${o.X.length} runs`, ours.X.length === o.X.length, `ours ${ours.X.length}`); continue; }
   check(`${c.name}: daewr's design has main effects orthogonal to all second-order terms`, meOrthSecondOrder(o.X, k));
   // Jones & Nachtsheim's 2011 search-based designs for m = 5 and 12 have slightly correlated
