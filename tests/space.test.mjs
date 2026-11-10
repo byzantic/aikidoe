@@ -63,6 +63,9 @@ section('the pictures: every run drawn, after augmentation too; contour values a
   const c = contourSVG({ ...sl, runs: sp.runs.map(r => ({ x: r.x[0], y: r.x[1] })), valueLabel: 'v' });
   check('the contour: one cell per grid point, filled by viridis of the value', (c.match(/<rect x=/g) ?? []).length >= 81 && c.includes(viridis(1)) && c.includes(viridis(0)));
   check('its runs: each run inside the slice drawn', (c.match(/class="run"/g) ?? []).length === sp.runs.filter(r => Math.abs(r.x[0]) <= sl.xs[8] + 1e-9 && Math.abs(r.x[1]) <= sl.ys[8] + 1e-9).length);
+  // no attribute twice on the root (a file with one is not XML)
+  const rootOk = (f) => { const t = f.slice(f.indexOf('<svg'), f.indexOf('>', f.indexOf('<svg'))), names = [...t.matchAll(/\s([a-zA-Z:-]+)="/g)].map(m => m[1]); return names.length === new Set(names).size; };
+  check('standalone files: no attribute twice on the root, for each kind of picture', [standalone(svg1), standalone(c), standalone(vdgSVG([{ radius: 0, min: 1, mean: 1, max: 1 }, { radius: 1, min: 2, mean: 3, max: 4 }]))].every(rootOk));
   check('standalone files carry the SVG namespace', standalone(vdgSVG([{ radius: 0, min: 1, mean: 1, max: 1 }, { radius: 1, min: 2, mean: 3, max: 4 }])).includes('xmlns="http://www.w3.org/2000/svg"'));
 }
 

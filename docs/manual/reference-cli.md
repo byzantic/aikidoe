@@ -129,6 +129,8 @@ Commands
        where the runs sit, as SVG: every pair of factors (coded units), the scaled prediction
        variance over two factors for a model (default: quadratic, else 2fi, else main), or the
        variance dispersion graph
+  plot STUDY --contour A,B --model "y ~ …" [--at "C=0.5,…"] [--colour response|residual|none] [--out FILE.svg]
+       the fitted response over two factors, the runs on it, the stationary point of a quadratic
   info STUDY
 
 Every command takes --json: one JSON object on stdout ({ schema: "aikidoe-cli/1", command, ok,

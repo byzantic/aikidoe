@@ -117,6 +117,8 @@
 //        where the runs sit, as SVG: every pair of factors (coded units), the scaled prediction
 //        variance over two factors for a model (default: quadratic, else 2fi, else main), or the
 //        variance dispersion graph
+//   plot STUDY --contour A,B --model "y ~ …" [--at "C=0.5,…"] [--colour response|residual|none] [--out FILE.svg]
+//        the fitted response over two factors, the runs on it, the stationary point of a quadratic
 //   info STUDY
 //
 // Every command takes --json: one JSON object on stdout ({ schema: "aikidoe-cli/1", command, ok,
@@ -128,7 +130,8 @@ import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
 import { codedRuns, spvSlice, spvFunction, vdg, feasibleSlice } from '../js/design/space.js';
-import { pairsSVG, contourSVG, vdgSVG, standalone } from '../js/io/svg-space.js';
+import { pairsSVG, contourSVG, vdgSVG, standalone, viridis } from '../js/io/svg-space.js';
+import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../js/model/surface.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
 import { optimalDesign } from '../js/design/optimal.js';
@@ -1089,7 +1092,7 @@ const nm = (names, i) => (names ? names[i] : T.factorName(i));
 function cmdPlot({ pos, opt }) {
   const file = pos[0], study = load(file);
   if (!study.design) fail('the study has no design yet');
-  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : fail('plot: give --pairs, --pv A,B or --vdg');
+  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : opt.contour !== undefined ? 'contour' : fail('plot: give --pairs, --pv A,B, --vdg or --contour A,B');
   const sp = codedRuns(study), X = sp.runs.map(r => r.x), F = study.factors;
   const base = file.replace(/\.aikidoe\.json$|\.json$/, '');
   const outFile = opt.out ? String(opt.out) : `${base}-${which}.svg`;
@@ -1099,7 +1102,31 @@ function cmdPlot({ pos, opt }) {
     fail('no model is estimable from these runs');
   };
   let svg, res = { kind: 'plot', plot: which, file: outFile, runs: sp.runs.length };
-  if (which === 'pairs') {
+  const atOf = () => Object.fromEntries(list(opt.at).flatMap(x => String(x).split(',')).filter(Boolean).map(t => { const [id, v] = t.split('='); const f = F.find(x => x.id === id.trim()) ?? fail(`--at: unknown factor "${id}"`);
+    return [f.id, f.type === 'categorical' ? Math.max(0, f.levels.indexOf(v.trim())) : code(f, Number(v))]; }));
+  if (which === 'contour') {
+    const [a, b] = String(opt.contour).split(',').map(x => x.trim());
+    if (!a || !b) fail('--contour: give two factors, e.g. --contour A,B');
+    if (!opt.model) fail('--contour: give the model, --model "y ~ …"');
+    const formula = String(opt.model), at = atOf();
+    // the fit the Analyse step makes: a GLMM for counts with whole plots, REML for nested readings, else least squares or a GLM
+    const respId = formula.slice(0, formula.indexOf('~')).trim(), r0 = study.responses.find(r => r.id === respId) ?? fail(`unknown response "${respId}"`);
+    let fit;
+    if (r0.distribution && randomGroupOf(study)) fit = fitCountMixedModel(study, formula);
+    else { let rand = []; try { rand = r0.distribution ? [] : randomEffects(observationTable(study, respId)); } catch { /* none */ } fit = rand.length ? fitMixedModel(study, formula) : fitModel(study, formula); }
+    const sl = responseSlice(study, fit, { x: a, y: b, at, n: 41 }), runsS = runsOnSlice(study, fit, { x: a, y: b, at }), sp = stationaryPoint(study, fit);
+    const colour = String(opt.colour ?? 'response'), maxRes = Math.max(...runsS.map(r => Math.abs(r.residual)).filter(Number.isFinite), 1e-300);
+    const onSl = sp && sp.factors.includes(a) && sp.factors.includes(b);
+    svg = contourSVG({ xs: sl.xs, ys: sl.ys, z: sl.z, xLabel: `${a} (coded)`, yLabel: `${b} (coded)`, valueLabel: `${r0.name ?? respId}${r0.units ? ` (${r0.units})` : ''}`, digits: 4,
+      runs: runsS.map(r => ({ x: r.x, y: r.y, fade: Math.min(1, r.distance / 1.5), title: `run ${r.run}: ${num(r.observed, 4)} (residual ${num(r.residual, 3)})`,
+        fill: colour === 'response' && Number.isFinite(r.observed) ? viridis(sl.max > sl.min ? (r.observed - sl.min) / (sl.max - sl.min) : 0.5) : colour === 'residual' && Number.isFinite(r.residual) ? (r.residual >= 0 ? '#0072B2' : '#E69F00') : undefined,
+        r: colour === 'residual' && Number.isFinite(r.residual) ? 2.5 + 3 * Math.abs(r.residual) / maxRes : 3.3 })),
+      best: onSl ? { x: sp.x[a], y: sp.x[b], title: `stationary point (${sp.kind})` } : null,
+      axes: canonicalAxesOn(sp, a, b) });
+    out(`fitted ${respId} over ${a} and ${b}${Object.keys(at).length ? ` (${Object.entries(at).map(([id, v]) => `${id} = ${num(v, 3)} coded`).join(', ')})` : ', the other factors at their centre'}: ${num(sl.min, 4)} … ${num(sl.max, 4)}; ${runsS.length} runs`);
+    if (sp) out(`stationary point: a ${sp.kind} at ${sp.factors.map(id => `${id} = ${num(sp.settings[id], 4)}`).join(', ')} (coded ${sp.factors.map(id => num(sp.x[id], 3)).join(', ')}), fitted ${num(sp.value, 4)}${sp.inside ? '' : ' — outside the runs: an extrapolation'}; canonical eigenvalues ${sp.eigen.map(e => num(e.value, 4)).join(', ')}`);
+    res = { ...res, x: a, y: b, model: formula, min: sl.min, max: sl.max, ...(sp ? { stationary: { kind: sp.kind, coded: sp.x, settings: Object.fromEntries(sp.factors.map(id => [id, sp.settings[id]])), value: sp.value, inside: sp.inside, eigenvalues: sp.eigen.map(e => e.value) } } : {}) };
+  } else if (which === 'pairs') {
     const ids = opt.factors ? String(opt.factors).split(',').map(x => x.trim()) : F.map(f => f.id).slice(0, 6);
     const idx = ids.map(id => { const j = F.findIndex(f => f.id === id); if (j < 0) fail(`--factors: unknown factor "${id}"`); return j; });
     const group = sp.runs.some(r => r.block !== undefined) ? 'block' : sp.runs.some(r => r.wholePlot !== undefined) ? 'wholePlot' : null;
@@ -1111,8 +1138,7 @@ function cmdPlot({ pos, opt }) {
   } else if (which === 'pv') {
     const [a, b] = String(opt.pv).split(',').map(x => x.trim());
     if (!a || !b) fail('--pv: give two factors, e.g. --pv A,B');
-    const at = Object.fromEntries(list(opt.at).flatMap(x => String(x).split(',')).filter(Boolean).map(t => { const [id, v] = t.split('='); const f = F.find(x => x.id === id.trim()) ?? fail(`--at: unknown factor "${id}"`);
-      return [f.id, f.type === 'categorical' ? Math.max(0, f.levels.indexOf(v.trim())) : code(f, Number(v))]; }));
+    const at = atOf();
     const model = modelOf(), sl = spvSlice(study, X, model, { x: a, y: b, at, n: 41 });
     svg = contourSVG({ xs: sl.xs, ys: sl.ys, z: sl.z, xLabel: `${a} (coded)`, yLabel: `${b} (coded)`, valueLabel: 'scaled prediction variance', log: sl.max / sl.min > 20,
       runs: sp.runs.map(r => ({ x: r.x[sl.ix], y: r.x[sl.iy], title: `run ${r.run}` })) });

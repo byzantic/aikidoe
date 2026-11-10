@@ -88,6 +88,29 @@ The result is a suggestion: every step is shown, and any term can be kept (`--ke
 run — wider, as it includes the run-to-run noise). Before acting on a prediction, confirm it:
 [confirmation runs](designs-sequential.md#confirmation-runs).
 
+## Fitted response
+
+The Analyse step draws the fitted model over any two continuous factors as a contour, the other
+factors held where you set them (sliders; categorical factors at a chosen level). The runs are on
+it, filled with their own results on the same colour scale — a run that stands out from the surface
+around it is one the model fits poorly — or coloured by residual (blue above the fit, orange below,
+larger further off). Runs away from the slice (at other settings of the held factors) are faded,
+and the table under the plot gives each run's distance from it.
+
+For a model with squared terms the **stationary point** is marked: where the fitted surface is
+flat, from the canonical analysis (Box & Wilson 1951) — the stationary point x_s = −½B⁻¹b in coded
+units, b the first-order and B the second-order coefficients, and the eigenvalues of B. All
+negative: a **maximum**; all positive: a **minimum**; mixed signs: a **saddle**, rising in some
+directions and falling in others. An eigenvalue near 0 is a **ridge**: many settings along its
+axis (the dashed canonical axes) give nearly the same response, which leaves room to choose the
+cheapest or most robust of them. A stationary point outside the runs is an extrapolation — a
+direction to explore with new runs, not a prediction. Checked against R (`lm`, `solve`, `eigen`, as
+`rsm::canonical`).
+
+Counts and proportions are drawn on the response scale (a mean count, a proportion), mixed models
+for a typical whole plot or block. `doe plot STUDY --contour A,B --model "y ~ …"` writes the same
+picture as SVG.
+
 ## Counts and proportions
 
 Many results are not measurements with constant noise but **counts** (colonies, cells, plaques,

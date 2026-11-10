@@ -138,6 +138,9 @@ there are infinite; Firth's penalised likelihood gives finite estimates.
 **Split-plot** — a design in which hard-to-change factors are set once per whole plot and the
 others vary within it.
 
+**Stationary point** — where a fitted second-order surface is flat: a maximum, a minimum or a
+saddle, read from the signs of the canonical eigenvalues. See [fitted response](analysis.md#fitted-response).
+
 **Stratum** — the level of a design at which a factor changes (between days, between whole plots
 within a day, within whole plots), and so the variation it is judged against.
 

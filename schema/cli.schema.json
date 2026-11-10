@@ -3755,7 +3755,8 @@
           "enum": [
             "pairs",
             "pv",
-            "vdg"
+            "vdg",
+            "contour"
           ]
         },
         "file": {
@@ -3798,6 +3799,17 @@
               "max"
             ]
           }
+        },
+        "stationary": {
+          "type": "object",
+          "description": "--contour of a second-order fit: the stationary point (coded and natural), its kind, the fitted value, whether it lies within the runs, the canonical eigenvalues",
+          "required": [
+            "kind",
+            "coded",
+            "value",
+            "inside",
+            "eigenvalues"
+          ]
         }
       }
     }

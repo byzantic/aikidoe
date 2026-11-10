@@ -11,6 +11,7 @@ import { normal } from '../js/dist.js';
 import { confirmPanel } from './augment.js';
 import { reduceModel } from '../js/model/reduce.js';
 import { activeProjection } from '../js/design/projectivity.js';
+import { surfacePanel } from './surface.js';
 import { fitMixedModel, observationTable, randomEffects } from '../js/model/mixed.js';
 import { observationsOf, availablePositionTerms, sitePositions } from '../js/model/sites.js';
 import { waferPlot } from './wafer.js';
@@ -74,6 +75,8 @@ export function render(ctx) {
   const backToDose = study.design?.kind === 'dose-response' ? h('div', { class: 'msg' }, 'A linear model of a dose–response design treats the dose as a straight-line effect. ', h('button', { class: 'btn small', id: 'dose-analysis-back', onclick: () => set({ linear: false }) }, 'back to the dose–response fit')) : null;
   const setFormula = (f) => set({ formulas: { ...(ui.formulas ?? {}), [resp.id]: f } });
   const rhs = formula.includes('~') ? formula.slice(formula.indexOf('~') + 1).trim() : formula;
+  // the fitted response over two factors (issue #88)
+  const surface = (f) => { try { return surfacePanel(study, f, { ui, set, resp }); } catch { return null; } };
 
   const fIn = h('input', { type: 'text', class: 'formula', id: 'formula', value: formula, 'aria-label': 'model formula', spellcheck: 'false',
     onchange: (e) => setFormula(e.target.value.includes('~') ? e.target.value : `${resp.id} ~ ${e.target.value}`) });
@@ -130,10 +133,10 @@ export function render(ctx) {
       let gm;
       try { gm = cached(study, JSON.stringify(['fit', formula, choice]), () => fitCountMixedModel(study, formula, { random: choice })); }
       catch (e) { return h('div', {}, controls, picker, h('div', { class: 'msg error' }, e.message)); }
-      return h('div', {}, controls, picker, glmmAnalysis(ctx, gm, { ui, set, setFormula, rhs, resp }));
+      return h('div', {}, controls, picker, glmmAnalysis(ctx, gm, { ui, set, setFormula, rhs, resp }), surface(gm));
     }
     if (fitErr) return h('div', {}, controls, picker, h('div', { class: 'msg error' }, fitErr.message));
-    return h('div', {}, controls, picker, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), confirmPanel(ctx, fit));
+    return h('div', {}, controls, picker, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), surface(fit), confirmPanel(ctx, fit));
   }
 
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)
@@ -146,7 +149,7 @@ export function render(ctx) {
     const used = new Set(formula.match(/[A-Za-z_][A-Za-z0-9_]*/g));
     const chips = avail.length ? h('div', { class: 'row small', id: 'position-terms', style: 'margin-top:6px' }, 'position terms:',
       avail.map(t => h('button', { class: 'btn small', disabled: used.has(t.id), title: t.name, onclick: () => setFormula(`${formula} + ${t.id}`) }, `+ ${t.id}`))) : null;
-    return h('div', {}, controls, chips, mixedPanel(m, ui, set), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
+    return h('div', {}, controls, chips, mixedPanel(m, ui, set), surface(m), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
   }
   const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
     h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;
@@ -237,7 +240,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, backToDose, controls, olsNote, summary, projPanel, mixPanel, anovaPanel, effectsPanel, diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  return h('div', {}, backToDose, controls, olsNote, summary, projPanel, mixPanel, anovaPanel, effectsPanel, surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

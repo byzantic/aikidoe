@@ -153,7 +153,7 @@ function isoSegments(xs, ys, z, c) {
  * how far from the slice) }], best { x, y, title }, labels xLabel, yLabel, valueLabel, width,
  * levels (contour values; default ~7 nice ones), log (colour on the log scale), digits.
  */
-export function contourSVG({ xs, ys, z, runs = [], best = null, xLabel = '', yLabel = '', valueLabel = 'value', width = 360, levels, log = false, digits = 3, title } = {}) {
+export function contourSVG({ xs, ys, z, runs = [], best = null, axes = [], xLabel = '', yLabel = '', valueLabel = 'value', width = 360, levels, log = false, digits = 3, title } = {}) {
   const m = { l: 44, r: 62, t: 10, b: 36 }, side = width - m.l - m.r, W = width, H = side + m.t + m.b;
   const x0 = xs[0], x1 = xs[xs.length - 1], y0 = ys[0], y1 = ys[ys.length - 1];
   const X = (v) => m.l + (v - x0) / (x1 - x0) * side, Y = (v) => m.t + side - (v - y0) / (y1 - y0) * side;
@@ -178,7 +178,8 @@ export function contourSVG({ xs, ys, z, runs = [], best = null, xLabel = '', yLa
     const dark = th > tl ? (T(c) - tl) / (th - tl) < 0.55 : false;
     out.push(`<path d="${segs.map(([p, q]) => `M${f1(X(p[0]))},${f1(Y(p[1]))}L${f1(X(q[0]))},${f1(Y(q[1]))}`).join('')}" stroke="${dark ? '#ffffff' : '#222222'}" stroke-opacity="0.7" stroke-width="0.9" fill="none"><title>${esc(`${valueLabel} = ${num(c, digits)}`)}</title></path>`);
     const mid = segs[Math.floor(segs.length / 2)][0];
-    out.push(`<text x="${f1(X(mid[0]))}" y="${f1(Y(mid[1]))}" font-size="8.5" fill="${dark ? '#ffffff' : '#222222'}" paint-order="stroke" stroke="${dark ? '#222222' : '#ffffff'}" stroke-width="2" stroke-opacity="0.6">${esc(num(c, digits))}</text>`);
+    // (an inline style: the page's CSS for plot text would otherwise grey the label out)
+    out.push(`<text x="${f1(X(mid[0]))}" y="${f1(Y(mid[1]))}" font-size="8.5" style="fill:${dark ? '#ffffff' : '#222222'}" paint-order="stroke" stroke="${dark ? '#222222' : '#ffffff'}" stroke-width="2" stroke-opacity="0.6">${esc(num(c, digits))}</text>`);
   }
   // axes
   out.push(`<rect x="${m.l}" y="${m.t}" width="${side}" height="${side}" fill="none" stroke="currentColor" stroke-opacity="0.5"/>`);
@@ -189,7 +190,18 @@ export function contourSVG({ xs, ys, z, runs = [], best = null, xLabel = '', yLa
   for (const r of runs) {
     if (r.x < x0 - 1e-9 || r.x > x1 + 1e-9 || r.y < y0 - 1e-9 || r.y > y1 + 1e-9) continue;
     const op = 1 - 0.75 * Math.min(1, Math.max(0, r.fade ?? 0));
-    out.push(`<circle class="run" cx="${f1(X(r.x))}" cy="${f1(Y(r.y))}" r="3.3" fill="#111111" stroke="#ffffff" stroke-width="1.2" opacity="${op.toFixed(2)}">${r.title ? `<title>${esc(r.title)}</title>` : ''}</circle>`);
+    // fill: a colour of its own (the run's response on the same scale, or its residual), else dark
+    out.push(`<circle class="run" cx="${f1(X(r.x))}" cy="${f1(Y(r.y))}" r="${f1(r.r ?? 3.3)}" fill="${r.fill ?? '#111111'}" stroke="${r.fill ? '#111111' : '#ffffff'}" stroke-width="1.2" opacity="${op.toFixed(2)}">${r.title ? `<title>${esc(r.title)}</title>` : ''}</circle>`);
+  }
+  // canonical axes: lines through a point along directions (coded), clipped to the plot
+  for (const a of axes) {
+    const ts = [];
+    for (const [lo, hi, p0, d] of [[x0, x1, a.x, a.dx], [y0, y1, a.y, a.dy]]) if (Math.abs(d) > 1e-12) ts.push((lo - p0) / d, (hi - p0) / d); else if (p0 < lo || p0 > hi) ts.push(NaN);
+    if (ts.some(Number.isNaN)) continue;
+    const tx = [(x0 - a.x) / a.dx, (x1 - a.x) / a.dx].filter(Number.isFinite).sort((u, v) => u - v), ty = [(y0 - a.y) / a.dy, (y1 - a.y) / a.dy].filter(Number.isFinite).sort((u, v) => u - v);
+    const t0 = Math.max(tx[0] ?? -Infinity, ty[0] ?? -Infinity), t1 = Math.min(tx[1] ?? Infinity, ty[1] ?? Infinity);
+    if (!(t1 > t0) || !Number.isFinite(t0) || !Number.isFinite(t1)) continue;
+    out.push(`<path class="canon" d="M${f1(X(a.x + t0 * a.dx))},${f1(Y(a.y + t0 * a.dy))}L${f1(X(a.x + t1 * a.dx))},${f1(Y(a.y + t1 * a.dy))}" stroke="#ff2a6d" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.85"><title>${esc(a.label ?? 'canonical axis')}</title></path>`);
   }
   if (best) out.push(`<path class="best" d="M${f1(X(best.x) - 7)},${f1(Y(best.y))}L${f1(X(best.x) + 7)},${f1(Y(best.y))}M${f1(X(best.x))},${f1(Y(best.y) - 7)}L${f1(X(best.x))},${f1(Y(best.y) + 7)}" stroke="#ff2a6d" stroke-width="2.4"><title>${esc(best.title ?? 'best')}</title></path>`);
   // colour bar
@@ -224,5 +236,8 @@ export function vdgSVG(curves, { width = 420, height = 240, label = 'scaled pred
 
 /** An SVG string as a standalone file: the namespace, a font and a default colour. */
 export function standalone(svg) {
-  return `<?xml version="1.0" encoding="UTF-8"?>\n${svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif" font-size="11" color="#1b1d21" style="background:#ffffff" ')}\n`;
+  // (merged into the root's own style attribute: a second one would make the file invalid XML)
+  const root = svg.slice(0, svg.indexOf('>')), rest = svg.slice(svg.indexOf('>'));
+  const head = /\sstyle="/.test(root) ? root.replace(/\sstyle="([^"]*)"/, ' style="background:#ffffff;$1"') : `${root} style="background:#ffffff"`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n${head.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif" font-size="11" color="#1b1d21" ')}${rest}\n`;
 }
