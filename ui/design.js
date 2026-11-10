@@ -4,9 +4,10 @@ import { h, select, messages, dataTable, help } from './dom.js';
 import { plot } from './plot.js';
 import { num } from '../js/format.js';
 import { estimableProjections } from '../js/design/projectivity.js';
+import { spacePanel } from './space.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable, PB_RUNS } from '../js/design/pb.js';
-import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
+import { ccd, boxBehnken } from '../js/design/rsm.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import * as T from '../js/design/twolevel.js';
 import { createStudy, feasible, decode } from '../js/study.js';
@@ -133,6 +134,9 @@ export function render(ctx) {
     cand.kind === 'lhs' ? h('p', { class: 'small' }, `Each factor’s range is cut into ${d.X.length} equal slices with one run in each; among such designs this one keeps the runs as far apart as it can (smallest distance ${num(d.params.minDist, 3)} in coded units). A simulator gives the same answer every time, so there is no replication, randomisation or power: the question is how well a surrogate model fitted to these runs predicts between them — its cross-validated error, shown with the yield analysis.`)
       : powerSection(study, d, cand, ui, set));
   const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label, help(...designHelp(cand.kind))), options, body);
+  // where the candidate's runs would sit (issue #88)
+  let candSpace = null;
+  if (d && !err) try { candSpace = spacePanel({ ...study, design: toStudyDesign(study, d, { seed: 1, randomise: 'none' }) }, { ui, set, key: 'space', intended: cand.kind === 'dsd' || cand.kind === 'lhs' ? 'quadratic' : intendedModel(study, d), title: `Where the runs are: ${cand.label}` }); } catch { /* not drawable */ }
   if (!d) err = err ?? 'not searched';
 
   // ---------------------------------------------------------------- create
@@ -156,7 +160,10 @@ export function render(ctx) {
         h('span', { class: 'muted small' }, `Runs are put in a random order from seed ${seed}; the same seed always gives the same run sheet.`)));
   }
   const plates = study.design ? platePanel(ctx) : null;
-  return h('div', {}, plates, doseDesignPanel(ctx), next, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, create);
+  // the study's own design, with any stages added since
+  let curSpace = null;
+  if (study.design && study.design.kind !== 'dose-response') try { curSpace = spacePanel(study, { ui, set, key: 'spaceCurrent', intended: study.design.params?.model ?? (['ccd', 'box-behnken', 'definitive-screening'].includes(study.design.kind) ? 'quadratic' : undefined), title: `Where the runs are: this study's design (${study.design.runs.length} runs)` }); } catch { /* not drawable */ }
+  return h('div', {}, plates, doseDesignPanel(ctx), next, curSpace, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, candSpace, create);
 }
 
 function diagnostics(study, d, modelFor) {
@@ -179,14 +186,6 @@ function diagnostics(study, d, modelFor) {
     const t = correlationTable(d.X, ids);
     const mx = t.length ? Math.max(...t.map(e => Math.abs(e.r))) : 0;
     parts.push(h('h3', {}, 'Partial aliasing'), h('p', { class: 'small' }, `Main effects are orthogonal to each other. Each two-factor interaction is partially correlated with main effects it does not contain (largest |r| = ${num(mx, 3)}), so a large interaction can bias main-effect estimates but cannot hide completely.`));
-  }
-  if (d.kind === 'ccd' || d.kind === 'box-behnken') {
-    const p = varianceProfile(d.X, { block: d.block, radii: [...Array(25).keys()].map(i => i * Math.max(...d.X.map(r => Math.hypot(...r))) / 24) });
-    parts.push(h('h3', {}, 'Prediction variance (full quadratic)'),
-      h('div', { style: 'max-width:520px' }, plot({ xLabel: 'distance from centre (coded units)', yLabel: 'scaled prediction variance', height: 220,
-        series: [{ kind: 'line', points: p.map(x => ({ x: x.radius, y: x.max })) }, { kind: 'line', cls: 's2 dash', points: p.map(x => ({ x: x.radius, y: x.min })) }],
-        vlines: [{ x: 1, label: 'cube', cls: 's2' }] })),
-      h('p', { class: 'muted small' }, p.every(x => x.max - x.min < 1e-6 * x.max) ? 'Rotatable: the variance depends only on the distance from the centre.' : 'Solid: largest, dashed: smallest variance over directions at each distance.'));
   }
   if (d.wholePlot) {
     const W = new Set(d.wholePlot).size, sizes = [...new Set(d.wholePlot)].map(w => d.wholePlot.filter(x => x === w).length);

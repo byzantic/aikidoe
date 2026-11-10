@@ -26,7 +26,8 @@ npm run ui        # → http://localhost:8080/
 Four steps, each usable on its own: **Define** factors, responses, constraints and drop-in
 sites; **Design** — compare candidate designs (fractions, Plackett–Burman, full factorial,
 central composite, Box–Behnken, definitive screening, optimal) with their aliasing,
-projectivity, prediction-variance and power diagnostics (power of each term for an effect Δ/σ), then create
+projectivity, where the runs sit (every pair of factors, prediction variance over any two,
+variance dispersion; `doe plot` writes SVG), prediction-variance and power diagnostics (power of each term for an effect Δ/σ), then create
 one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
 printable sheet; **Optimise** — desirability goals for the responses, the best settings, a prediction profiler and a two-factor overlay.
 

@@ -113,6 +113,10 @@
 //        self-contained HTML report (design, run sheet, fitted models, plots; the study embedded)
 //   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
+//   plot STUDY (--pairs [--factors A,B,…] | --pv A,B [--at "C=0.5,…"] | --vdg) [--model M] [--out FILE.svg]
+//        where the runs sit, as SVG: every pair of factors (coded units), the scaled prediction
+//        variance over two factors for a model (default: quadratic, else 2fi, else main), or the
+//        variance dispersion graph
 //   info STUDY
 //
 // Every command takes --json: one JSON object on stdout ({ schema: "aikidoe-cli/1", command, ok,
@@ -123,6 +127,8 @@ import { createStudy, parseStudy, serializeStudy, StudyError, code } from '../js
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
+import { codedRuns, spvSlice, spvFunction, vdg, feasibleSlice } from '../js/design/space.js';
+import { pairsSVG, contourSVG, vdgSVG, standalone } from '../js/io/svg-space.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
 import { optimalDesign } from '../js/design/optimal.js';
@@ -1079,6 +1085,51 @@ function cmdAlias({ pos, opt }) {
 }
 const nm = (names, i) => (names ? names[i] : T.factorName(i));
 
+/** doe plot (issue #88): where the runs sit, as an SVG file. */
+function cmdPlot({ pos, opt }) {
+  const file = pos[0], study = load(file);
+  if (!study.design) fail('the study has no design yet');
+  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : fail('plot: give --pairs, --pv A,B or --vdg');
+  const sp = codedRuns(study), X = sp.runs.map(r => r.x), F = study.factors;
+  const base = file.replace(/\.aikidoe\.json$|\.json$/, '');
+  const outFile = opt.out ? String(opt.out) : `${base}-${which}.svg`;
+  const modelOf = () => {
+    if (opt.model) return String(opt.model);
+    for (const m of ['quadratic', '2fi', 'main']) { try { spvFunction(study, X, m); return m; } catch { /* next */ } }
+    fail('no model is estimable from these runs');
+  };
+  let svg, res = { kind: 'plot', plot: which, file: outFile, runs: sp.runs.length };
+  if (which === 'pairs') {
+    const ids = opt.factors ? String(opt.factors).split(',').map(x => x.trim()) : F.map(f => f.id).slice(0, 6);
+    const idx = ids.map(id => { const j = F.findIndex(f => f.id === id); if (j < 0) fail(`--factors: unknown factor "${id}"`); return j; });
+    const group = sp.runs.some(r => r.block !== undefined) ? 'block' : sp.runs.some(r => r.wholePlot !== undefined) ? 'wholePlot' : null;
+    const lim = (j) => Math.max(1, ...X.map(r => Math.abs(r[j])).filter(Number.isFinite)) * 1.12, n = 31;
+    svg = pairsSVG(sp, { factors: idx, group, natural: F.map(f => (f.type === 'categorical' ? null : { low: f.low, high: f.high, units: f.units })),
+      feasible: study.constraints?.length ? (i, j) => feasibleSlice(study, { x: i, y: j, xs: [...Array(n).keys()].map(t => -lim(i) + 2 * lim(i) * t / (n - 1)), ys: [...Array(n).keys()].map(t => -lim(j) + 2 * lim(j) * t / (n - 1)) }) : null });
+    out(`every pair of ${ids.join(', ')}: ${sp.runs.length} runs (${[...new Set(sp.runs.map(r => r.kind))].join(', ')})${group ? `, coloured by ${group === 'block' ? 'block' : 'whole plot'}` : ''}`);
+    res = { ...res, factors: ids };
+  } else if (which === 'pv') {
+    const [a, b] = String(opt.pv).split(',').map(x => x.trim());
+    if (!a || !b) fail('--pv: give two factors, e.g. --pv A,B');
+    const at = Object.fromEntries(list(opt.at).flatMap(x => String(x).split(',')).filter(Boolean).map(t => { const [id, v] = t.split('='); const f = F.find(x => x.id === id.trim()) ?? fail(`--at: unknown factor "${id}"`);
+      return [f.id, f.type === 'categorical' ? Math.max(0, f.levels.indexOf(v.trim())) : code(f, Number(v))]; }));
+    const model = modelOf(), sl = spvSlice(study, X, model, { x: a, y: b, at, n: 41 });
+    svg = contourSVG({ xs: sl.xs, ys: sl.ys, z: sl.z, xLabel: `${a} (coded)`, yLabel: `${b} (coded)`, valueLabel: 'scaled prediction variance', log: sl.max / sl.min > 20,
+      runs: sp.runs.map(r => ({ x: r.x[sl.ix], y: r.x[sl.iy], title: `run ${r.run}` })) });
+    out(`scaled prediction variance for ${model} over ${a} and ${b}${Object.keys(at).length ? ` (${Object.entries(at).map(([id, v]) => `${id} = ${num(v, 3)} coded`).join(', ')})` : ', the other factors at their centre'}: ${num(sl.min, 4)} … ${num(sl.max, 4)}`);
+    res = { ...res, model, x: a, y: b, min: sl.min, max: sl.max };
+  } else {
+    const model = modelOf(), g = vdg(study, X, model).curves, k = F.length;
+    svg = vdgSVG(g, { marks: [{ x: 1, label: 'faces' }, { x: Math.sqrt(k), label: 'corners' }] });
+    out(`variance dispersion for ${model}: scaled prediction variance on spheres about the centre`);
+    out(table([{ key: 'radius', label: 'distance' }, { key: 'min', label: 'min' }, { key: 'mean', label: 'mean' }, { key: 'max', label: 'max' }], g.filter((_, i) => i % 4 === 0 || i === g.length - 1).map(c => ({ radius: num(c.radius, 3), min: num(c.min, 4), mean: num(c.mean, 4), max: num(c.max, 4) }))));
+    res = { ...res, model, curves: g };
+  }
+  writeFileSync(outFile, standalone(svg));
+  out(`wrote ${outFile}`);
+  put(res);
+}
+
 /** Projection properties of a non-regular two-level design (issue #79): text lines and JSON fields. */
 function projectionSummary(X) {
   const p = projectivity(X, { max: 4 }), g = generalisedResolution(X, { max: 4 }), k = X[0].length;
@@ -1603,7 +1654,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, info: cmdInfo };
+const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

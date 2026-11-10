@@ -60,7 +60,8 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
 3. **Recommend** designs: `doe recommend STUDY --goal screen|model|optimise --budget N --json`.
    Present two or three options to the user with run counts, what each can estimate, what is
    aliased, and power — [references/decisions.md](references/decisions.md). Agree one.
-4. **Design** and hand over the **run sheet**: `doe design …`, `doe alias`, `doe power`,
+4. **Design** and hand over the **run sheet**: `doe design …`, `doe alias`, `doe power`, `doe plot`
+   (where the runs sit: `--pairs`, `--pv A,B` prediction variance, `--vdg`; SVG files to show the user),
    `doe sheet STUDY --csv sheet.csv` (or `--html`). Tell the user to run it in the given order.
    Runs in the wells of microplates: `doe plate STUDY --control id:role:n … --pipetting FILE.csv`
    (balanced layout, controls spread) — never let the conditions be lined up in rows.

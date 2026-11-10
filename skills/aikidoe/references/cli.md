@@ -125,6 +125,10 @@ Commands
        self-contained HTML report (design, run sheet, fitted models, plots; the study embedded)
   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
+  plot STUDY (--pairs [--factors A,B,…] | --pv A,B [--at "C=0.5,…"] | --vdg) [--model M] [--out FILE.svg]
+       where the runs sit, as SVG: every pair of factors (coded units), the scaled prediction
+       variance over two factors for a model (default: quadratic, else 2fi, else main), or the
+       variance dispersion graph
   info STUDY
 
 Every command takes --json: one JSON object on stdout ({ schema: "aikidoe-cli/1", command, ok,
@@ -145,7 +149,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

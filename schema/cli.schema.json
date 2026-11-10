@@ -627,6 +627,25 @@
       "then": {
         "$ref": "#/$defs/exercise"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "plot"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/plot"
+      }
     }
   ],
   "$defs": {
@@ -3715,6 +3734,69 @@
           "type": "array",
           "items": {
             "type": "object"
+          }
+        }
+      }
+    },
+    "plot": {
+      "type": "object",
+      "description": "doe plot (issue #88): where the runs sit, written as an SVG file",
+      "required": [
+        "kind",
+        "plot",
+        "file",
+        "runs"
+      ],
+      "properties": {
+        "kind": {
+          "const": "plot"
+        },
+        "plot": {
+          "enum": [
+            "pairs",
+            "pv",
+            "vdg"
+          ]
+        },
+        "file": {
+          "type": "string"
+        },
+        "runs": {
+          "type": "integer"
+        },
+        "factors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model": {
+          "type": "string"
+        },
+        "x": {
+          "type": "string"
+        },
+        "y": {
+          "type": "string"
+        },
+        "min": {
+          "type": "number",
+          "description": "--pv: smallest scaled prediction variance over the slice"
+        },
+        "max": {
+          "type": "number"
+        },
+        "curves": {
+          "type": "array",
+          "description": "--vdg: min, mean and max scaled prediction variance at each distance from the centre",
+          "items": {
+            "type": "object",
+            "required": [
+              "radius",
+              "min",
+              "mean",
+              "max"
+            ]
           }
         }
       }
