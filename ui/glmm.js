@@ -28,7 +28,10 @@ export function glmmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }) {
   const notes = [];
   for (const v of hierarchyViolations(fit.model)) notes.push(`${v.term} is in the model without ${v.missing.join(', ')}.`);
   if (fit.aliased.length) notes.push(`Not estimable (aliased with earlier terms): ${fit.aliased.join(', ')}.`);
-  for (const w of fit.warnings) notes.push(w);
+  for (const w of fit.warnings.filter(w => !/^overdispersion/.test(w))) notes.push(w);
+  const od = fit.overdispersion?.detected ? h('div', { class: 'msg warning', id: 'glmm-overdispersion' },
+    `Overdispersion within ${gs}: the counts vary ${num(fit.overdispersion.ratio, 3)} times as much as the Poisson model allows (Pearson χ²/df, p ${pval(fit.overdispersion.p)}), beyond the shifts between ${gs}, so the standard errors are too small. `,
+    h('button', { class: 'btn small', id: 'use-negbin', onclick: () => ctx.update(x => { const r = x.responses.find(y => y.id === resp.id); r.distribution = 'negbin'; delete r.link; }) }, 'use the negative binomial')) : null;
 
   const ci = glmmConfint(fit);
   const rows = fit.columns.map((c, j) => ({ term: c, est: fit.coef[j], se: fit.se[j], z: fit.z[j], df: fit.df[j], p: fit.p[j], ci: ci.find(x => x.name === c), assign: fit.assign[j],
@@ -36,10 +39,11 @@ export function glmmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }) {
   const summary = h('section', { class: 'panel', id: 'glmm-fit' },
     h('h2', {}, `Fit: ${nm.label} with a random ${ga} effect`, help('analysis', 'random-effects-for-counts-and-proportions')),
     h('p', { class: 'small' }, `Runs in the same ${g} share a shift on the ${fit.link} scale, drawn from a normal distribution with standard deviation σ: the model for a ${study.design.runs.some(r => r.wholePlot !== undefined) && fit.random.id === 'wholePlot' ? 'split-plot' : 'blocked design'} whose ${gs} are a sample of the ones that could have been run.`),
-    messages(notes, 'warning'),
+    messages(notes, 'warning'), od,
     h('div', { class: 'row small', id: 'glmm-stats' },
       h('span', { class: 'stat' }, h('b', {}, fit.n), ' observations'), h('span', { class: 'stat' }, h('b', {}, fit.random.m), ` ${gs}`),
       h('span', { class: 'stat' }, `${g} σ = `, h('b', { id: 'glmm-sigma' }, num(fit.sigma, 3)), ` (${fit.link} scale)`),
+      fit.theta !== undefined ? h('span', { class: 'stat', title: `the counts' variation within a ${g}: variance μ + μ²/θ` }, 'θ = ', h('b', { id: 'glmm-theta' }, num(fit.theta, 3))) : null,
       fit.boundary ? h('span', { class: 'stat' }, `no variation between ${gs} beyond the noise: the fit is the ordinary model's`)
         : h('span', { class: 'stat' }, 'σ = 0 test p ', h('b', {}, pval(fit.sigmaTest.p))),
       h('span', { class: 'stat' }, 'log-likelihood ', h('b', {}, num(fit.loglik))), h('span', { class: 'stat' }, 'AIC ', h('b', {}, num(fit.aic)))),
@@ -62,7 +66,7 @@ export function glmmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }) {
     dataTable([{ key: 'term', label: 'source' }, { key: 'df', label: 'df', cls: 'n' }, { key: 'chi2', label: 'χ²', cls: 'n', fmt: (v) => num(v) },
       ...(F ? [{ key: 'F', label: 'F', cls: 'n', fmt: (v) => (v === undefined ? '' : num(v)) }] : []),
       { key: 'p', label: 'p', cls: 'n', fmt: (v) => h('span', { class: v < 0.05 ? 'sig' : '' }, pval(v)) }], tests),
-    h('p', { class: 'muted small' }, `Each term's χ² compares the fits with and without it, σ re-estimated in each.${F ? ` Terms that change only between ${gs} are F tests on ${fit.dfGroups} df.` : ''}`));
+    h('p', { class: 'muted small' }, `Each term's χ² compares the fits with and without it, σ${fit.theta !== undefined ? ' and θ' : ''} re-estimated in each.${F ? ` Terms that change only between ${gs} are F tests on ${fit.dfGroups} df.` : ''}`));
 
   // the estimated whole-plot or block effects
   const eff = Object.entries(fit.modes).map(([k, v]) => ({ k, v }));

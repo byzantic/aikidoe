@@ -161,6 +161,16 @@ try {
     await settle();
     check(`reduce (p): the GLMM's backward elimination, run in the background (${want.formula})`, (await page.inputValue('#formula')) === want.formula && /likelihood-ratio/.test(await page.textContent('#reduction'))
       && await page.locator('#glmm-fit').count() === 1, await page.textContent('#reduction'));
+    // counts that vary more than Poisson within whole plots (issue #78): flagged, the negative binomial one click away
+    const odd = createStudy(runVirtual({ seed: 4, factors: s0.factors, responses: [{ id: 'n', distribution: 'negbin', theta: 2, truth: { intercept: Math.log(40), terms: { T: 0.25, D: 0.3 } } }], nuisance: { wholePlot: 0.4 } }, sd));
+    await page.evaluate((d) => window.aikidoe.setDoc(d), JSON.parse(JSON.stringify(odd))); await settle();
+    await page.click('[data-step="analyse"]'); await settle();
+    await page.fill('#formula', 'n ~ T + D'); await page.keyboard.press('Tab'); await settle();
+    check('Poisson GLMM of clumped counts: overdispersion within whole plots flagged', await page.locator('#glmm-overdispersion').count() === 1);
+    await page.click('#use-negbin'); await settle();
+    const nbRef = fitCountMixedModel({ ...odd, responses: [{ ...odd.responses[0], distribution: 'negbin' }] }, 'n ~ T + D');
+    check(`… the negative binomial with the random whole-plot effect: θ as the library fits it (${num(nbRef.theta, 3)})`, (await state()).doc.responses[0].distribution === 'negbin' && await page.locator('#glmm-fit').count() === 1
+      && (await page.textContent('#glmm-theta')) === num(nbRef.theta, 3) && await page.locator('#glmm-overdispersion').count() === 0, await page.textContent('#glmm-stats'));
   }
 
   section('Design: power in a split-plot, with the whole-plot σ');

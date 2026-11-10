@@ -1890,6 +1890,7 @@
             "distribution": {
               "enum": [
                 "poisson",
+                "negbin",
                 "binomial",
                 "bernoulli"
               ]
@@ -2167,6 +2168,27 @@
                   }
                 }
               }
+            },
+            "theta": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "negative binomial: θ, the variance within a group being μ + μ²/θ"
+            },
+            "thetaSE": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "overdispersion": {
+              "type": "object",
+              "description": "Poisson: Pearson χ² of the residuals at the conditional modes on n − p − 1 df",
+              "required": [
+                "ratio",
+                "df",
+                "p",
+                "detected"
+              ]
             }
           }
         }

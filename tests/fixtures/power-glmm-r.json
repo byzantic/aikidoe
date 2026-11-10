@@ -4,7 +4,8 @@
   "meta": {
     "R": "4.3.3",
     "packages": {
-      "lme4": "2.1.0"
+      "lme4": "2.1.0",
+      "glmmTMB": "1.1.8"
     }
   },
   "cases": [
@@ -22,6 +23,7 @@
         "sigma": 0.3,
         "trials": 30,
         "alpha": 0.05,
+        "theta": null,
         "formula": "T + B",
         "wholePlotTerms": ["T"],
         "dfGroups": 6
@@ -47,6 +49,7 @@
         "sigma": 0.4,
         "trials": 30,
         "alpha": 0.05,
+        "theta": null,
         "formula": "T + B",
         "wholePlotTerms": ["T"],
         "dfGroups": 10
@@ -72,6 +75,7 @@
         "sigma": 0.6,
         "trials": 30,
         "alpha": 0.05,
+        "theta": null,
         "formula": "T + B",
         "wholePlotTerms": ["T"],
         "dfGroups": 14
@@ -97,6 +101,7 @@
         "sigma": 0.15,
         "trials": 30,
         "alpha": 0.05,
+        "theta": null,
         "formula": "T + B",
         "wholePlotTerms": ["T"],
         "dfGroups": 4
@@ -105,6 +110,32 @@
         "terms": ["T", "B"],
         "power": [0.366, 0.692],
         "se": [0.0215427017804174, 0.0206463556106156],
+        "nsim": [500, 500]
+      }
+    },
+    {
+      "name": "negbin-12x4-sigma0.4-theta4",
+      "input": {
+        "wholePlots": 12,
+        "perWholePlot": 4,
+        "distribution": "negbin",
+        "baseline": 20,
+        "ratio": {
+          "T": 2,
+          "B": 1.4
+        },
+        "sigma": 0.4,
+        "trials": 30,
+        "alpha": 0.05,
+        "theta": 4,
+        "formula": "T + B",
+        "wholePlotTerms": ["T"],
+        "dfGroups": 10
+      },
+      "output": {
+        "terms": ["T", "B"],
+        "power": [0.63, 0.566],
+        "se": [0.0215916650585359, 0.0221650174825106],
         "nsim": [500, 500]
       }
     }
