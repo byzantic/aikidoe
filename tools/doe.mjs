@@ -57,6 +57,7 @@
 //        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
 //        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
 //        [--sigma-wp σ]  in a split-plot: σ of the whole-plot shift on the link scale (the analysis's random effect)
+//        [--sigma-block σ]  with blocks: σ of the block shift (random blocks; with --sigma-wp, blocks ⊃ whole plots)
 //   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
@@ -548,13 +549,13 @@ function printGLM(study, fit, opt) {
     overdispersion: fit.overdispersion, separation: fit.separation, warnings: fit.warnings, tests: { type: fit.firth ? 'wald' : type, rows: tests } });
 }
 
-/** The random grouping for a count or proportion response's fit: --random wholePlot|block|none, or the whole plots of a split-plot. */
+/** The random grouping(s) for a count or proportion response's fit: --random wholePlot|block|run (or a nested list, e.g. block,wholePlot)|none, or the whole plots of a split-plot. */
 function countRandomOf(study, opt, distribution) {
   const r = opt.random === undefined ? 'auto' : String(opt.random);
   if (r === 'none') return null;
   // automatically only for the distributions a random effect is available for (a quasi model stays fixed: it has no likelihood)
   if (r === 'auto' && !['poisson', 'negbin', 'binomial', 'bernoulli'].includes(distribution)) return null;
-  if (!['auto', 'block', 'wholePlot'].includes(r)) fail(`--random ${r}: for counts and proportions use wholePlot, block or none`);
+  if (r !== 'auto' && !r.split(',').every(x => ['block', 'wholePlot', 'run'].includes(x.trim()))) fail(`--random ${r}: for counts and proportions use wholePlot, block, run, a nested list of them (block,wholePlot) or none`);
   return randomGroupOf(study, r)?.id ?? null;
 }
 
@@ -565,10 +566,11 @@ function printGLMM(study, formula, random, opt) {
   const fo = glmmOpts(random, opt);
   const fit = fitCountMixedModel(study, formula, fo);
   const nm = noiseOf(fit), ratioName = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null, gs = `${fit.random.name}s`;
-  out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'} + a random intercept per ${fit.random.name}`);
-  out(`${nm.label}, ${fit.link} link; ${fit.nAGQ === 1 ? 'Laplace approximation' : `adaptive Gauss–Hermite quadrature (${fit.nAGQ} nodes)`}, maximum likelihood`);
-  out(`${fit.n} observations in ${fit.random.m} ${gs}, ${fit.rank} fixed coefficients${fit.offset.some(v => v !== 0) ? '; exposure as an offset (rates per unit exposure)' : ''}`);
-  if (fit.theta !== undefined) out(`θ = ${num(fit.theta, 4)} (s.e. ${num(fit.thetaSE, 3)}): within a ${fit.random.name}, a count varies as μ + μ²/θ`);
+  const R = fit.randoms, nested = R.length > 1, inner = R[R.length - 1].name;
+  out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'} + ${nested ? `random intercepts per ${R.map(r => r.name).join(' and per ')} (nested)` : `a random intercept per ${fit.random.name}`}`);
+  out(`${nm.label}, ${fit.link} link; ${fit.nAGQ === 1 ? `Laplace approximation${nested ? ' (over all the random effects)' : ''}` : `adaptive Gauss–Hermite quadrature (${fit.nAGQ} nodes)`}, maximum likelihood`);
+  out(`${fit.n} observations in ${R.map(r => `${r.m} ${r.name}s`).join(' ⊃ ')}, ${fit.rank} fixed coefficients${fit.offset.some(v => v !== 0) ? '; exposure as an offset (rates per unit exposure)' : ''}`);
+  if (fit.theta !== undefined) out(`θ = ${num(fit.theta, 4)} (s.e. ${num(fit.thetaSE, 3)}): within a ${inner}, a count varies as μ + μ²/θ`);
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
   out('');
@@ -579,20 +581,29 @@ function printGLMM(study, formula, random, opt) {
     ...(ratioName ? [{ key: 'ratio', label: ratioName }, { key: 'rci', label: '95% interval', align: 'left' }] : []),
   ], rows.map(r => ({ ...r, dft: r.df === Infinity ? 'z' : `t ${r.df}`, ratio: r.ci?.ratio?.estimate, rci: r.ci?.ratio ? `${num(r.ci.ratio.lower, 4)} … ${num(r.ci.ratio.upper, 4)}` : '' }))));
   out(`coded units: each continuous factor runs from −1 (low) to +1 (high)${ratioName ? `; ${ratioName === 'odds ratio' ? 'an' : 'a'} ${ratioName} is the factor of change per coded unit (squared for low → high)` : ''}`);
-  if (fit.groupLevel.length && !fit.boundary) out(`${fit.groupLevel.join(', ')} vary only between ${gs}: t on ${fit.random.m} − ${fit.groupLevel.length} = ${fit.dfGroups} df, standard errors × √(${fit.random.m}/${fit.dfGroups}) (a small-sample correction); the others: Wald z`);
-  out(`
-${fit.random.name} σ = ${num(fit.sigma, 4)} on the ${fit.link} scale${fit.boundary ? ' (estimated as 0: no variation between them beyond the noise; the fit is the GLM\'s)' : ` (s.e. ${num(fit.sigmaSE, 3)}); σ = 0 tested by the likelihood ratio χ² = ${num(fit.sigmaTest.chi2, 4)}, p ${pval(fit.sigmaTest.p).startsWith("<") ? pval(fit.sigmaTest.p) : `= ${pval(fit.sigmaTest.p)}`} (½χ²₀ + ½χ²₁)`}`);
+  // the small-sample correction, stratum by stratum
+  const act = R.filter(r => !r.boundary);
+  act.forEach((r, t) => {
+    if (!r.coefficients.length) return;
+    const within = t ? ` within ${act[t - 1].name}s` : '', units = t ? `(${r.m} − ${act[t - 1].m})` : `${r.m}`;
+    out(`${r.coefficients.join(', ')} vary only between ${r.name}s${within}: t on ${units} − ${r.coefficients.length} = ${r.df} df, standard errors × √(${r.units ?? r.m}/${r.df}) (a small-sample correction)`);
+  });
+  if (act.some(r => r.coefficients.length)) out('the others: Wald z');
+  out('');
+  for (const r of R) out(`${r.name} σ = ${num(r.sigma, 4)} on the ${fit.link} scale${r.boundary ? ` (estimated as 0: no variation between them beyond ${nested ? 'the other levels' : 'the noise'}${nested ? '' : '; the fit is the GLM\'s'})` : ` (s.e. ${num(r.sigmaSE, 3)}); σ = 0 tested by the likelihood ratio χ² = ${num(r.test.chi2, 4)}, p ${pval(r.test.p).startsWith('<') ? pval(r.test.p) : `= ${pval(r.test.p)}`} (½χ²₀ + ½χ²₁${nested ? `; the fit without random ${r.name}s` : ''})`}`);
   out(`log-likelihood = ${num(fit.loglik)}   AIC = ${num(fit.aic)}`);
   for (const w of fit.warnings) out(`warning: ${w}`);
   const type = opt.anova ? int(opt.anova, 'anova') : 1;
   const tests = glmmTests(fit, type);
   out(`
-likelihood-ratio tests (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'}; σ${fit.theta !== undefined ? ' and θ' : ''} re-estimated in each model${tests.some(r => r.F !== undefined) ? `; terms that vary only between ${gs} as F = χ²/df on ${fit.dfGroups} df` : ''})`);
-  out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'chi2', label: 'χ²' }, { key: 'F', label: 'F', fmt: (v) => (v === undefined ? '' : num(v)) }, { key: 'p', label: 'p', fmt: pval }], tests));
+likelihood-ratio tests (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'}; σ${nested ? '\'s' : ''}${fit.theta !== undefined ? ' and θ' : ''} re-estimated in each model${tests.some(r => r.F !== undefined) ? (nested ? '; terms that vary only between groups as F = χ²/df on their stratum\'s df' : `; terms that vary only between ${gs} as F = χ²/df on ${fit.dfGroups} df`) : ''})`);
+  out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'chi2', label: 'χ²' }, { key: 'F', label: 'F', fmt: (v) => (v === undefined ? '' : num(v)) }, { key: 'ddf', label: 'on', fmt: (v) => (v === undefined ? '' : String(v)) }, { key: 'p', label: 'p', fmt: pval }], tests));
   put({ kind: 'glmm', response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`, distribution: fit.noise, link: fit.link, nAGQ: fit.nAGQ,
-    random: { id: fit.random.id, name: fit.random.name, groups: fit.random.m, sigma: fit.sigma, sigmaSE: fit.sigmaSE, boundary: fit.boundary, test: fit.sigmaTest, modes: fit.modes },
+    ...(nested ? {} : { random: { id: fit.random.id, name: fit.random.name, groups: fit.random.m, sigma: fit.sigma, sigmaSE: fit.sigmaSE, boundary: fit.boundary, test: fit.sigmaTest, modes: fit.modes } }),
+    randoms: R.map((r, k) => ({ id: (fit.random.levels ?? [fit.random])[k].id, name: r.name, groups: r.m, sigma: r.sigma, sigmaSE: Number.isFinite(r.sigmaSE) ? r.sigmaSE : null, boundary: r.boundary, test: r.test,
+      coefficients: r.coefficients, ...(r.df !== undefined ? { df: r.df } : {}), modes: r.modes })),
     ...(fit.theta !== undefined ? { theta: fit.theta, thetaSE: fit.thetaSE } : {}),
-    n: fit.n, rank: fit.rank, aliased: fit.aliased, units: 'coded', groupLevel: fit.groupLevel, dfGroups: fit.dfGroups,
+    n: fit.n, rank: fit.rank, aliased: fit.aliased, units: 'coded', groupLevel: fit.groupLevel, ...(nested ? {} : { dfGroups: fit.dfGroups }),
     coefficients: rows.map(r => ({ term: r.term, estimate: r.est, se: r.se, seWald: fit.seWald[fit.columns.indexOf(r.term)], statistic: r.z, df: r.df === Infinity ? null : r.df, p: r.p, lower: r.ci.lower, upper: r.ci.upper, ...(r.ci.ratio ? { ratio: r.ci.ratio } : {}) })),
     loglik: fit.loglik, aic: fit.aic, converged: fit.converged, ...(fit.overdispersion ? { overdispersion: fit.overdispersion } : {}), warnings: fit.warnings, tests: { type, rows: tests } });
 }
@@ -614,8 +625,8 @@ function cmdFit({ pos, opt }) {
       if (opt.reduce) {
         const method = opt.reduce === true ? 'p' : String(opt.reduce);
         const r = reduceGLMM(study, formula, { method, ...glmmOpts(g, opt), ...(opt['alpha-out'] !== undefined ? { alphaOut: Number(opt['alpha-out']) } : {}), keep: list(opt.keep).flatMap(k => String(k).split(',')).filter(Boolean) });
-        const gs = `${r.fit.random.name}s`;
-        out(`model reduction with a random ${r.fit.random.name} effect (${method === 'p' ? `backward, likelihood-ratio p > ${opt['alpha-out'] ?? 0.1}; terms that vary only between ${gs} as F` : 'backward, AICc'}; hierarchy kept), from ${r.start.formula}:`);
+        const RR = r.fit.randoms, gs = RR.length > 1 ? 'groups' : `${r.fit.random.name}s`;
+        out(`model reduction with ${RR.length > 1 ? `random ${RR.map(x => x.name).join(' and ')} effects` : `a random ${r.fit.random.name} effect`} (${method === 'p' ? `backward, likelihood-ratio p > ${opt['alpha-out'] ?? 0.1}; terms that vary only between ${gs} as F` : 'backward, AICc'}; hierarchy kept), from ${r.start.formula}:`);
         if (!r.steps.length) out('  nothing to remove');
         for (const st of r.steps) out(`  drop ${st.drop.padEnd(12)} ${st.F !== undefined ? `F = ${num(st.F, 4)} on (${st.df}, ${st.ddf}) df` : `χ² = ${num(st.chi2, 4)} on ${st.df} df`}, p = ${pval(st.p)}  AICc → ${num(st.aicc, 6)}`);
         out(`reduced model: ${r.formula}   (a suggestion: put a term back by editing the formula)\n`);
@@ -814,14 +825,16 @@ function cmdPredict({ pos, opt }) {
     // counts and proportions with a random intercept: a typical whole plot or block, the average over
     // them, and one new run in a new one
     const fit = fitCountMixedModel(study, formula, { random: g, ...(opt.nagq !== undefined ? { nAGQ: int(opt.nagq, 'nagq') } : {}) });
-    const prop = !['poisson', 'quasipoisson', 'negbin'].includes(fit.distribution), gn = fit.random.name;
+    const prop = !['poisson', 'quasipoisson', 'negbin'].includes(fit.distribution), R = fit.randoms, nested = R.length > 1;
+    const gn = nested ? R.map(r => r.name).join(' and ') : fit.random.name, gns = nested ? R.map(r => `${r.name}s`).join(' and ') : `${gn}s`;
     const po = { ...(opt.exposure !== undefined ? { exposure: Number(opt.exposure) } : {}), ...(opt.trials !== undefined ? { trials: int(opt.trials, 'trials') } : resp?.trials ? { trials: resp.trials } : {}) };
     const q = predictCountMixed(fit, at, po);
-    put({ kind: 'glmm', response: fit.response, random: { id: fit.random.id, sigma: fit.sigma }, ...po, predictions: at.map((s, i) => ({ settings: s, fit: q[i].fit, lower: q[i].lower, upper: q[i].upper, marginal: q[i].marginal, predLower: q[i].predLower, predUpper: q[i].predUpper, link: q[i].link, seLink: q[i].seLink })), level: 0.95 });
+    put({ kind: 'glmm', response: fit.response, random: { id: fit.random.id, ...(nested ? { sigmas: R.map(r => r.sigma) } : { sigma: fit.sigma }) }, ...po, predictions: at.map((s, i) => ({ settings: s, fit: q[i].fit, lower: q[i].lower, upper: q[i].upper, marginal: q[i].marginal, predLower: q[i].predLower, predUpper: q[i].predUpper, link: q[i].link, seLink: q[i].seLink })), level: 0.95 });
     const what = prop ? `one run of ${po.trials ?? 'the typical number of'} trials` : `one run, exposure ${po.exposure ?? 1}`;
-    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: `typical ${gn}` }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'marg', label: `average over ${gn}s` }, { key: 'pi', label: `95% PI (${what}, new ${gn})`, align: 'left' }],
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: `typical ${gn}` }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'marg', label: `average over ${gns}` }, { key: 'pi', label: `95% PI (${what}, new ${gn})`, align: 'left' }],
       at.map((s, i) => ({ at: showSettings(s), fit: q[i].fit, ci: `${num(q[i].lower)} … ${num(q[i].upper)}`, marg: q[i].marginal, pi: `${num(q[i].predLower)} … ${num(q[i].predUpper)}` }))));
-    out(`${noiseOf(fit).label} with a random ${gn} intercept (σ = ${num(fit.sigma, 4)}): "typical" is a ${gn} whose effect is 0 on the ${fit.link} scale; the average over ${gn}s${fit.sigma > 0 ? ' differs from it because the scale is not linear' : ' is the same (σ = 0)'}; the prediction interval includes a new ${gn}'s effect`);
+    const anyS = R.some(r => r.sigma > 0);
+    out(`${noiseOf(fit).label} with random ${gn} intercept${nested ? 's' : ''} (σ = ${R.map(r => num(r.sigma, 4)).join(', ')}): "typical" is a ${gn} whose effect${nested ? 's are' : ' is'} 0 on the ${fit.link} scale; the average over ${gns}${anyS ? ' differs from it because the scale is not linear' : ' is the same (σ = 0)'}; the prediction interval includes ${nested ? 'the effects of a new ' + R.map(r => r.name).join(' and a new ') : `a new ${gn}'s effect`}`);
     return;
   }
   const fit = fitModel(study, formula, opt.firth && resp?.distribution ? { firth: true } : {});
@@ -905,9 +918,12 @@ function countsPower(study, opt) {
 function printCountsPower(study, model, c, { alpha, target, opt }) {
   const { response, ...spec } = c;
   const split = study.design.runs.some(r => r.wholePlot !== undefined);
-  if (opt['sigma-wp'] !== undefined) {
-    if (!split) fail('--sigma-wp is for a split-plot design (whole plots)');
-    return printSplitPlotCountsPower(study, model, { ...spec, sigma: Number(opt['sigma-wp']) }, { alpha, target, opt });
+  if (opt['sigma-wp'] !== undefined || opt['sigma-block'] !== undefined) {
+    if (opt['sigma-wp'] !== undefined && !split) fail('--sigma-wp is for a split-plot design (whole plots)');
+    if (opt['sigma-block'] !== undefined && !study.design.runs.some(r => r.block !== undefined)) fail('--sigma-block is for a design with blocks');
+    const keys = [...(opt['sigma-block'] !== undefined ? ['block'] : []), ...(opt['sigma-wp'] !== undefined ? ['wholePlot'] : [])];
+    const sig = keys.map(k => Number(opt[k === 'block' ? 'sigma-block' : 'sigma-wp']));
+    return printSplitPlotCountsPower(study, model, { ...spec, random: keys.join(','), sigma: sig.length > 1 ? sig : sig[0] }, { alpha, target, opt });
   }
   if (split) out('warning: split-plot design — this power treats every run as independent, so it overstates the power for hard-to-change factors: give --sigma-wp, the whole-plot σ on the link scale, for the analysis\'s random whole-plot effect');
   const p = studyPower(study, { model, alpha, ...spec });
@@ -929,16 +945,21 @@ function printSplitPlotCountsPower(study, model, spec, { alpha, target, opt }) {
   const p = studyGlmmPower(study, { model, alpha, ...spec });
   const odds = String(spec.distribution).includes('binomial') || spec.distribution === 'bernoulli', rname = odds ? 'odds ratio' : 'rate ratio';
   const per = (v) => (Array.isArray(v) ? `${v.join(', ')} (cycled over the runs)` : v);
-  out(`power for ${model}, ${spec.distribution} (${p.link} link) with a random whole-plot intercept: ${p.n} runs in ${p.groups} whole plots; whole-plot σ = ${spec.sigma} on the ${p.link} scale; α = ${alpha}; baseline ${odds ? 'proportion' : 'mean count'} ${spec.baseline}${odds ? `, ${per(spec.trials)} trials per run` : spec.exposure !== 1 ? ` per unit exposure, exposure ${per(spec.exposure)}` : ''}${spec.theta ? `, θ = ${spec.theta} within whole plots` : ''}`);
+  const lv = p.levels, wpOnly = spec.random === 'wholePlot', adj = (nm) => nm.replace(' ', '-');
+  const what = wpOnly ? `a random whole-plot intercept: ${p.n} runs in ${p.groups} whole plots; whole-plot σ = ${spec.sigma}`
+    : `random ${lv.map(l => adj(l.name)).join(' and ')} intercepts${lv.length > 1 ? ' (nested)' : ''}: ${p.n} runs in ${lv.map(l => `${l.m} ${l.name}s`).join(' ⊃ ')}; ${lv.map(l => `${l.name} σ = ${l.sigma}`).join(', ')}`;
+  out(`power for ${model}, ${spec.distribution} (${p.link} link) with ${what} on the ${p.link} scale; α = ${alpha}; baseline ${odds ? 'proportion' : 'mean count'} ${spec.baseline}${odds ? `, ${per(spec.trials)} trials per run` : spec.exposure !== 1 ? ` per unit exposure, exposure ${per(spec.exposure)}` : ''}${spec.theta ? `, θ = ${spec.theta} within whole plots` : ''}`);
   const det = Object.fromEntries(detectableGlmmRatio(p, { power: target }).map(d => [d.term, d.ratio]));
   let sim = null;
-  if (opt.simulate) { const { mm, groups } = studyGlmmMatrix(study, model); sim = Object.fromEntries(simulateGlmmPower(mm, groups, { ...spec, alpha, nsim: int(opt.simulate, 'simulate'), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed }).map(s => [s.term, s])); }
+  if (opt.simulate) { const { mm, groups } = studyGlmmMatrix(study, model, { random: spec.random }); sim = Object.fromEntries(simulateGlmmPower(mm, groups, { ...spec, alpha, nsim: int(opt.simulate, 'simulate'), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed }).map(s => [s.term, s])); }
   const rows = p.terms.filter(t => !t.block);
-  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, wholePlots: p.groups, dfGroups: p.dfGroups, sigmaWholePlot: spec.sigma, alpha, target, distribution: spec.distribution, link: p.link, baseline: spec.baseline, ratio: spec.ratio, ...(spec.theta ? { theta: spec.theta } : {}),
-    terms: rows.map(t => ({ term: t.term, df: t.df, ...(t.ddf !== undefined ? { ddf: t.ddf } : {}), test: t.test, ratio: t.ratio, power: t.power, detectableRatio: det[t.term], ...(sim ? { simulated: sim[t.term].power, simulatedSE: sim[t.term].se } : {}) })) });
+  const sigOf = (id) => lv.find(l => l.name === (id === 'block' ? 'block' : 'whole plot'))?.sigma;
+  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, ...(spec.random.includes('wholePlot') ? { wholePlots: lv[lv.length - 1].m, sigmaWholePlot: sigOf('wholePlot') } : {}), ...(spec.random.includes('block') ? { blocks: lv[0].m, sigmaBlock: sigOf('block') } : {}),
+    ...(lv.length === 1 ? { dfGroups: p.dfGroups } : {}), levels: lv.map(l => ({ name: l.name, groups: l.m, sigma: l.sigma, df: l.df, coefficients: l.coefficients })), alpha, target, distribution: spec.distribution, link: p.link, baseline: spec.baseline, ratio: spec.ratio, ...(spec.theta ? { theta: spec.theta } : {}),
+    terms: rows.map(t => ({ term: t.term, df: t.df, ...(t.ddf !== undefined ? { ddf: t.ddf, level: t.level } : {}), test: t.test, ratio: t.ratio, power: t.power, detectableRatio: det[t.term], ...(sim ? { simulated: sim[t.term].power, simulatedSE: sim[t.term].se } : {}) })) });
   out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'tested', label: 'tested against', align: 'left' }, { key: 'ratio', label: rname }, { key: 'power', label: 'power' }, ...(sim ? [{ key: 'sim', label: `simulated (${opt.simulate})`, align: 'left' }] : []), { key: 'det', label: `${rname} for ${target * 100}%` }],
-    rows.map(t => ({ ...t, tested: t.wholePlot ? `whole plots (F, ${t.ddf} df)` : 'runs (χ²)', power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: Number.isFinite(det[t.term]) ? num(det[t.term], 4) : '> 1000', ...(sim ? { sim: `${num(sim[t.term].power, 3)} ± ${num(sim[t.term].se, 2)}` } : {}) }))));
-  out(`${rname}: the ${odds ? 'odds of success' : 'mean count'} at a factor's high setting over its low setting, each term alone, the others at the baseline. A term that changes only between whole plots is judged against the whole-plot variation, an F on ${p.dfGroups} df as in the analysis; the others by χ² (Wald approximation at the expected means${sim ? '; simulated: the GLMM fitted to simulated experiments, likelihood-ratio tests' : ''})`);
+    rows.map(t => ({ ...t, tested: t.wholePlot ? `${t.level}s (F, ${t.ddf} df)` : 'runs (χ²)', power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: Number.isFinite(det[t.term]) ? num(det[t.term], 4) : '> 1000', ...(sim ? { sim: `${num(sim[t.term].power, 3)} ± ${num(sim[t.term].se, 2)}` } : {}) }))));
+  out(`${rname}: the ${odds ? 'odds of success' : 'mean count'} at a factor's high setting over its low setting, each term alone, the others at the baseline. ${lv.length === 1 ? `A term that changes only between ${lv[0].name}s is judged against the ${adj(lv[0].name)} variation, an F on ${p.dfGroups} df as in the analysis` : 'A term that changes only between groups is judged against the variation at its level, an F on that level\'s df as in the analysis'}; the others by χ² (Wald approximation at the expected means${sim ? '; simulated: the GLMM fitted to simulated experiments, likelihood-ratio tests' : ''})`);
 }
 
 /** The model matrix of the study's design for a model (for simulation). */

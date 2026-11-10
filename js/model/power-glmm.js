@@ -22,6 +22,11 @@
 // 0.5–8 points low.) σ = 0 gives the GLM's power, with the F on m − q for whole-plot terms. For the
 // negative binomial, V(μ) = μ + μ²/θ in w, θ as anticipated (the analysis estimates it).
 //
+// Nested groupings (blocks ⊃ whole plots; issue #78): V = W⁻¹ + Σ σ_k² Z_k Z_kᵀ, block-diagonal over
+// the outermost groups; each term's stratum as the analysis's (the outermost grouping within whose
+// groups its columns are constant: units = its groups less those of the grouping outside it, df =
+// units − q), only that stratum's σ² widened by units/df, and an F on that df.
+//
 // By simulation: experiments are simulated from the GLMM (each whole plot's shift drawn), fitted
 // with fitGLMM with and without the term, and the analysis's likelihood-ratio test (F on m − q for
 // whole-plot terms) counted at α.
@@ -30,7 +35,7 @@ import { fDist, ncf, chi2 as CHI2, ncChi2, normal } from '../dist.js';
 import { parseFormula, modelMatrix } from './formula.js';
 import { family, LINKS, canonicalLink, DISTRIBUTIONS as GLM_DISTRIBUTIONS, _draw } from './glm.js';
 import { ratioCoefficient } from './power.js';
-import { fitGLMM, glmmCompare } from './glmm.js';
+import { fitGLMM, glmmDropTest } from './glmm.js';
 import { rng } from '../design/rng.js';
 
 const glmDistribution = (d) => (d === 'bernoulli' ? 'binomial' : d);
@@ -72,55 +77,75 @@ export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, basel
   const d = glmDistribution(distribution);
   if (!['poisson', 'negbin', 'binomial'].includes(d)) throw new Error(`power with a random whole-plot effect is for Poisson and negative binomial counts, binomial proportions and pass/fail results, not ${distribution}`);
   if (d === 'negbin' && !(theta > 0)) throw new Error('the negative binomial needs θ (within a whole plot the variance is μ + μ²/θ): give the θ you expect');
-  if (!(sigma >= 0)) throw new Error('give σ of the whole-plot shift on the link scale (0 or more): how much whole plots differ beyond the counts\' own variation');
+  // one grouping (labels, σ a number) or several nested ([{ name, labels }] outermost first, σ an array)
+  const nestedIn = groupLabels.length && groupLabels[0] && typeof groupLabels[0] === 'object' && 'labels' in groupLabels[0];
+  const levels = nestedIn ? groupLabels : [{ name: 'whole plot', labels: groupLabels }], K = levels.length;
+  const sigmas = Array.isArray(sigma) ? sigma : [sigma];
+  if (sigmas.length !== K) throw new Error(`${sigmas.length} σ's for ${K} groupings`);
+  if (!sigmas.every(v => v >= 0)) throw new Error(K > 1 ? 'give σ (0 or more) on the link scale for each grouping' : 'give σ of the whole-plot shift on the link scale (0 or more): how much whole plots differ beyond the counts\' own variation');
   const lk = link ?? canonicalLink(d), counts = GLM_DISTRIBUTIONS[d].counts;
   if (!(baseline > 0) || (!counts && !(baseline < 1))) throw new Error(counts ? 'the baseline mean count must be positive' : 'the baseline proportion must lie between 0 and 1');
   if (!(alpha > 0 && alpha < 1)) throw new Error('α must be between 0 and 1');
   const fam = family(d, lk, d === 'negbin' ? theta : undefined), L = fam.link;
   const { X, columns, assign, model } = mm, n = X.length;
-  if (groupLabels.length !== n) throw new Error(`${groupLabels.length} whole-plot labels for ${n} runs`);
-  const G = groupsOf(groupLabels);
-  if (G.m < 2) throw new Error('a random whole-plot effect needs at least two whole plots');
+  for (const l of levels) if (l.labels.length !== n) throw new Error(`${l.labels.length} ${l.name} labels for ${n} runs`);
+  const Gs = levels.map(l => groupsOf(l.labels));
+  Gs.forEach((G, k) => { if (G.m < 2) throw new Error(`a random ${levels[k].name} effect needs at least two ${levels[k].name}s`); });
+  for (let k = 1; k < K; k++) {
+    const o = new Map();
+    for (let i = 0; i < n; i++) { const g = Gs[k].idx[i]; if (o.has(g) && o.get(g) !== Gs[k - 1].idx[i]) throw new Error(`the ${levels[k].name}s are not nested within the ${levels[k - 1].name}s`); o.set(g, Gs[k - 1].idx[i]); }
+  }
   const per = (v) => X.map((_, i) => (Array.isArray(v) ? v[i % v.length] : v));
   const m = d.includes('binomial') ? per(trials) : X.map(() => 1), expo = counts ? per(exposure) : X.map(() => 1);
   const icpt = columns.findIndex((_, j) => assign[j] === -1), b0 = L.fun(baseline);
   const ratioOf = (label) => (typeof ratio === 'number' ? ratio : ratio[label] ?? ratio.default ?? 2);
-  // the columns constant within every whole plot, among the estimable ones
+  // each column's stratum: the outermost grouping within whose groups it is constant (as the analysis)
   const f0 = qr(X, { tol: 1e-11 }), est = columns.map((_, j) => !f0.aliased.includes(j));
-  const level = columns.map((_, j) => est[j] && G.rows.every(I => I.every(i => X[i][j] === X[I[0]][j])));
-  const q = level.filter(Boolean).length, dfG = G.m - q, kG = dfG >= 1 ? G.m / dfG : NaN;
+  const levelOf = columns.map((_, j) => (est[j] ? Gs.findIndex(G => G.rows.every(I => I.every(i => X[i][j] === X[I[0]][j]))) : -1));
+  const strata = Gs.map((G, k) => { const units = G.m - (k ? Gs[k - 1].m : 0), q = levelOf.filter(v => v === k).length, df = units - q; return { units, q, df, scale: df >= 1 ? units / df : NaN }; });
+  const levelOfTerm = (S) => (S.length && levelOf[S[0]] >= 0 && S.every(j => levelOf[j] === levelOf[S[0]]) ? levelOf[S[0]] : -1);
+  const J = est.map((e, j) => j).filter(j => est[j]), p = J.length;
   const lambdaFor = (S, bS) => {
-    // a whole-plot term: σ² widened by m/(m − q) (see the header)
-    const s2 = S.length && S.every(j => level[j]) ? sigma * sigma * kG : sigma * sigma;
+    // a term in stratum k: σ_k² widened by its units/df (see the header)
+    const lt = levelOfTerm(S), s2 = sigmas.map((v, k) => v * v * (k === lt ? strata[k].scale : 1));
     const beta = columns.map((_, j) => (j === icpt ? b0 : 0));
     S.forEach((j, k) => { beta[j] = bS[k]; });
     const eta = X.map((r, i) => r.reduce((s, v, j) => s + v * beta[j], 0) + (counts && L.name === 'log' ? Math.log(expo[i]) : 0));
     const mu = eta.map(L.inv);
     if (counts && L.name !== 'log') mu.forEach((v, i) => { mu[i] = v * expo[i]; });
-    if (mu.some(v => !fam.validMu(v))) return NaN;
+    if (mu.some(v => !fam.validMu(v)) || !s2.every(Number.isFinite)) return NaN;
     const w = mu.map((v, i) => m[i] * L.deriv(eta[i]) ** 2 / fam.variance(v));
-    // Xᵀ V⁻¹ X, whole plot by whole plot
-    const J = est.map((e, j) => j).filter(j => est[j]), p = J.length;
     const M = Array.from({ length: p }, () => new Array(p).fill(0));
-    for (const I of G.rows) {
-      const sw = I.reduce((s, i) => s + w[i], 0), c = s2 / (1 + s2 * sw);
-      const u = J.map(j => I.reduce((s, i) => s + w[i] * X[i][j], 0));     // Xᵀ W 1 for this whole plot
-      for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) {
-        let s = 0; for (const i of I) s += X[i][J[a]] * w[i] * X[i][J[b]];
-        M[a][b] += s - c * u[a] * u[b];
+    if (K === 1) {
+      // Xᵀ V⁻¹ X, whole plot by whole plot (Woodbury)
+      for (const I of Gs[0].rows) {
+        const sw = I.reduce((s, i) => s + w[i], 0), c = s2[0] / (1 + s2[0] * sw);
+        const u = J.map(j => I.reduce((s, i) => s + w[i] * X[i][j], 0));     // Xᵀ W 1 for this whole plot
+        for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) {
+          let s = 0; for (const i of I) s += X[i][J[a]] * w[i] * X[i][J[b]];
+          M[a][b] += s - c * u[a] * u[b];
+        }
+      }
+    } else {
+      // nested: V = W⁻¹ + Σ σ_k² Z_k Z_kᵀ, block-diagonal over the outermost groups
+      for (const I of Gs[0].rows) {
+        const Vc = I.map((i, a) => I.map((i2, b) => (a === b ? 1 / w[i] : 0) + s2.reduce((s, v, k) => s + (Gs[k].idx[i] === Gs[k].idx[i2] ? v : 0), 0)));
+        const Vi = invert(Vc);
+        for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) {
+          let s = 0; for (let x = 0; x < I.length; x++) for (let y = 0; y < I.length; y++) s += X[I[x]][J[a]] * Vi[x][y] * X[I[y]][J[b]];
+          M[a][b] += s;
+        }
       }
     }
     const V = invert(M), idx = S.map(j => J.indexOf(j));
     if (idx.some(k => k < 0)) return NaN;
     const A = idx.map(a => idx.map(b => V[a][b]));
     const x = solveSym(A, bS);
-    const lam = bS.reduce((s, v, i) => s + v * x[i], 0);
-    return lam;
+    return bS.reduce((s, v, i) => s + v * x[i], 0);
   };
-  const isWP = (S) => S.length > 0 && S.every(j => level[j]);
-  const powerOf = (df, lambda, wp) => {
+  const powerOf = (df, lambda, lt) => {
     if (!Number.isFinite(lambda)) return NaN;
-    if (wp) return dfG >= 1 ? ncf.sf(fDist.isf(alpha, df, dfG), df, dfG, lambda) : NaN;
+    if (lt >= 0) { const dd = strata[lt].df; return dd >= 1 ? ncf.sf(fDist.isf(alpha, df, dd), df, dd, lambda) : NaN; }
     return ncChi2.sf(CHI2.ppf(1 - alpha, df), df, lambda);
   };
   const colsOf = (ti) => columns.map((_, j) => j).filter(j => assign[j] === ti);
@@ -129,13 +154,15 @@ export function glmmPowerFromMatrix(mm, groupLabels, { distribution, link, basel
     return lambdaFor(S, S.map(() => ratioCoefficient(d, lk, baseline, r)));
   };
   const terms = model.terms.map((t, ti) => {
-    const S = colsOf(ti), r = ratioOf(t.label), wp = isWP(S);
+    const S = colsOf(ti), r = ratioOf(t.label), lt = levelOfTerm(S);
     if (t.block) return { term: t.label, df: S.length, ratio: r, lambda: NaN, power: NaN, block: true };
     const lambda = lambdaFor(S, S.map(() => ratioCoefficient(d, lk, baseline, r)));
-    return { term: t.label, df: S.length, ratio: r, lambda, test: wp ? 'F' : 'chi2', ...(wp ? { ddf: dfG } : {}), wholePlot: wp, power: powerOf(S.length, lambda, wp) };
+    return { term: t.label, df: S.length, ratio: r, lambda, test: lt >= 0 ? 'F' : 'chi2', ...(lt >= 0 ? { ddf: strata[lt].df, level: levels[lt].name } : {}), wholePlot: lt >= 0, power: powerOf(S.length, lambda, lt) };
   });
-  return { n, rank: est.filter(Boolean).length, dfRes: n - est.filter(Boolean).length, groups: G.m, dfGroups: dfG, groupLevel: columns.filter((_, j) => level[j]), sigma, alpha, distribution, link: lk, baseline, ratio, ...(d === 'negbin' ? { theta } : {}), terms,
-    lambdaAt, powerOf: (df, lambda, term) => powerOf(df, lambda, terms.find(t => t.term === term)?.wholePlot) };
+  const out = { n, rank: p, dfRes: n - p, groups: Gs[K - 1].m, groupLevel: columns.filter((_, j) => levelOf[j] >= 0), alpha, distribution, link: lk, baseline, ratio, ...(d === 'negbin' ? { theta } : {}), terms,
+    levels: levels.map((l, k) => ({ name: l.name, m: Gs[k].m, sigma: sigmas[k], units: strata[k].units, df: strata[k].df, coefficients: columns.filter((_, j) => levelOf[j] === k) })),
+    lambdaAt, powerOf: (df, lambda, term) => powerOf(df, lambda, levelOfTerm(colsOf(model.terms.findIndex(t => t.label === term)))) };
+  return K === 1 ? { ...out, dfGroups: strata[0].df, sigma: sigmas[0] } : { ...out, sigma: sigmas };
 }
 
 /**
@@ -156,15 +183,19 @@ const binomialDraw = (R, n, p) => { let k = 0; for (let i = 0; i < n; i++) if (R
 
 /**
  * Power by simulation from the GLMM: for each term, nsim experiments with each whole plot's shift
- * drawn from N(0, σ²), fitted by fitGLMM (nAGQ, default 25) with and without the term; the
- * likelihood-ratio test counted at α (F on m − q df for a whole-plot term, as the analysis).
+ * drawn from N(0, σ²) (nested groupings: each level's shifts, with its σ), fitted by fitGLMM (nAGQ,
+ * default 25; 1 for nested groupings) with and without the term; the analysis's likelihood-ratio
+ * test counted at α (F on its stratum's df for a term that varies only between groups).
  * Returns [{ term, power, se, nsim }].
  */
 export function simulateGlmmPower(mm, groupLabels, opts = {}) {
-  const { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, theta, sigma, alpha = 0.05, nsim = 200, seed = 1, nAGQ = 25 } = opts;
+  const { distribution, link, baseline, ratio = 2, trials = 1, exposure = 1, theta, sigma, alpha = 0.05, nsim = 200, seed = 1 } = opts;
   const approx = glmmPowerFromMatrix(mm, groupLabels, opts);
   const d = glmDistribution(distribution), lk = link ?? canonicalLink(d), counts = GLM_DISTRIBUTIONS[d].counts, L = LINKS[lk];
-  const R = rng(seed), { X, columns, assign, model } = mm, G = groupsOf(groupLabels);
+  const nestedIn = typeof groupLabels[0] === 'object' && groupLabels[0] !== null && 'labels' in groupLabels[0];
+  const Gs = (nestedIn ? groupLabels : [{ labels: groupLabels }]).map(l => groupsOf(l.labels)), sigmas = Array.isArray(sigma) ? sigma : [sigma];
+  const nAGQ = opts.nAGQ ?? (nestedIn && groupLabels.length > 1 ? 1 : 25);
+  const R = rng(seed), { X, columns, assign, model } = mm;
   const per = (v) => X.map((_, i) => (Array.isArray(v) ? v[i % v.length] : v));
   const m = d.includes('binomial') ? per(trials) : X.map(() => 1), expo = counts ? per(exposure) : X.map(() => 1);
   const icpt = columns.findIndex((_, j) => assign[j] === -1), b0 = L.fun(baseline);
@@ -173,23 +204,21 @@ export function simulateGlmmPower(mm, groupLabels, opts = {}) {
   const o = { distribution: d, link: lk, weights: counts ? undefined : m, offset, nAGQ, group: 'whole plot' };
   return model.terms.filter(t => !t.block).map(t => {
     const ti = model.terms.indexOf(t), S = columns.map((_, j) => j).filter(j => assign[j] === ti);
-    const wp = approx.terms.find(x => x.term === t.label)?.wholePlot;
     const beta = columns.map((_, j) => (j === icpt ? b0 : S.includes(j) ? ratioCoefficient(d, lk, baseline, ratioOf(t.label)) : 0));
     const eta = X.map((r) => r.reduce((s, v, j) => s + v * beta[j], 0));
     const keep = columns.map((_, j) => j).filter(j => !S.includes(j));
     const small = { ...mm, X: X.map(r => keep.map(j => r[j])), columns: keep.map(j => columns[j]), assign: keep.map(j => assign[j]) };
     let hits = 0, done = 0;
     for (let s = 0; s < nsim; s++) {
-      const shift = Array.from({ length: G.m }, () => sigma * normal.ppf(Math.min(1 - 1e-12, Math.max(1e-12, R.random()))));
+      const shifts = Gs.map((G, k) => Array.from({ length: G.m }, () => sigmas[k] * normal.ppf(Math.min(1 - 1e-12, Math.max(1e-12, R.random())))));
       const y = eta.map((e, i) => {
-        const mu = L.inv(e + shift[G.idx[i]]);
+        const mu = L.inv(e + Gs.reduce((s, G, k) => s + shifts[k][G.idx[i]], 0));
         // the negative binomial as a Poisson with a gamma-distributed mean (shape θ, mean 1); θ is estimated in the fits, as the analysis does
         return counts ? _draw.poisson(R, mu * expo[i] * (d === 'negbin' ? _draw.gamma(R, theta) / theta : 1)) : binomialDraw(R, m[i], mu) / m[i];
       });
       try {
         const big = fitGLMM(mm, y, groupLabels, o), sm = fitGLMM(small, y, groupLabels, o);
-        const c = glmmCompare(big, sm);
-        const p = wp && !big.boundary ? (big.dfGroups >= 1 ? fDist.sf(c.chi2 / c.df, c.df, big.dfGroups) : NaN) : c.p;
+        const p = glmmDropTest(big, sm, t.label).p;              // the analysis's test (F on its stratum's df for a whole-plot term)
         if (Number.isFinite(p)) { done++; if (p < alpha) hits++; }
       } catch { /* a degenerate simulated data set: not counted */ }
     }
@@ -198,14 +227,21 @@ export function simulateGlmmPower(mm, groupLabels, opts = {}) {
   });
 }
 
-/** The study's design with its whole plots (or blocks: random: 'block'): the model matrix and labels. */
+/**
+ * The study's design with its whole plots (or blocks: random 'block'; or both, nested: 'block,wholePlot',
+ * blocks outermost): the model matrix and the labels (a list of { name, labels } for several).
+ */
 export function studyGlmmMatrix(study, model = 'main', { random = 'wholePlot' } = {}) {
   if (!study.design) throw new Error('the study has no design yet');
   const runs = study.design.runs.filter(r => r.kind !== 'confirm');
-  const key = random === 'block' ? 'block' : 'wholePlot';
-  if (!runs.every(r => r[key] !== undefined)) throw new Error(random === 'block' ? 'the design has no blocks' : 'the design has no whole plots');
+  const keys = String(random).split(',').map(x => x.trim()).sort((a, b) => (a === 'block' ? -1 : b === 'block' ? 1 : 0));
+  for (const key of keys) {
+    if (!['block', 'wholePlot'].includes(key)) throw new Error(`power with a random "${key}" effect: use wholePlot, block or block,wholePlot`);
+    if (!runs.every(r => r[key] !== undefined)) throw new Error(key === 'block' ? 'the design has no blocks' : 'the design has no whole plots');
+  }
   const mm = modelMatrix(parseFormula(model, study.factors), study.factors, runs.map(r => r.settings));
-  return { mm, groups: runs.map(r => String(r[key])) };
+  if (keys.length === 1) return { mm, groups: runs.map(r => String(r[keys[0]])) };
+  return { mm, groups: keys.map(key => ({ name: key === 'block' ? 'block' : 'whole plot', labels: runs.map(r => String(r[key])) })) };
 }
 
 /** Power of the study's split-plot (or blocked, random: 'block') design for a count or proportion response. */

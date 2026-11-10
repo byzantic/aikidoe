@@ -1870,12 +1870,12 @@
             "distribution",
             "link",
             "nAGQ",
-            "random",
             "n",
             "rank",
             "coefficients",
             "loglik",
-            "tests"
+            "tests",
+            "randoms"
           ],
           "properties": {
             "kind": {
@@ -1916,7 +1916,8 @@
                 "id": {
                   "enum": [
                     "wholePlot",
-                    "block"
+                    "block",
+                    "run"
                   ]
                 },
                 "name": {
@@ -1963,7 +1964,8 @@
                     "type": "number"
                   }
                 }
-              }
+              },
+              "description": "one random effect: its grouping, σ and test (also the first entry of randoms)"
             },
             "n": {
               "type": "integer"
@@ -2189,6 +2191,72 @@
                 "p",
                 "detected"
               ]
+            },
+            "randoms": {
+              "type": "array",
+              "minItems": 1,
+              "description": "each grouping's random intercept, outermost first (several: nested, e.g. blocks ⊃ whole plots)",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "groups",
+                  "sigma",
+                  "boundary",
+                  "coefficients"
+                ],
+                "properties": {
+                  "id": {
+                    "enum": [
+                      "block",
+                      "wholePlot",
+                      "run"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "groups": {
+                    "type": "integer"
+                  },
+                  "sigma": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "sigmaSE": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "boundary": {
+                    "type": "boolean"
+                  },
+                  "test": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "coefficients": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "the coefficients judged in this grouping's stratum (t on df)"
+                  },
+                  "df": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "modes": {
+                    "type": "object"
+                  }
+                }
+              }
             }
           }
         }
@@ -2467,6 +2535,48 @@
         "sigmaWholePlot": {
           "type": "number",
           "description": "σ of the whole-plot shift on the link scale (--sigma-wp)"
+        },
+        "blocks": {
+          "type": "integer"
+        },
+        "sigmaBlock": {
+          "type": "number",
+          "minimum": 0
+        },
+        "levels": {
+          "type": "array",
+          "description": "counts and proportions with random effects: each grouping (outermost first), its σ and the df of its stratum",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "groups",
+              "sigma"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "groups": {
+                "type": "integer"
+              },
+              "sigma": {
+                "type": "number"
+              },
+              "df": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "coefficients": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     },

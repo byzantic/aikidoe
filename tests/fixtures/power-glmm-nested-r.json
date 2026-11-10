@@ -1,0 +1,70 @@
+{
+  "fixture": "power-glmm-nested-r",
+  "generator": "tests/ref/power_glmm_nested_r.R",
+  "meta": {
+    "R": "4.3.3",
+    "packages": {
+      "lme4": "2.1.0"
+    }
+  },
+  "cases": [
+    {
+      "name": "poisson-6days-4wp-2runs",
+      "input": {
+        "days": 6,
+        "wholePlotsPerDay": 4,
+        "perWholePlot": 2,
+        "distribution": "poisson",
+        "baseline": 15,
+        "ratio": {
+          "D": 2.2,
+          "T": 1.6,
+          "B": 1.25
+        },
+        "sigma": {
+          "day": 0.35,
+          "wp": 0.3
+        },
+        "alpha": 0.05,
+        "formula": "D + T + B"
+      },
+      "output": {
+        "terms": ["D", "T", "B"],
+        "power": [0.3575, 0.8375, 0.8975],
+        "se": [0.023963187913965, 0.0184454432042171, 0.015165235738359],
+        "nsim": [400, 400, 400]
+      }
+    },
+    {
+      "name": "poisson-8days-3wp-4runs",
+      "input": {
+        "days": 8,
+        "wholePlotsPerDay": 3,
+        "perWholePlot": 4,
+        "distribution": "poisson",
+        "baseline": 10,
+        "ratio": {
+          "D": 1.8,
+          "T": 1.5,
+          "B": 1.2
+        },
+        "sigma": {
+          "day": 0.25,
+          "wp": 0.4
+        },
+        "alpha": 0.05,
+        "formula": "D + T + B"
+      },
+      "output": {
+        "terms": ["D", "T", "B"],
+        "power": [0.495, 0.5475, 0.84],
+        "se": [0.0249987499687484, 0.0248869318116959, 0.0183303027798234],
+        "nsim": [400, 400, 400]
+      }
+    }
+  ],
+  "tolerance": {
+    "rel": 0,
+    "abs": 0.03
+  }
+}

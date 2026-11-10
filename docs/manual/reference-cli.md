@@ -69,6 +69,7 @@ Commands
        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
        [--sigma-wp σ]  in a split-plot: σ of the whole-plot shift on the link scale (the analysis's random effect)
+       [--sigma-block σ]  with blocks: σ of the block shift (random blocks; with --sigma-wp, blocks ⊃ whole plots)
   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
                 | --optimal --runs n [--model …] [--criterion D|I|A]

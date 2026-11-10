@@ -171,6 +171,21 @@ try {
     const nbRef = fitCountMixedModel({ ...odd, responses: [{ ...odd.responses[0], distribution: 'negbin' }] }, 'n ~ T + D');
     check(`… the negative binomial with the random whole-plot effect: θ as the library fits it (${num(nbRef.theta, 3)})`, (await state()).doc.responses[0].distribution === 'negbin' && await page.locator('#glmm-fit').count() === 1
       && (await page.textContent('#glmm-theta')) === num(nbRef.theta, 3) && await page.locator('#glmm-overdispersion').count() === 0, await page.textContent('#glmm-stats'));
+    // nested: blocks (days) ⊃ whole plots (issue #78)
+    const s4 = createStudy({ ...s0, design: toStudyDesign(s0, splitPlotFull([2, 2], [true, false], { replicates: 8 }), { seed: 3 }) });
+    const wps = [...new Set(s4.design.runs.map(r => r.wholePlot))].sort((x, y) => x - y);
+    const s4b = createStudy({ ...s4, design: { ...s4.design, runs: s4.design.runs.map(r => ({ ...r, block: 1 + Math.floor(wps.indexOf(r.wholePlot) / 4) })) } });
+    const bsp = createStudy(runVirtual({ seed: 2, factors: s0.factors, responses: [{ id: 'n', distribution: 'poisson', truth: { intercept: Math.log(25), terms: { T: 0.25, D: 0.3 } } }], nuisance: { wholePlot: 0.3, block: 0.4 } }, s4b));
+    const nref = fitCountMixedModel(bsp, 'n ~ T + D', { random: 'block,wholePlot' });
+    await page.evaluate((d) => window.aikidoe.setDoc(d), JSON.parse(JSON.stringify(bsp))); await settle();
+    await page.click('[data-step="analyse"]'); await settle();
+    await page.fill('#formula', 'n ~ T + D'); await page.keyboard.press('Tab'); await settle();
+    const opts = await page.locator('select[aria-label="random effect"] option').allTextContents();
+    check('the random-effect choice offers blocks ⊃ whole plots (nested)', opts.includes('blocks ⊃ whole plots (nested)'), opts.join(' | '));
+    await page.selectOption('select[aria-label="random effect"]', 'block,wholePlot'); await settle();
+    check(`nested: σ for blocks and for whole plots as the library fits them (${num(nref.randoms[0].sigma, 3)}, ${num(nref.randoms[1].sigma, 3)})`, (await page.textContent('#glmm-sigma-0')) === num(nref.randoms[0].sigma, 3) && (await page.textContent('#glmm-sigma-1')) === num(nref.randoms[1].sigma, 3));
+    check('… T judged between whole plots within blocks: t on 11 df; an effects plot per level', (await dfOf('T')) === '11' && /within blocks/.test(await page.textContent('#glmm-fit')) && await page.locator('#glmm-effects svg').count() === (nref.randoms.filter(r => !r.boundary).length));
+    await shot('counts-glmm-nested');
   }
 
   section('Design: power in a split-plot, with the whole-plot σ');
