@@ -2902,6 +2902,28 @@
               }
             }
           }
+        },
+        "beyondRuns": {
+          "description": "null when the best settings lie among the runs; else whether they are inside the convex hull of the runs, and the largest ratio over the models of the scaled prediction variance there to its largest at a run",
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "inside",
+            "ratio"
+          ],
+          "properties": {
+            "inside": {
+              "type": "boolean"
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
         }
       }
     },

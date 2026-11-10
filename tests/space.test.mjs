@@ -1,10 +1,13 @@
 // Where the runs sit (issue #88): the runs in coded units, the scaled prediction variance of a
 // design for a model and the variance dispersion graph, against base R (tests/ref/space_r.R:
 // model.matrix and (FᵀF)⁻¹ at given points, R's treatment contrasts for a categorical factor);
-// against rsm.js's predictionVariance for the quadratic; slices, constraints and the SVG plots.
+// against rsm.js's predictionVariance for the quadratic; slices, constraints and the SVG plots;
+// settings beyond the runs (phase 3): the convex hull of the runs against geometry::inhulln and
+// nnls::nnls (tests/ref/hull_r.R), and the warning's two tests.
 import { readFileSync } from 'node:fs';
 import { section, check, near, throws, done } from './lib/check.mjs';
-import { codedRuns, spvFunction, spvSlice, vdg, feasibleSlice } from '../js/design/space.js';
+import { codedRuns, spvFunction, spvSlice, vdg, feasibleSlice, nnls, inHull, extrapolation, beyondRuns } from '../js/design/space.js';
+import { fittedModels } from '../js/model/desirability.js';
 import { ccd, predictionVariance, varianceProfile } from '../js/design/rsm.js';
 import { toStudyDesign } from '../js/design/factorial.js';
 import { createStudy } from '../js/study.js';
@@ -15,6 +18,13 @@ import { pairsSVG, contourSVG, vdgSVG, standalone, viridis } from '../js/io/svg-
 const F = JSON.parse(readFileSync(new URL('./fixtures/space-r.json', import.meta.url), 'utf8'));
 // G is the categorical factor (level indices 0, 1, 2 in the input); the others are continuous, coded −1 … +1
 const studyOf = (ids) => createStudy({ name: 's', seed: 1, factors: ids.map(id => (id === 'G' ? { id, type: 'categorical', levels: ['a', 'b', 'c'] } : { id, low: -1, high: 1 })), responses: [{ id: 'y' }] });
+
+// a k-factor rotatable CCD with 3 centre runs; A from 40 to 60, B from 4 to 6, others −1 … 1
+const toStudyDesign0 = (k) => {
+  const ids = ['A', 'B', 'C', 'D'].slice(0, k), fs = ids.map((id, j) => (j === 0 ? { id, low: 40, high: 60 } : j === 1 ? { id, low: 4, high: 6 } : { id, low: -1, high: 1 }));
+  const s = createStudy({ name: 'c', seed: 1, factors: fs, responses: [{ id: 'y' }] });
+  return { ...s, design: toStudyDesign(s, ccd(k, { alpha: 'rotatable', centre: 3 }), { seed: 1, randomise: 'none' }) };
+};
 
 section('scaled prediction variance against base R');
 for (const c of F.cases) {
@@ -67,6 +77,47 @@ section('the pictures: every run drawn, after augmentation too; contour values a
   const rootOk = (f) => { const t = f.slice(f.indexOf('<svg'), f.indexOf('>', f.indexOf('<svg'))), names = [...t.matchAll(/\s([a-zA-Z:-]+)="/g)].map(m => m[1]); return names.length === new Set(names).size; };
   check('standalone files: no attribute twice on the root, for each kind of picture', [standalone(svg1), standalone(c), standalone(vdgSVG([{ radius: 0, min: 1, mean: 1, max: 1 }, { radius: 1, min: 2, mean: 3, max: 4 }]))].every(rootOk));
   check('standalone files carry the SVG namespace', standalone(vdgSVG([{ radius: 0, min: 1, mean: 1, max: 1 }, { radius: 1, min: 2, mean: 3, max: 4 }])).includes('xmlns="http://www.w3.org/2000/svg"'));
+}
+
+section('beyond the runs: the convex hull against geometry and nnls (R)');
+{
+  const H = JSON.parse(readFileSync(new URL('./fixtures/hull-r.json', import.meta.url), 'utf8'));
+  for (const c of H.cases) {
+    const r = c.input.points.map(x => inHull(c.input.design, x));
+    check(`${c.name}: inside or outside, as inhulln`, r.every((q, i) => q.inside === c.output.inside[i]), JSON.stringify(r.map(q => q.inside)));
+    near(`${c.name}: the NNLS residual (0 inside, about the distance outside), as nnls`, r.map(q => q.distance), c.output.residual, H.tolerance);
+  }
+  // runs in a plane (a mixture's blends): a point on an edge of their hull, and one just off it
+  const blends = [[30, 45, 25], [30, 40, 30], [65, 20, 15], [65, 25, 10], [50, 20, 30], [45, 45, 10], [55, 35, 10]];
+  check('runs in a plane (blends): a point on an edge is inside, one beyond it outside', inHull(blends, [39.27501353382525, 45, 15.724986466174744], { tol: 1e-3 }).inside
+    && !inHull(blends, [39, 46, 15], { tol: 1e-3 }).inside && Number.isFinite(inHull(blends, [39, 46, 15]).distance));
+  const t = nnls([[1, 0], [0, 1], [1, 1]], [1, -1, 0]);
+  near('nnls: a bound active (x₂ = 0)', [...t.x, t.residual], [0.5, 0, Math.sqrt(1.5)], { abs: 1e-12 });
+}
+{
+  // a 2-factor CCD (α = √2) and the quadratic: in the hull up to the axial points; the variance
+  // largest at a run at the factorial and axial points (rotatable), more beyond
+  const st = createStudy(toStudyDesign0(2));
+  const X = codedRuns(st).runs.map(r => r.x);
+  const at = (p) => extrapolation(st, X, p, { model: 'quadratic' });
+  check('a CCD: the centre is well inside', !at([0, 0]).flagged && at([0, 0]).ratio < 1);
+  check('… a factorial corner: in the hull, the variance at most that at a run', !at([1, 1]).flagged);
+  check('… beyond a corner: outside the hull, the variance larger', at([1.2, 1.2]).inside === false && at([1.2, 1.2]).ratio > 1 && at([1.2, 1.2]).flagged);
+  // a 2^(3−1) fraction and a first-order model: (1, 1, −1) is a corner of the cube left unrun
+  const sf = createStudy({ name: 'f', seed: 1, factors: ['A', 'B', 'C'].map(id => ({ id, low: -1, high: 1 })), responses: [{ id: 'y' }],
+    design: { runs: [[-1, -1, 1], [1, -1, -1], [-1, 1, -1], [1, 1, 1]].map((x, i) => ({ run: i + 1, settings: { A: x[0], B: x[1], C: x[2] } })) } });
+  const Xf = codedRuns(sf).runs.map(r => r.x), e = extrapolation(sf, Xf, [1, 1, -1], { model: 'A + B + C' });
+  check('a half fraction: an unrun corner of the cube lies outside the runs', e.inside === false && e.flagged);
+}
+{
+  // beyondRuns, as the Optimise step and doe optimise use it: fitted models, natural units
+  const s0 = createStudy(toStudyDesign0(2));
+  const obs = s0.design.runs.map(r => ({ run: r.run, response: 'y', value: 10 + 2 * r.settings.A - r.settings.B - r.settings.A ** 2 + 0.3 * Math.sin(r.run) }));
+  const st = createStudy({ ...s0, responses: [{ id: 'y', goal: 'maximize', lower: 5, upper: 15 }], observations: obs });
+  const { models } = fittedModels(st, { formulas: { y: 'y ~ A + B + I(A^2) + I(B^2) + A:B' } });
+  check('beyondRuns: null at the centre', beyondRuns(st, models, { A: 50, B: 5 }) === null);
+  const b = beyondRuns(st, models, { A: 62, B: 6.2 });
+  check('… outside the runs at a far corner, with the variance ratio', b && b.inside === false && b.ratio > 1, JSON.stringify(b));
 }
 
 done();

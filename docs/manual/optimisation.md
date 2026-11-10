@@ -28,6 +28,22 @@ a value. Each response's prediction is shown with its 95 % confidence interval: 
 from predictions, and the intervals say how sure they are. Confirm the result with
 [confirmation runs](designs-sequential.md#confirmation-runs).
 
+### Beyond the runs
+
+A fitted model is only supported where there are runs. When the best settings (or settings you
+type in) go beyond them, the Optimise step says so, in either of two ways:
+
+- **outside the region of the runs**: the settings lie outside the convex hull of the runs — the
+  smallest region with straight edges that contains them all — in the continuous factors. A
+  sphere region, or a fraction that leaves corners of the cube unrun, can put the optimum there;
+- **far from the runs**: inside that region, but the
+  [scaled prediction variance](concepts.md#prediction-variance) of a fitted model there is larger
+  than at any run — a gap in the design, where the prediction rests on few runs.
+
+Either way the predicted D is an extrapolation: treat the settings as a direction to explore, and
+run at or near them before relying on them. Augmenting the design towards them
+([sequential designs](designs-sequential.md)) both checks the prediction and fills the gap.
+
 ## Profiler
 
 The prediction profiler shows each response against each factor, with the others held at the
@@ -38,7 +54,11 @@ where the trade-offs are.
 ## Overlay
 
 The overlay plots D over two factors (the others at the current settings), with the regions
-where some response is unacceptable greyed out: the sweet spot is the coloured region.
+where some response is unacceptable greyed out: the sweet spot is the coloured region. The runs
+are drawn on it as open circles, faded when their other factors differ from the current settings
+(the filled circle); for a mixture, the triangle shows each run's shares of the three components.
+A sweet spot with no runs near it rests on the model alone. The robustness map over two control
+factors shows the runs the same way.
 
 ## Robust design
 

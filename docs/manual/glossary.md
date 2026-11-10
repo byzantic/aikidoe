@@ -38,6 +38,10 @@ wells (evaporation, temperature). See [microplates](plates.md).
 **Effect** — the change in a response from a factor's low to its high setting (twice the coded
 coefficient).
 
+**Extrapolation** — predicting from a fitted model at settings beyond the runs: outside the
+region they cover (their convex hull), or where its prediction variance is larger than at any run.
+See [Beyond the runs](optimisation.md#beyond-the-runs).
+
 **Extreme vertices** — the corners of a mixture region cut by the components' limits; with the
 centroids of its edges and faces, a design for constrained mixtures. See
 [constrained regions](designs-mixture.md#constrained-regions).

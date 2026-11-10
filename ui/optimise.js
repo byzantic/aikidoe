@@ -9,6 +9,24 @@ import { propagationOfError, dualResponse, poeGrid } from '../js/model/robust.js
 import { yieldPanel } from './yield.js';
 import { ternaryPlot, shares } from './mixture.js';
 import { referenceBlend, coxBlend, coxRange, ternaryGrid, mixtureOf } from '../js/design/mixture.js';
+import { codedRuns, codedRow, beyondRuns } from '../js/design/space.js';
+
+/**
+ * The runs as circles on a square heat map over factors fx and fy (coded −1 … +1 drawn from x0 over
+ * width W and from the top over height H); runs away from the other settings (at, natural units) are
+ * faded, and runs outside the drawn ranges (axial points) left off.
+ */
+function runDots(study, at, fx, fy, { x0 = 44, W, H }) {
+  const F = study.factors, jx = F.findIndex(f => f.id === fx), jy = F.findIndex(f => f.id === fy), c0 = codedRow(study, at);
+  const { runs } = codedRuns(study);
+  return runs.filter(r => Math.abs(r.x[jx]) <= 1.0001 && Math.abs(r.x[jy]) <= 1.0001).map(r => {
+    const d = Math.sqrt(F.reduce((s, f, j) => (j === jx || j === jy ? s : s + (f.type === 'categorical' ? (r.x[j] === c0[j] ? 0 : 1) : (r.x[j] - c0[j]) ** 2)), 0));
+    const fade = Math.min(1, d / 1.5);
+    return h('svg:circle', { class: 'run-dot', cx: x0 + (r.x[jx] + 1) / 2 * W, cy: H - (r.x[jy] + 1) / 2 * H, r: 3, 'fill-opacity': (1 - 0.75 * fade).toFixed(2), 'stroke-opacity': (1 - 0.75 * fade).toFixed(2) },
+      h('svg:title', {}, `run ${r.run}${r.count > 1 ? ` (×${r.count})` : ''}${d > 1e-9 ? `, ${num(d, 2)} from these settings in the other factors (coded)` : ''}`));
+  });
+}
+
 
 const GOALS = [{ value: 'none', label: '—' }, { value: 'maximize', label: 'maximise' }, { value: 'minimize', label: 'minimise' }, { value: 'target', label: 'target' }, { value: 'range', label: 'in range' }];
 
@@ -64,11 +82,12 @@ function robustPanel({ state, update, setUI }, at, set, ui) {
     const fx = ctl.some(f => f.id === ui.px) ? ui.px : ctl[0].id, fy = ctl.some(f => f.id === ui.py) && ui.py !== fx ? ui.py : ctl.find(f => f.id !== fx).id;
     const g = poeGrid(study, m.predict, at, fx, fy, { n: 31, ...noiseOpt });
     const vals = g.cells.flat().map(c => c.sd), lo = Math.min(...vals), hi = Math.max(...vals), n = g.xs.length, W = 300, cw = W / n;
-    surf = h('figure', {}, h('figcaption', {}, `sd of ${m.id} over ${fx} and ${fy} (darker = more robust); range ${num(lo)} … ${num(hi)} `,
+    surf = h('figure', {}, h('figcaption', {}, `sd of ${m.id} over ${fx} and ${fy} (darker = more robust; ○ the runs, ● the settings above); range ${num(lo)} … ${num(hi)} `,
       select(ctl.map(f => f.id), fx, (v) => set({ px: v }), { 'aria-label': 'poe x' }), ' ', select(ctl.map(f => f.id), fy, (v) => set({ py: v }), { 'aria-label': 'poe y' })),
-      h('svg:svg', { class: 'heat', viewBox: `0 0 ${W + 50} ${W + 36}`, role: 'img', 'aria-label': `POE surface over ${fx} and ${fy}`, id: 'poe-surface' },
+      h('svg:svg', { class: 'heat', viewBox: `0 -6 ${W + 56} ${W + 42}`, role: 'img', 'aria-label': `POE surface over ${fx} and ${fy}`, id: 'poe-surface' },
         ...g.cells.flatMap((row, j) => row.map((c, i) => h('svg:rect', { x: 44 + i * cw, y: (n - 1 - j) * cw, width: cw + 0.5, height: cw + 0.5,
           style: `fill: color-mix(in srgb, var(--accent) ${Math.round(100 * (hi - c.sd) / ((hi - lo) || 1))}%, var(--panel))` }, h('svg:title', {}, `sd ${num(c.sd)}, mean ${num(c.mean)}`)))),
+        ...runDots(study, at, fx, fy, { W, H: W }),
         h('svg:circle', { cx: 44 + (code(study.factors.find(f => f.id === fx), at[fx]) + 1) / 2 * W, cy: W - (code(study.factors.find(f => f.id === fy), at[fy]) + 1) / 2 * W, r: 5, class: 'site-dot' }),
         h('svg:text', { x: 44 + W / 2, y: W + 28, 'text-anchor': 'middle', class: 'site-label' }, fx), h('svg:text', { x: 12, y: W / 2, 'text-anchor': 'middle', class: 'site-label', transform: `rotate(-90 12 ${W / 2})` }, fy)));
   }
@@ -129,6 +148,7 @@ export function render(ctx) {
     } }, 'Find best settings'));
   const ds = ms.map(m => { const y = m.predict(at); return { id: m.id, y, d: dValue(m.spec, y) }; });
   const D = dOverall(ds.map(x => x.d), ms.map(m => m.spec.importance ?? 1));
+  const beyond = beyondRuns(study, ms, at);
   const res = h('div', { id: 'opt-result' },
     ui.error ? h('div', { class: 'msg error' }, ui.error) : null,
     h('div', { class: 'row small' }, h('span', { class: 'stat' }, `overall desirability ${ui.at ? 'at these settings' : ui.result ? 'at the optimum' : 'at the centre'} `, h('b', { 'data-d': D }, num(D, 4))),
@@ -137,7 +157,11 @@ export function render(ctx) {
       v: f.type === 'categorical' ? select(f.levels, at[f.id], (v) => set({ at: { ...at, [f.id]: v } }), { 'aria-label': `at ${f.id}` })
         : h('input', { class: 'num', type: 'number', step: 'any', value: +Number(at[f.id]).toPrecision(5), 'aria-label': `at ${f.id}`, onchange: (e) => set({ at: moveTo(f.id, Number(e.target.value)) }) }) }))),
     study.mixture ? h('p', { class: 'muted small' }, `Changing a component moves the other components in proportion (its Cox direction), so the blend still adds up to ${study.mixture.total}; it stops at the edge of the region.`) : null,
-    D === 0 ? h('p', { class: 'muted small' }, 'D = 0: at least one response is outside its acceptable range here.') : null);
+    D === 0 ? h('p', { class: 'muted small' }, 'D = 0: at least one response is outside its acceptable range here.') : null,
+    beyond ? h('div', { class: 'msg warning', id: 'extrapolation' }, beyond.inside
+      ? `These settings are inside the region of the runs but far from them: the variance of the prediction is ${num(beyond.ratio, 2)} times the largest at any run. `
+      : `These settings lie outside the region the runs cover, so the predictions here are an extrapolation${Number.isFinite(beyond.ratio) ? ` (the variance of the prediction ${num(beyond.ratio, 2)} times the largest at any run)` : ''}. `,
+      'Treat them as a direction to explore: confirm with runs at or near these settings before relying on them.', help('optimisation', 'beyond-the-runs')) : null);
 
   // profiler
   const prof = profile(study, ms, at, { points: 25 });
@@ -174,17 +198,18 @@ export function render(ctx) {
     const gr = ternaryGrid(study, Dat, { components: three, at, n: 30, pseudo: true });
     overlay = h('section', { class: 'panel', id: 'overlay' }, h('h2', {}, 'Overlay', help('optimisation','overlay')),
       comps.length > 3 ? h('div', { class: 'row small' }, 'triangle of', ...[0, 1, 2].map(k => select(comps, three[k], (v) => { const c = three.slice(); c[k] = v; set({ tern: c }); }, { 'aria-label': `overlay component ${k + 1}` })), h('span', { class: 'muted' }, 'the others at the settings above')) : null,
-      ternaryPlot({ grid: gr, label: 'D', best: shares(at, three, gr) }),
-      h('p', { class: 'muted small' }, `Overall desirability over blends of ${three.join(', ')}${comps.length > 3 || mixtureOf(study).process.length ? ' (the other factors at the settings above)' : ''}; + marks the settings above. Grey: outside the components’ bounds or a constraint.`));
+      ternaryPlot({ grid: gr, label: 'D', best: shares(at, three, gr), points: (study.design?.runs ?? []).map(r => ({ z: shares(r.settings, three, gr), title: `run ${r.run}` })) }),
+      h('p', { class: 'muted small' }, `Overall desirability over blends of ${three.join(', ')}${comps.length > 3 || mixtureOf(study).process.length ? ' (the other factors at the settings above)' : ''}; ○ the runs (their shares of these three), + the settings above. Grey: outside the components’ bounds or a constraint.`));
   } else if (contF.length >= 2 && !study.mixture) {
     const used = new Set(ms.flatMap(m => m.fit.model.terms.flatMap(t => t.comps.flatMap(c => (c.f ? [c.f] : Object.keys(c.I))))));
     const pref = contF.filter(f => !f.noise).sort((a, b) => used.has(b.id) - used.has(a.id)).concat(contF.filter(f => f.noise));
     const fx = ui.ox ?? pref[0].id, fy = ui.oy ?? pref.find(f => f.id !== fx).id;
     const gr = desirabilityGrid(study, ms, at, fx, fy, { n: 41 });
     const W = 320, Hh = 320, n = gr.xs.length, cw = W / n, ch = Hh / n;
-    const svg = h('svg:svg', { class: 'heat', viewBox: `0 0 ${W + 50} ${Hh + 36}`, role: 'img', 'aria-label': `overall desirability over ${fx} and ${fy}` },
+    const svg = h('svg:svg', { class: 'heat', viewBox: `0 -6 ${W + 56} ${Hh + 42}`, role: 'img', 'aria-label': `overall desirability over ${fx} and ${fy}`, id: 'overlay-heat' },
       ...gr.cells.flatMap((row, j) => row.map((c, i) => h('svg:rect', { x: 44 + i * cw, y: (n - 1 - j) * ch, width: cw + 0.5, height: ch + 0.5, class: c.ok ? '' : 'infeasible',
         style: c.ok ? `fill: color-mix(in srgb, var(--accent) ${Math.round(100 * c.D)}%, var(--panel))` : '' }))),
+      ...runDots(study, at, fx, fy, { W, H: Hh }),
       h('svg:circle', { cx: 44 + (code(study.factors.find(f => f.id === fx), at[fx]) + 1) / 2 * W, cy: Hh - (code(study.factors.find(f => f.id === fy), at[fy]) + 1) / 2 * Hh, r: 5, class: 'site-dot' }),
       ...[[gr.xs[0], 44, 'start'], [gr.xs[n - 1], 44 + W, 'end']].map(([v, x, a]) => h('svg:text', { x, y: Hh + 14, 'text-anchor': a, class: 'site-label' }, num(v, 4))),
       ...[[gr.ys[0], Hh], [gr.ys[n - 1], 10]].map(([v, y]) => h('svg:text', { x: 40, y, 'text-anchor': 'end', class: 'site-label' }, num(v, 4))),
@@ -192,7 +217,7 @@ export function render(ctx) {
     overlay = h('section', { class: 'panel', id: 'overlay' }, h('h2', {}, 'Overlay', help('optimisation','overlay')),
       h('div', { class: 'row small' }, h('label', { class: 'inline' }, 'x', select(contF.map(f => f.id), fx, (v) => set({ ox: v }), { 'aria-label': 'overlay x' })),
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
-      svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region.`));
+      svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region. ○ the runs (faded when their other factors differ from the settings above), ● the settings above: a sweet spot far from any run rests on extrapolation.`));
   }
   return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, ...(study.mixture ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));
 }

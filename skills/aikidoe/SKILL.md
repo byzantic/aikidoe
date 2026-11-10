@@ -72,7 +72,9 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    saturated designs, diagnostics, `--reduce p|aicc`.
 7. **Decide the next stage** with the user: fold-over, axial points, optimal augmentation, or
    confirmation runs at the chosen settings (`doe augment`); optimise (`doe optimise`, `doe
-   robust`); then confirm.
+   robust`); then confirm. When `doe optimise --json` gives a non-null `beyondRuns`, the best
+   settings lie beyond the runs: tell the user the prediction is an extrapolation and suggest
+   runs near those settings before relying on it.
 8. **Report**: `doe report STUDY` writes a self-contained HTML report.
 
 Recipes for each path, with real outputs: [references/recipes.md](references/recipes.md).

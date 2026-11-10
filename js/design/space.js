@@ -15,6 +15,9 @@
 //                                   for any model: the variance dispersion graph
 //   feasibleSlice(study, o)         over the same grid, whether the study's linear constraints hold
 //                                   (the other factors at o.at)
+//   inHull(X, x), extrapolation(…)  whether a coded point lies in the convex hull of the runs, and
+//   beyondRuns(study, models, s)    its scaled prediction variance against the runs' (settings beyond
+//                                   the runs: the Optimise step's warning)
 import { code, decode, parseConstraint, satisfies } from '../study.js';
 import { compileModel } from './optimal.js';
 import { parseFormula } from '../model/formula.js';
@@ -128,4 +131,104 @@ export function feasibleSlice(study, { x, y, at, n = 41, xs, ys } = {}) {
     return cons.every(c => satisfies(c, s));
   }));
   return { xs, ys, ok };
+}
+
+// ---------------------------------------------------------------- extrapolation (phase 3)
+
+/**
+ * Lawson–Hanson non-negative least squares: min ‖A x − b‖ subject to x ≥ 0. A: m × n rows.
+ * Returns { x, residual }.
+ */
+export function nnls(A, b, { maxIter = 500, tol = 1e-10 } = {}) {
+  const m = A.length, n = A[0].length;
+  const x = new Array(n).fill(0), P = new Set();
+  const Atr = (r) => [...Array(n).keys()].map(j => A.reduce((s, row, i) => s + row[j] * r[i], 0));
+  const resid = (v) => b.map((bi, i) => bi - A[i].reduce((s, a, j) => s + a * v[j], 0));
+  // least squares on the passive set (normal equations, small systems)
+  const lsP = (idx) => {
+    const k = idx.length, M = idx.map(p => idx.map(q => A.reduce((s, row) => s + row[p] * row[q], 0))), rhs = idx.map(p => A.reduce((s, row, i) => s + row[p] * b[i], 0));
+    for (let c = 0; c < k; c++) {                     // Gaussian elimination with partial pivoting
+      let piv = c; for (let r = c + 1; r < k; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+      [M[c], M[piv]] = [M[piv], M[c]]; [rhs[c], rhs[piv]] = [rhs[piv], rhs[c]];
+      if (Math.abs(M[c][c]) < 1e-14) continue;
+      for (let r = c + 1; r < k; r++) { const f = M[r][c] / M[c][c]; for (let q = c; q < k; q++) M[r][q] -= f * M[c][q]; rhs[r] -= f * rhs[c]; }
+    }
+    const z = new Array(k).fill(0);
+    for (let r = k - 1; r >= 0; r--) { if (Math.abs(M[r][r]) < 1e-14) { z[r] = 0; continue; } let s = rhs[r]; for (let q = r + 1; q < k; q++) s -= M[r][q] * z[q]; z[r] = s / M[r][r]; }
+    return z;
+  };
+  for (let it = 0; it < maxIter; it++) {
+    const w = Atr(resid(x));
+    let jmax = -1, wmax = tol;
+    for (let j = 0; j < n; j++) if (!P.has(j) && w[j] > wmax) { wmax = w[j]; jmax = j; }
+    if (jmax < 0) break;
+    P.add(jmax);
+    for (let inner = 0; inner < maxIter; inner++) {
+      const idx = [...P], z = lsP(idx);
+      if (z.every(v => v > tol)) { x.fill(0); idx.forEach((p, a) => { x[p] = z[a]; }); break; }
+      let alpha = Infinity;
+      idx.forEach((p, a) => { if (z[a] <= tol) { const den = x[p] - z[a], t = den > 0 ? x[p] / den : 0; if (t < alpha) alpha = t; } });
+      idx.forEach((p, a) => { x[p] += alpha * (z[a] - x[p]); });
+      for (const p of idx) if (x[p] <= tol) { x[p] = 0; P.delete(p); }
+    }
+  }
+  const r = resid(x);
+  return { x, residual: Math.sqrt(r.reduce((s, v) => s + v * v, 0)) };
+}
+
+/**
+ * Is a coded point inside the convex hull of the runs X (coded rows; continuous coordinates only)?
+ * min ‖Xᵀλ − x‖ with λ ≥ 0, Σλ = 1 (the sum constraint weighted in). Returns { inside, distance }:
+ * distance is about the distance to the hull (0 inside), inside when it is below tol.
+ */
+export function inHull(X, x, { tol = 1e-6 } = {}) {
+  const k = x.length, w = 1e3;
+  const A = [...Array(k).keys()].map(j => X.map(r => r[j])).concat([X.map(() => w)]);
+  const r = nnls(A, [...x, w]);
+  return { inside: r.residual < tol * Math.max(1, Math.hypot(...x)), distance: r.residual };
+}
+
+/**
+ * How far the settings at a coded point go beyond what the runs support: whether it lies inside the
+ * convex hull of the runs (in the continuous factors), and the scaled prediction variance there
+ * against the largest at any run, for a model. Returns { inside, spv, spvRunsMax, ratio, flagged }:
+ * flagged when outside the hull or the variance is over the largest at a run.
+ */
+export function extrapolation(study, X, point, { model = 'quadratic' } = {}) {
+  const cont = study.factors.map((f, j) => j).filter(j => study.factors[j].type !== 'categorical');
+  const h = inHull(X.map(r => cont.map(j => r[j])), cont.map(j => point[j]));
+  let spv = NaN, spvRunsMax = NaN;
+  try { const { v } = spvFunction(study, X, model); spv = v(point); spvRunsMax = Math.max(...X.map(v)); } catch { /* not estimable */ }
+  const ratio = spv / spvRunsMax;
+  return { inside: h.inside, hullDistance: h.distance, spv, spvRunsMax, ratio, flagged: !h.inside || ratio > 1 + 1e-9 };
+}
+
+/**
+ * Whether settings (natural units) go beyond what the runs support, for fitted models (each with
+ * fit.model, as fittedModels gives): outside the convex hull of the runs, or a scaled prediction
+ * variance over the largest at any run for some model. Returns null when they are within, else
+ * { inside, ratio } (ratio: the largest over the models of the variance there against the largest
+ * at a run; NaN when no model's variance could be computed). A mixture's components are taken as
+ * proportions of the total (the Scheffé models' scale) for the variance. tol (coded units, default
+ * 0.001): how far beyond the hull, or above 1 the ratio, still counts as among the runs.
+ */
+export function beyondRuns(study, models, settings, { tol = 1e-3 } = {}) {
+  const runs = study.design?.runs ?? [];
+  if (!runs.length) return null;
+  const Xc = runs.map(r => codedRow(study, r.settings)), xc = codedRow(study, settings);
+  if (xc.some(v => !Number.isFinite(v))) return null;
+  // inside the hull of the runs in the continuous factors (coded), allowing for round-off at its edge
+  const cont = study.factors.map((f, j) => j).filter(j => study.factors[j].type !== 'categorical');
+  const inside = inHull(Xc.map(r => cont.map(j => r[j])), cont.map(j => xc[j]), { tol }).inside;
+  // the variance, with a mixture's components as proportions of the total (the Scheffé models' scale)
+  const comps = new Set(study.mixture?.components ?? []), total = study.mixture?.total ?? 1;
+  const row = (s, c) => c.map((v, j) => (comps.has(study.factors[j].id) ? s[study.factors[j].id] / total : v));
+  const X = runs.map((r, i) => row(r.settings, Xc[i])), x = row(settings, xc);
+  let ratio = NaN;
+  for (const m of models) {
+    let r;
+    try { const { v } = spvFunction(study, X, m.fit?.model ?? m.model ?? m); r = v(x) / Math.max(...X.map(v)); } catch { continue; }
+    if (Number.isFinite(r)) ratio = Number.isFinite(ratio) ? Math.max(ratio, r) : r;
+  }
+  return !inside || ratio > 1 + tol ? { inside, ratio } : null;
 }

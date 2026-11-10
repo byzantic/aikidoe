@@ -201,6 +201,9 @@ try {
   check('optimise --fix', r.code === 0 && /held: T=150/.test(r.out) && /best settings: T=150,/.test(r.out), r.out + r.err);
   r = run('optimise', 'ccd.aikidoe.json', '--region', 'sphere');
   check('optimise --region sphere (default radius √k)', r.code === 0 && /region: sphere/.test(r.out), r.out + r.err);
+  check('optimise: no warning when the best settings lie among the runs', !/warning: /.test(r.out), r.out);
+  r = run('optimise', 'ccd.aikidoe.json', '--fix', 'T=175', '--radius', '1.6');
+  check('optimise: a warning when the best settings lie beyond the runs', r.code === 0 && /warning: these settings lie outside the region the runs cover \(prediction variance [\d.]+ × the largest at a run\)/.test(r.out), r.out + r.err);
 
   section('robust design (issue #19)');
   writeFileSync(join(dir, 'filt.aikidoe.json'), serializeStudy(EXAMPLES.find(e => e.id === 'filtration').build()));
@@ -431,7 +434,9 @@ try {
   check('gauge --json: %GRR and σ_meas', o.gauge?.pctGRR > 0 && o.gauge.sigmaMeas > 0);
   js('goal', 'jccd.aikidoe.json', 'bypr', '--minimize', '--target', '2', '--upper', '5');
   o = js('optimise', 'jccd.aikidoe.json');
-  check('optimise --json: settings, D and predictions', o.D > 0 && o.responses?.length >= 1);
+  check('optimise --json: settings, D and predictions', o.D > 0 && o.responses?.length >= 1 && 'beyondRuns' in o);
+  o = js('optimise', 'jccd.aikidoe.json', '--fix', 'T=175', '--radius', '1.6');
+  check('optimise --json: beyondRuns when the settings lie beyond the runs', o.beyondRuns?.inside === false && o.beyondRuns.ratio > 1);
   o = js('robust', 'jfilt.aikidoe.json', '--model', 'rate ~ A + C + D + A:C + A:D', '--target', '72', '--fix', 'B=0');
   check('robust --json: mean on target, sd, parts', Math.abs(o.mean - 72) < 1e-6 && o.parts?.length >= 1);
   js('simulator', 'jsim.aikidoe.json', '--expression', 'y=10 + 2*a', '--expression', 'z=3 + b^2 - c');

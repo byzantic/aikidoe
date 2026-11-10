@@ -76,7 +76,8 @@
 //   goal STUDY RESPONSE (--maximize|--minimize|--target|--range|--none) [--lower L] [--target T] [--upper U]
 //        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
 //   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
-//        best settings by overall desirability over the fitted models
+//        best settings by overall desirability over the fitted models; warns when they lie beyond
+//        the runs (outside their convex hull, or a prediction variance over the largest at a run)
 //   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
 //        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
 //        propagation of error and dual-response optimisation (mean on target, minimum s)
@@ -129,7 +130,7 @@ import { createStudy, parseStudy, serializeStudy, StudyError, code } from '../js
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
-import { codedRuns, spvSlice, spvFunction, vdg, feasibleSlice } from '../js/design/space.js';
+import { codedRuns, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
 import { pairsSVG, contourSVG, vdgSVG, standalone, viridis } from '../js/io/svg-space.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../js/model/surface.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
@@ -1258,7 +1259,8 @@ function cmdOptimise({ pos, opt }) {
   if (!['cube', 'sphere'].includes(region)) fail('--region cube or sphere');
   const fixed = opt.fix ? Object.fromEntries(String(opt.fix).split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? fail(`unknown factor "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })) : {};
   const o = optimiseDesirability(study, models, { region, ...(opt.radius !== undefined ? { radius: Number(opt.radius) } : {}), fixed, seed: study.seed });
-  put({ models: models.map(m => ({ id: m.id, formula: m.formula, mixed: m.fit.kind === 'mixed' })), region, fixed, settings: o.settings, D: o.D, feasible: o.feasible,
+  const beyond = beyondRuns(study, models, o.settings);
+  put({ models: models.map(m => ({ id: m.id, formula: m.formula, mixed: m.fit.kind === 'mixed' })), region, fixed, settings: o.settings, D: o.D, feasible: o.feasible, beyondRuns: beyond,
     responses: models.map((m, i) => { const b = m.predictBand(o.settings); return { id: m.id, predicted: o.d[i].y, lower: b.lower, upper: b.upper, d: o.d[i].d, goal: m.spec }; }) });
   out(`models: ${models.map(m => m.formula + (m.fit.kind === 'mixed' ? ' (mixed)' : '')).join('; ')}`);
   out(study.mixture ? `region: the mixture (${study.mixture.components.join(" + ")} = ${study.mixture.total}, within the bounds)${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ""}` : `region: ${region}${opt.radius !== undefined ? ` (${region === 'sphere' ? 'radius' : 'half-width'} ${opt.radius} coded)` : ''}${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ''}`);
@@ -1269,6 +1271,7 @@ function cmdOptimise({ pos, opt }) {
       return { id: m.id, y: o.d[i].y, ci: `${num(b.lower)} … ${num(b.upper)}`, d: o.d[i].d,
         goal: sp.kind === 'max' ? `max (${sp.low} → ${sp.high})` : sp.kind === 'min' ? `min (${sp.low} ← ${sp.high})` : sp.kind === 'target' ? `target ${sp.target} (${sp.low} … ${sp.high})` : `range ${sp.low} … ${sp.high}` }; })));
   if (o.D === 0) out('D = 0: no settings in the region meet every response\'s acceptable range');
+  if (beyond) out(`warning: ${beyond.inside ? 'these settings are inside the region of the runs but far from them' : 'these settings lie outside the region the runs cover'}${Number.isFinite(beyond.ratio) ? ` (prediction variance ${num(beyond.ratio, 2)} × the largest at a run)` : ''}: an extrapolation — confirm with runs near them`);
 }
 
 function cmdRobust({ pos, opt }) {

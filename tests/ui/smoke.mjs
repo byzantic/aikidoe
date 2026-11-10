@@ -271,12 +271,15 @@ try {
   check('best settings found: 0 < D < 1 (the goals conflict)', Dopt > 0.3 && Dopt < 1, Dopt);
   check('profiler: 2 responses × 2 factors with bands', (await page.locator('#profiler .cell').count()) === 4 && (await page.locator('#profiler path.ribbon').count()) === 4);
   check('overlay heat map with an infeasible region', (await page.locator('#overlay rect.infeasible').count()) > 0 && (await page.locator('#overlay rect').count()) === 41 * 41);
+  check('the runs on the overlay: the 9 inside the factor ranges (not the 4 axial points), and no warning at the optimum (#88)', (await page.locator('#overlay-heat circle.run-dot').count()) === 9 && (await page.locator('#extrapolation').count()) === 0);
   await page.fill('input[aria-label="at T"]', '150'); await page.keyboard.press('Tab'); await settle();
   check('moving a factor away lowers D', Number(await page.getAttribute('[data-d]', 'data-d')) < Dopt);
   await page.fill('input[aria-label="conv importance"]', '3'); await page.keyboard.press('Tab'); await settle();
   await page.click('#optimise'); await settle();
   check('importance stored on the response', (await state()).study.responses.find(r => r.id === 'conv').importance === 3);
   await shot('11-optimise');
+  await page.fill('input[aria-label="at T"]', '175'); await page.keyboard.press('Tab'); await settle();
+  check('settings beyond the runs: a warning (#88)', /outside the region the runs cover/.test(await page.textContent('#extrapolation')));
 
   section('robust design (issue #19)');
   await page.click('#btn-examples'); await page.click('[data-example="filtration"]'); await settle();
@@ -291,6 +294,7 @@ try {
   const sdv = Number(await page.getAttribute('#poe [data-sd]', 'data-sd'));
   check('robust settings: sd = residual only (√19.51 = 4.417), mean on target', Math.abs(sdv - Math.sqrt(19.5125)) < 1e-4 && /mean 72/.test(await page.textContent('#poe')), sdv);
   check('POE surface drawn', (await page.locator('#poe-surface rect').count()) === 31 * 31);
+  check('… with the runs on it (#88)', (await page.locator('#poe-surface circle.run-dot').count()) > 0);
   await shot('12-robust');
 
   section('computer experiments (issue #20)');
