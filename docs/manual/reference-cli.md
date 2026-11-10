@@ -88,7 +88,8 @@ Commands
   goal STUDY RESPONSE (--maximize|--minimize|--target|--range|--none) [--lower L] [--target T] [--upper U]
        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
-       best settings by overall desirability over the fitted models
+       best settings by overall desirability over the fitted models; warns when they lie beyond
+       the runs (outside their convex hull, or a prediction variance over the largest at a run)
   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
        propagation of error and dual-response optimisation (mean on target, minimum s)

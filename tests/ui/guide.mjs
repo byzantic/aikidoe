@@ -144,6 +144,7 @@ try {
   const best = s.ui.optimise.result.settings;
   check('Optimise: the best blend adds up to 100, within the limits, near feldspar + silica', Math.abs(best.feldspar + best.silica + best.whiting - 100) < 1e-6 && best.whiting < 12 && best.feldspar > 45, JSON.stringify(best));
   check('… shown on a ternary map of the desirability', await page.locator('#overlay svg.ternary').count() === 1 && await page.locator('#overlay svg.ternary .tbest').count() === 1);
+  check('… with the runs on it (#88)', await page.locator('#overlay svg.ternary .tpt').count() === s.study.design.runs.length);
   await page.fill('input[aria-label="at whiting"]', '20'); await page.keyboard.press('Tab'); await settle();
   s = await state();
   let at = s.ui.optimise.at;
@@ -152,6 +153,7 @@ try {
   await page.fill('input[aria-label="at silica"]', '50'); await page.keyboard.press('Tab'); await settle();
   at = (await state()).ui.optimise.at;
   check('… and stops at the edge of the region', at.silica <= 45 + 1e-9 && at.whiting >= 10 - 1e-9 && at.feldspar >= 30 - 1e-9 && Math.abs(at.feldspar + at.silica + at.whiting - 100) < 1e-6, JSON.stringify(at));
+  check('… on the edge of the runs (silica 45): no extrapolation warning (#88)', await page.locator('#extrapolation').count() === 0);
   check('no robustness or yield panels for a mixture', await page.locator('#main').getByText('Yield and sensitivity').count() === 0);
   await shot('mixture-optimise');
 

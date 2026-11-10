@@ -159,3 +159,4 @@ svg.ternary .tcell { stroke: none; } svg.ternary .tcell.out { fill: var(--line);
 svg.ternary .tframe { fill: none; stroke: var(--ink); stroke-width: 1; }
 svg.ternary .tpt { fill: var(--panel); stroke: var(--ink); stroke-width: 1.2; }
 svg.ternary .tbest { stroke: var(--trace-2); stroke-width: 2.4; }
+svg.heat .run-dot { fill: var(--panel); stroke: var(--ink); stroke-width: 1; }
