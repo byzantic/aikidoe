@@ -26,20 +26,20 @@ section('the Wald approximation: its algebra');
 {
   const { mm, g } = splitPlot(8, 4), o = { distribution: 'poisson', baseline: 20, ratio: { T: 1.8, B: 1.3 }, sigma: 0.3 };
   const p = glmmPowerFromMatrix(mm, g, o);
-  // λ for T from the full covariance V = W⁻¹ + σ² Z Zᵀ, inverted whole (not whole plot by whole plot)
+  // λ for T from the full covariance V = W⁻¹ + σ² m/(m − q) Z Zᵀ, inverted whole (not whole plot by whole plot)
   const b = ratioCoefficient('poisson', 'log', 20, 1.8), beta = [Math.log(20), b, 0];
   const X = mm.X, n = X.length, mu = X.map(r => Math.exp(r.reduce((s, v, j) => s + v * beta[j], 0)));
-  const Vm = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => (i === j ? 1 / mu[i] : 0) + (g[i] === g[j] ? 0.09 : 0)));
+  const Vm = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => (i === j ? 1 / mu[i] : 0) + (g[i] === g[j] ? 0.09 * 8 / 6 : 0)));
   const inv = (A) => { const m = A.length, M = A.map((r, i) => [...r, ...A.map((_, j) => (i === j ? 1 : 0))]);
     for (let c = 0; c < m; c++) { let q = c; for (let r = c + 1; r < m; r++) if (Math.abs(M[r][c]) > Math.abs(M[q][c])) q = r; [M[c], M[q]] = [M[q], M[c]];
       const d = M[c][c]; for (let k = 0; k < 2 * m; k++) M[c][k] /= d; for (let r = 0; r < m; r++) if (r !== c) { const f = M[r][c]; for (let k = 0; k < 2 * m; k++) M[r][k] -= f * M[c][k]; } }
     return M.map(r => r.slice(m)); };
   const Vi = inv(Vm), XtVX = [0, 1, 2].map(a => [0, 1, 2].map(c => X.reduce((s, ra, i) => s + ra[a] * X.reduce((t, rc, j) => t + Vi[i][j] * rc[c], 0), 0)));
   const cov = inv(XtVX), m = 8, q = 2;
-  near('λ for the whole-plot factor: b²/Var(b̂) with V = W⁻¹ + σ²ZZᵀ, ÷ m/(m − q)', p.terms[0].lambda, b * b / cov[1][1] / (m / (m - q)), { rel: 1e-9 });
+  near('λ for the whole-plot factor: b²/Var(b̂) with V = W⁻¹ + σ² m/(m − q) ZZᵀ', p.terms[0].lambda, b * b / cov[1][1], { rel: 1e-9 });
   check('T changes only between whole plots: F on 8 − 2 = 6 df; B within them: χ²', p.terms[0].test === 'F' && p.terms[0].ddf === 6 && p.terms[1].test === 'chi2' && p.dfGroups === 6 && JSON.stringify(p.groupLevel) === '["(Intercept)","T"]');
   const g0 = glmPowerFromMatrix(mm, o), p0 = glmmPowerFromMatrix(mm, g, { ...o, sigma: 0 });
-  near('σ = 0: the subplot term has the GLM\'s power; the whole-plot term the GLM\'s λ, ÷ m/(m − q)', [p0.terms[1].power, p0.terms[0].lambda], [g0.terms[1].power, g0.terms[0].lambda * 6 / 8], { rel: 1e-9 });
+  near('σ = 0: the subplot term has the GLM\'s power; the whole-plot term the GLM\'s λ (on an F with m − q df)', [p0.terms[1].power, p0.terms[0].lambda], [g0.terms[1].power, g0.terms[0].lambda], { rel: 1e-9 });
   const pw = (s) => glmmPowerFromMatrix(mm, g, { ...o, sigma: s }).terms.map(t => t.power);
   const [a, c] = [pw(0.1), pw(0.6)];
   check(`more whole-plot variation: T's power falls (${a[0].toFixed(3)} → ${c[0].toFixed(3)}), B's hardly moves (${a[1].toFixed(3)} → ${c[1].toFixed(3)})`, c[0] < a[0] - 0.3 && Math.abs(c[1] - a[1]) < 0.05);
@@ -50,15 +50,14 @@ section('the Wald approximation: its algebra');
 section('against lme4::glmer simulations of the analysis');
 // The approximation ignores that a log-normal whole-plot shift also changes the counts' variance and
 // that σ is estimated; against 500 simulated experiments per term it is within a few points for
-// terms that vary within whole plots, and conservative for whole-plot factors: 2–6 points low for
-// Poisson and binomial, 10 for the negative binomial (θ = 4), whose λ ÷ m/(m − q) also scales the
-// within-whole-plot scatter. So whole-plot terms may be up to 0.11 low, but no more than the usual
-// tolerance high.
+// terms that vary within whole plots, and conservative for whole-plot factors: 0.5–4.5 points low
+// for Poisson and binomial, 7.6 for the negative binomial (θ = 4). So whole-plot terms may be up to
+// 0.08 low, but no more than the usual tolerance high.
 for (const c of F.cases) {
   const { mm, g } = splitPlot(c.input.wholePlots, c.input.perWholePlot), p = glmmPowerFromMatrix(mm, g, optsOf(c));
   c.output.terms.forEach((t, i) => {
     const a = p.terms.find(x => x.term === t).power, r = c.output.power[i], tol = Math.max(0.06, 3 * c.output.se[i]), wp = c.input.wholePlotTerms.includes(t);
-    check(`${c.name}, ${t}${wp ? ' (whole plot)' : ''}: approximation ${a.toFixed(3)}, ${c.input.distribution === 'negbin' ? 'glmmTMB' : 'glmer'} simulation ${r.toFixed(3)} ± ${c.output.se[i].toFixed(3)}`, a - r <= tol && r - a <= (wp ? 0.11 : tol));
+    check(`${c.name}, ${t}${wp ? ' (whole plot)' : ''}: approximation ${a.toFixed(3)}, ${c.input.distribution === 'negbin' ? 'glmmTMB' : 'glmer'} simulation ${r.toFixed(3)} ± ${c.output.se[i].toFixed(3)}`, a - r <= tol && r - a <= (wp ? 0.08 : tol));
   });
   check(`${c.name}: the whole-plot terms and their df as the R generator`, JSON.stringify(p.terms.filter(t => t.wholePlot).map(t => t.term)) === JSON.stringify(c.input.wholePlotTerms) && p.dfGroups === c.input.dfGroups);
 }
