@@ -14,6 +14,7 @@ import { checkConfirmation } from '../design/augment.js';
 import { serializeStudy } from '../study.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../model/surface.js';
 import { contourSVG, viridis } from './svg-space.js';
+import { covariateSlopes, covariateTable, droppedNote } from '../model/covariates.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const tbl = (head, rows, cls = '') => `<table class="${cls}"><thead><tr>${head.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td${typeof c === 'number' ? ' class="n"' : ''}>${typeof c === 'number' ? esc(num(c)) : esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
@@ -61,6 +62,16 @@ function contourHTML(study, fit, r) {
   } catch { return ''; }
 }
 
+// the covariates in a model (issue #82): the coding, the slope per unit, the runs left out
+function covariateHTML(fit, r) {
+  const cs = covariateSlopes(fit);
+  if (!cs.length) return '';
+  const link = fit.kind === 'glmm' || (fit.noise && fit.noise !== 'normal');
+  return `<p class="stats">${cs.map(c => `Covariate <b>${esc(c.name)}</b> (<code>${esc(c.id)}</code>): mean ${num(c.mean, 4)}, ${num(c.min, 4)} … ${num(c.max, 4)}${c.units ? ` ${esc(c.units)}` : ''}; in the model as (${esc(c.id)} − ${num(c.mean, 4)}) / ${num(c.halfRange, 4)}`
+    + (Number.isFinite(c.slope) ? `; ${esc(r.name)} changes by ${num(c.slope, 3)} ± ${num(c.slopeSe, 2)} per ${esc(c.units || 'unit')}${link ? ' on the link scale' : ''}${c.interacts ? ' at the centre of the factors' : ''}` : '') + '. ').join('')}`
+    + `The other terms, and predictions, are at the mean of the covariate${cs.length > 1 ? 's' : ''}.${fit.dropped?.length ? ` ${esc(droppedNote(fit.dropped).replace(/^r/, 'R'))}.` : ''}</p>`;
+}
+
 function responseSection(study, r, formula) {
   const out = [`<h2 id="response-${esc(r.id)}">${esc(r.name)}${r.units ? ` (${esc(r.units)})` : ''}</h2>`];
   let mixed = false;
@@ -69,6 +80,7 @@ function responseSection(study, r, formula) {
     if (mixed) {
       const m = fitMixedModel(study, formula);
       out.push(`<p>Model: <code>${esc(formula)}</code> — mixed model (REML) on ${m.n} readings; random effects ${esc(m.random.map(x => x.name).join(', '))}. Coefficients in coded units; Kenward–Roger standard errors and tests.</p>`);
+      out.push(covariateHTML(m, r));
       out.push('<h3>Variance components</h3>', tbl(['source', 'variance', 'std. dev.', '95% CI (variance)'], m.varcomp.map(v => [v.name, v.variance, v.sd, v.boundary ? 'on the boundary (0)' : `${num(v.lower)} … ${num(v.upper)}`])));
       out.push('<h3>Fixed effects</h3>', tbl(['term', 'estimate', 'std. error', 'df', 't', 'p', ''], m.columns.map((c, j) => [c, m.coef[j], m.seKR[j], m.dfKR[j], m.t[j], pval(m.pKR[j]), stars(m.pKR[j])]).filter(x => Number.isFinite(x[1]))));
       out.push('<h3>Tests of model terms</h3>', tbl(['term', 'F', 'ndf', 'ddf', 'p', 'tested in'], m.terms.filter(t => t.df > 0 && !m.model.terms.find(x => x.label === t.term)?.block).map(t => [t.term, t.FKR, t.df, t.ddfKR, pval(t.pKR), t.stratum ?? ''])));
@@ -78,6 +90,7 @@ function responseSection(study, r, formula) {
       const fit = fitCountMixedModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;
       const R = fit.randoms;
       out.push(`<p>Model: <code>${esc(formula)}</code> — ${esc(nm.label)}, ${esc(fit.link)} link, with a random intercept per ${R.length > 1 ? `${esc(R.map(x => `${x.name} (${x.m})`).join(' and per '))}, nested (Laplace approximation` : `${esc(R[0].name)} (${R[0].m} of them; ${fit.nAGQ === 1 ? 'Laplace approximation' : 'adaptive Gauss–Hermite quadrature'}`}, maximum likelihood), ${fit.n} observations; coefficients on the ${esc(fit.link)} scale in coded units.${R.filter(x => !x.boundary && x.coefficients.length).map(x => ` ${esc(x.coefficients.join(', '))} change only between ${esc(x.name)}s: t on ${x.df} df.`).join('')}</p>`);
+      out.push(covariateHTML(fit, r));
       out.push(tbl(['term', 'estimate', 'std. error', 'z or t', 'df', 'p', '', ...(ratio ? [ratio] : [])], fit.columns.map((c, j) => [c, fit.coef[j], fit.se[j], fit.z[j], fit.df[j] === Infinity ? 'z' : fit.df[j], pval(fit.p[j]), stars(fit.p[j]), ...(ratio ? [Math.exp(fit.coef[j])] : [])]).filter(x => Number.isFinite(x[1]))));
       out.push(`<p class="stats">${R.map(x => `${esc(x.name)} σ = ${esc(num(x.sigma))} on the ${esc(fit.link)} scale${x.boundary ? ' (estimated as 0)' : ` · σ = 0 test p ${esc(pval(x.test.p))}`}`).join(' · ')}${fit.theta !== undefined ? ` · θ = ${esc(num(fit.theta))}` : ''} · log-likelihood = ${esc(num(fit.loglik))} · AIC = ${esc(num(fit.aic))}</p>`);
       for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
@@ -88,6 +101,7 @@ function responseSection(study, r, formula) {
       // counts and proportions: the generalised linear model
       const fit = fitModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;
       out.push(`<p>Model: <code>${esc(formula)}</code> — ${esc(nm.label)}, ${esc(fit.link)} link${fit.distribution === 'negbin' ? `, θ = ${esc(num(fit.theta))}` : ''}${fit.firth ? ', Firth' : ''}, ${fit.n} observations; coefficients on the ${esc(fit.link)} scale in coded units.${fit.aliased.length ? ` Aliased (not estimable): ${esc(fit.aliased.join(', '))}.` : ''}</p>`);
+      out.push(covariateHTML(fit, r));
       out.push(tbl(['term', 'estimate', 'std. error', fit.statistic, 'p', '', ...(ratio ? [ratio] : [])], fit.columns.map((c, j) => [c, fit.coef[j], fit.se[j], fit.t[j], pval(fit.p[j]), stars(fit.p[j]), ...(ratio ? [Math.exp(fit.coef[j])] : [])]).filter(x => Number.isFinite(x[1]))));
       out.push(`<p class="stats">deviance = ${esc(num(fit.deviance))} on ${fit.dfRes} df · null deviance = ${esc(num(fit.nullDeviance))}${Number.isFinite(fit.aic) ? ` · AIC = ${esc(num(fit.aic))}` : ''}${fit.dispersionEstimated ? ` · dispersion = ${esc(num(fit.dispersion))}` : ''}${fit.overdispersion ? ` · Pearson χ²/df = ${esc(num(fit.overdispersion.ratio))}` : ''}</p>`);
       for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
@@ -97,6 +111,7 @@ function responseSection(study, r, formula) {
     } else {
       const fit = fitModel(study, formula);
       out.push(`<p>Model: <code>${esc(formula)}</code> — least squares on ${fit.n} runs${fit.rows.some(x => x.n > 1) ? ' (per-run means)' : ''}; coefficients in coded units (−1 … +1).${fit.aliased.length ? ` Aliased (not estimable): ${esc(fit.aliased.join(', '))}.` : ''}</p>`);
+      out.push(covariateHTML(fit, r));
       out.push(tbl(['term', 'estimate', ...(fit.dfRes > 0 ? ['std. error', 't', 'p', ''] : [])], fit.columns.map((c, j) => [c, fit.coef[j], ...(fit.dfRes > 0 ? [fit.se[j], fit.t[j], pval(fit.p[j]), stars(fit.p[j])] : [])]).filter(x => Number.isFinite(x[1]))));
       if (fit.dfRes > 0) {
         out.push(`<p class="stats">σ = ${esc(num(fit.sigma))} · R² = ${esc(num(fit.r2))} · adjusted R² = ${esc(num(fit.adjR2))} · predicted R² = ${esc(num(fit.predR2))}${Number.isFinite(fit.fStat) ? ` · F = ${esc(num(fit.fStat))} on ${fit.dfModel} and ${fit.dfRes} df, p ${esc(pval(fit.fP))}` : ''}</p>`);
@@ -129,6 +144,10 @@ export function studyReport(study, { formulas = {}, date = new Date().toISOStrin
   if (study.responses.length) parts.push('<h2 id="responses">Responses</h2>', tbl(['response', 'name', 'units', 'goal', 'measured', 'notes'], study.responses.map(r => [r.id, r.name, r.units ?? '',
     r.goal === 'none' ? '' : `${r.goal}${r.lower !== undefined ? `, lower ${r.lower}` : ''}${r.target !== undefined ? `, target ${r.target}` : ''}${r.upper !== undefined ? `, upper ${r.upper}` : ''}`,
     (r.levels ?? ['run']).join(' > '), [r.derived ? `${r.derived.stat} of ${r.derived.from} per wafer` : '', r.measurement ? `σ_meas ${num(r.measurement.sigma)}` : '', r.spec ? `spec ${r.spec.lower ?? '−∞'} … ${r.spec.upper ?? '∞'}` : ''].filter(Boolean).join('; ')])));
+  if (study.covariates?.length) parts.push('<h2 id="covariates">Covariates</h2>', '<p class="stats">Measured at each run, not set.</p>', tbl(['covariate', 'name', 'units', 'runs with a value', 'mean', 'range'], study.covariates.map(c => {
+    const v = covariateTable(study, c.id).map(x => x.value);
+    return [c.id, c.name, c.units ?? '', v.length, v.length ? v.reduce((a, x) => a + x, 0) / v.length : '', v.length ? `${num(Math.min(...v), 5)} … ${num(Math.max(...v), 5)}` : ''];
+  })));
   if (study.constraints.length) parts.push('<h2 id="constraints">Constraints</h2><ul>', ...study.constraints.map(c => `<li><code>${esc(typeof c === 'string' ? c : `${c.expr} (${c.units})`)}</code></li>`), '</ul>');
   if (study.design) {
     const d = study.design, p = d.params ?? {};

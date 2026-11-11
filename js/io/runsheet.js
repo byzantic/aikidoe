@@ -4,7 +4,7 @@
 //   runSheetCSV(study, opts)         → CSV text of the run sheet (existing results filled in)
 //   runSheetHTML(study, opts)        → printable, self-contained HTML run sheet
 //   observationsCSV(study)           → long-format CSV of all observations
-//   importResults(study, text, opts) → { format, observations, problems, mapping }
+//   importResults(study, text, opts) → { format, observations, covariates, problems, mapping }
 //   applyResults(study, imported, { mode })  → new study with the observations merged
 //
 // Wide layout: one row per run (or per run × wafer × repeat when there are several), one
@@ -19,6 +19,10 @@
 // column "<id>.trials" (the trials of each run), a count response with the log link a column
 // "<id>.exposure" (volume plated, cells counted, area …; blank for 1). In long format: columns
 // trials and exposure.
+//
+// Covariates (issue #82): one column per covariate, before the results, filled in like a result
+// (a row of a wafer holds that wafer's value). In long format a covariate's id in the response
+// column. Blank: not measured.
 import { parseCSV, writeCSV, parseNumber, guessDecimal, records, detectDelimiter } from './csv.js';
 import { createStudy } from '../study.js';
 import { parseWell, wellId, excludedSet, plateNumbers, rowLabel } from '../plate.js';
@@ -49,6 +53,20 @@ function resultColumns(study) {
   return out;
 }
 
+// a covariate's value for a sheet row: the one recorded for exactly that run, lot and wafer
+const covKeys = (meta, mv) => Object.fromEntries(['lot', 'wafer'].filter(k => meta.includes(k) && mv[meta.indexOf(k)] !== null && mv[meta.indexOf(k)] !== undefined && mv[meta.indexOf(k)] !== '').map(k => [k, mv[meta.indexOf(k)]]));
+const sameCov = (v, run, keys) => v.run === run && v.site === undefined && ['lot', 'wafer'].every(k => String(v[k] ?? '') === String(keys[k] ?? ''));
+/** The covariate value a sheet row shows and edits: { run, …lot and wafer of the row }. */
+export const covariateCell = (study, id, run, keys = {}) => (study.covariates ?? []).find(c => c.id === id)?.values.find(v => sameCov(v, run, keys))?.value;
+/** A document's covariate values with one set (value undefined: removed), for the run and the row's lot and wafer. */
+export function setCovariateCell(doc, id, run, keys, value) {
+  const c = (doc.covariates ?? []).find(x => x.id === id);
+  if (!c) throw new Error(`no covariate "${id}"`);
+  c.values = (c.values ?? []).filter(v => !sameCov(v, run, keys));
+  if (value !== undefined) c.values.push({ run, value, ...keys });
+  c.values.sort((a, b) => a.run - b.run);
+}
+
 function metaColumns(study) {
   const used = new Set(study.observations.flatMap(o => META.filter(k => o[k] !== undefined)));
   if (nested(study, 'lot')) used.add('lot');
@@ -59,10 +77,10 @@ function metaColumns(study) {
 /** The run sheet as header and rows of cell values (numbers, strings, null, or ''). */
 export function runSheet(study) {
   if (!study.design) throw new Error('the study has no design yet');
-  const meta = metaColumns(study), res = resultColumns(study);
+  const meta = metaColumns(study), res = resultColumns(study), covs = (study.covariates ?? []).map(c => c.id);
   const W = wellOf(study), plated = W.size > 0;
   const header = ['order', 'run', ...(plated ? ['plate', 'well'] : []), ...(has(study, 'wholePlot') ? ['wholePlot'] : []), ...(has(study, 'block') ? ['block'] : []), 'kind',
-    ...study.factors.map(f => f.id), ...meta, ...res.map(c => c.header), 'note'];
+    ...study.factors.map(f => f.id), ...meta, ...covs, ...res.map(c => c.header), 'note'];
   const rows = [];
   for (const run of sortedRuns(study)) {
     const obs = study.observations.filter(o => o.run === run.run);
@@ -84,10 +102,10 @@ export function runSheet(study) {
       });
       const notes = [...new Set(list.map(o => o.note).filter(Boolean))].join('; ');
       rows.push([run.order, run.run, ...(plated ? [W.get(run.run)?.plate ?? '', W.get(run.run)?.well ?? ''] : []), ...(has(study, 'wholePlot') ? [run.wholePlot ?? ''] : []), ...(has(study, 'block') ? [run.block ?? ''] : []), run.kind,
-        ...study.factors.map(f => run.settings[f.id]), ...mv.map(v => v ?? ''), ...cells, notes]);
+        ...study.factors.map(f => run.settings[f.id]), ...mv.map(v => v ?? ''), ...covs.map(id => covariateCell(study, id, run.run, covKeys(meta, mv)) ?? ''), ...cells, notes]);
     }
   }
-  return { header, rows, resultColumns: res, metaColumns: meta };
+  return { header, rows, resultColumns: res, metaColumns: meta, covariateColumns: covs };
 }
 
 export function runSheetCSV(study, { delimiter = ',' } = {}) {
@@ -115,12 +133,14 @@ export function runSheetHTML(study, { title, date } = {}) {
     if (f) return `${esc(f.name)}${f.units ? ` <span class="u">(${esc(f.units)})</span>` : ''}`;
     const ax = /^(.*)\.(trials|exposure)$/.exec(h), ar = ax && study.responses.find(x => x.id === ax[1]);
     if (ar) return `${esc(ar.name)} <span class="u">(${ax[2]})</span>`;
+    const cv = (study.covariates ?? []).find(x => x.id === h);
+    if (cv) return `${esc(cv.name)}${cv.units ? ` <span class="u">(${esc(cv.units)})</span>` : ''}`;
     const r = study.responses.find(x => x.id === h.split('@')[0]);
     if (r) { const site = h.includes('@') ? ` @ ${esc(h.split('@')[1])}` : ''; return `${esc(r.name)}${site}${r.units ? ` <span class="u">(${esc(r.units)})</span>` : ''}`; }
     return esc({ order: 'Order', run: 'Run', plate: 'Plate', well: 'Well', wholePlot: 'Whole plot', block: 'Block', kind: 'Type', note: 'Notes',
       lot: 'Lot', wafer: 'Wafer', slot: 'Slot', operator: 'Operator', repeat: 'Repeat' }[h] ?? h);
   };
-  const resStart = s.header.length - 1 - s.resultColumns.length;
+  const resStart = s.header.length - 1 - s.resultColumns.length - s.covariateColumns.length;
   let body = '', prev;
   for (const r of s.rows) {
     if (group && r[gi] !== prev) {
@@ -171,7 +191,7 @@ const label = (s) => { const t = String(s).trim(); return /^-?(0|[1-9]\d*)$/.tes
 
 /**
  * Map file columns to roles. Returns { mapping: { header → role }, unmatched: [headers] }.
- * Roles: 'run', 'response', 'value', 'site', 'note', a META field, { factor }, { result: {response, site} },
+ * Roles: 'run', 'response', 'value', 'site', 'note', a META field, { factor }, { result: {response, site} }, { covariate },
  * or 'ignore' for sheet columns that are not read back (order, whole plot, block, type).
  */
 function mapColumns(study, header, given = {}) {
@@ -183,7 +203,7 @@ function mapColumns(study, header, given = {}) {
     for (const x of items) for (const k of new Set([norm(x.id), norm(x.name)])) { loose.set(k, x); count.set(k, (count.get(k) || 0) + 1); }
     return { has: (h) => exact.has(h.trim()) || count.get(norm(h)) === 1, get: (h) => exact.get(h.trim()) ?? loose.get(norm(h)) };
   };
-  const resp = lookup(study.responses.filter(x => !x.derived)), fac = lookup(study.factors);
+  const resp = lookup(study.responses.filter(x => !x.derived)), fac = lookup(study.factors), cov = lookup(study.covariates ?? []);
   for (const h of header) {
     if (given[h] !== undefined) { mapping[h] = given[h]; continue; }
     const k = norm(h);
@@ -199,6 +219,7 @@ function mapColumns(study, header, given = {}) {
     else if (h.includes('@') && resp.has(h.slice(0, h.indexOf('@')))) mapping[h] = { result: { response: resp.get(h.slice(0, h.indexOf('@'))).id, site: label(h.slice(h.indexOf('@') + 1)) } };
     else if (resp.has(h)) mapping[h] = { result: { response: resp.get(h).id } };
     else if (fac.has(h)) mapping[h] = { factor: fac.get(h).id };
+    else if (cov.has(h)) mapping[h] = { covariate: cov.get(h).id };
     else { mapping[h] = 'ignore'; unmatched.push(h); }
   }
   return { mapping, unmatched };
@@ -221,15 +242,22 @@ export function importResults(study, text, opts = {}) {
   const iRun = col('run'), iPlate = col('plate'), iWell = col('well');
   const byWell = new Map((study.plates?.wells ?? []).map(w => [`${w.plate}/${w.well}`, w]));
   const plated = iPlate >= 0 && iWell >= 0 && byWell.size > 0;
-  if (iRun < 0 && !plated) { err(1, null, study.plates ? 'no "run" column, and no "plate" and "well" columns: the file must say which run (or well) each row belongs to' : 'no "run" column: the file must say which run each row belongs to'); return { format: null, observations: [], readings: [], problems, mapping, unmatched }; }
+  if (iRun < 0 && !plated) { err(1, null, study.plates ? 'no "run" column, and no "plate" and "well" columns: the file must say which run (or well) each row belongs to' : 'no "run" column: the file must say which run each row belongs to'); return { format: null, observations: [], readings: [], covariates: [], problems, mapping, unmatched }; }
   const long = col('response') >= 0 && col('value') >= 0;
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
   const sites = siteIds(study);
   const decimals = header.map((_, j) => opts.decimal ?? guessDecimal(rows.map(r => r[j]), delimiter));
   const num = (s, j) => parseNumber(s, { decimal: decimals[j] });
-  for (const h of unmatched) warn(1, h, `column "${h}" is not a run, factor, response or measurement field and was ignored`);
+  for (const h of unmatched) warn(1, h, `column "${h}" is not a run, factor, response${study.covariates?.length ? ', covariate' : ''} or measurement field and was ignored`);
 
-  const obs = [], readings = [];
+  const obs = [], readings = [], covs = [];
+  // a covariate value (issue #82): for the run, or for the row's lot, wafer and site
+  const addCov = (id, base, site, j, r, line) => {
+    const v = num(r[j], j);
+    if (v === undefined) return;
+    if (Number.isNaN(v)) { err(line, header[j], `"${r[j]}" is not a number`); return; }
+    covs.push({ c: { covariate: id, run: base.run, value: v, ...(base.lot !== undefined ? { lot: base.lot } : {}), ...(base.wafer !== undefined ? { wafer: base.wafer } : {}), ...(site !== undefined ? { site } : {}) }, line, column: header[j] });
+  };
   rows.forEach((r, i) => {
     const line = i + 2;
     if (r.every(v => v.trim() === '')) return;
@@ -299,9 +327,11 @@ export function importResults(study, text, opts = {}) {
       const own = study.responses.filter(x => !x.derived);
       const resp = own.find(x => x.id === rid) ?? (own.filter(x => norm(x.name) === norm(rid) || norm(x.id) === norm(rid)).length === 1
         ? own.find(x => norm(x.name) === norm(rid) || norm(x.id) === norm(rid)) : undefined);
+      const cv = !resp && (study.covariates ?? []).find(x => x.id === rid);
+      if (cv) { addCov(cv.id, base, is >= 0 && r[is].trim() !== '' ? label(r[is]) : undefined, iv, r, line); return; }
       if (!resp) { if (rid) err(line, header[ir], `unknown response "${rid}"`); return; }
       add({ response: resp.id, site: is >= 0 && r[is].trim() !== '' ? label(r[is]) : undefined }, iv);
-    } else roles.forEach((role, j) => { if (role?.result) add(role.result, j); });
+    } else roles.forEach((role, j) => { if (role?.result) add(role.result, j); else if (role?.covariate) addCov(role.covariate, base, undefined, j, r, line); });
   });
 
   // duplicates, within the file and against what the study already holds
@@ -311,6 +341,14 @@ export function importResults(study, text, opts = {}) {
     const k = keyOf(x.o);
     if (seen.has(k)) warn(x.line, x.column, `duplicate of line ${seen.get(k)} (same run, response, wafer, site and repeat)`);
     else seen.set(k, x.line);
+  }
+  // covariates: a wide sheet repeats a run's value on each of its rows — the same value again is
+  // fine, a different one is a mistake
+  const cKey = (c) => JSON.stringify(['covariate', 'run', 'lot', 'wafer', 'site'].map(k => c[k] ?? null)), cSeen = new Map(), covOut = [];
+  for (const x of covs) {
+    const k = cKey(x.c), was = cSeen.get(k);
+    if (!was) { cSeen.set(k, x); covOut.push(x.c); }
+    else if (was.c.value !== x.c.value) err(x.line, x.column, `run ${x.c.run}: ${x.c.covariate} is ${x.c.value} here but ${was.c.value} on line ${was.line} (one value per run${x.c.wafer !== undefined ? ' and wafer' : ''})`);
   }
   const existing = new Set(study.observations.map(keyOf));
   const clash = obs.filter(x => existing.has(keyOf(x.o))).length;
@@ -334,8 +372,12 @@ export function importResults(study, text, opts = {}) {
   const got = new Set(obs.map(x => x.o.run));
   const none = [...runs.keys()].filter(k => !got.has(k) && !study.observations.some(o => o.run === k));
   if (none.length && obs.length) problems.push({ severity: 'info', line: null, column: null, message: `no results yet for run(s) ${none.join(', ')}` });
+  for (const c of study.covariates ?? []) {
+    const n = covOut.filter(x => x.covariate === c.id).length;
+    if (n) problems.push({ severity: 'info', line: null, column: null, message: `${n} value(s) of the covariate ${c.id}` });
+  }
   if (readings.length) problems.push({ severity: 'info', line: null, column: null, message: `${readings.length} control-well reading(s)` });
-  return { format: long ? 'long' : 'wide', observations: obs.map(x => x.o), readings, problems, mapping, unmatched };
+  return { format: long ? 'long' : 'wide', observations: obs.map(x => x.o), readings, covariates: covOut, problems, mapping, unmatched };
 }
 
 /**
@@ -356,7 +398,15 @@ export function applyResults(study, imported, { mode = 'replace', force = false 
     const k = (x) => `${x.plate}/${x.well}/${x.response}`, got = new Set(imported.readings.map(k));
     plates = { ...plates, readings: [...plates.readings.filter(x => mode === 'append' || !got.has(k(x))), ...imported.readings] };
   }
-  return createStudy({ ...study, observations: [...keep, ...imported.observations], ...(plates ? { plates } : {}) });
+  // covariate values: 'replace' clears the values of each run and covariate in the import first;
+  // 'append' replaces only a value for the same run, lot, wafer and site
+  let covariates = study.covariates;
+  if (imported.covariates?.length) {
+    const kRun = (c, v) => `${c}|${v.run}`, kAll = (c, v) => JSON.stringify([c, v.run, v.lot ?? null, v.wafer ?? null, v.site ?? null]);
+    const key = mode === 'replace' ? kRun : kAll, got = new Set(imported.covariates.map(x => key(x.covariate, x)));
+    covariates = covariates.map(c => ({ ...c, values: [...c.values.filter(v => !got.has(key(c.id, v))), ...imported.covariates.filter(x => x.covariate === c.id).map(({ covariate, ...v }) => v)].sort((a, b) => a.run - b.run) }));
+  }
+  return createStudy({ ...study, observations: [...keep, ...imported.observations], ...(plates ? { plates } : {}), ...(covariates ? { covariates } : {}) });
 }
 
 /**

@@ -21,6 +21,7 @@ import { mixtureAnalysis } from './mixture.js';
 import { glmAnalysis } from './glm.js';
 import { glmmAnalysis, cached } from './glmm.js';
 import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
+import { covariateSlopes, droppedNote } from '../js/model/covariates.js';
 
 /** A sensible first model for the study's design. */
 
@@ -80,7 +81,21 @@ export function render(ctx) {
 
   const fIn = h('input', { type: 'text', class: 'formula', id: 'formula', value: formula, 'aria-label': 'model formula', spellcheck: 'false',
     onchange: (e) => setFormula(e.target.value.includes('~') ? e.target.value : `${resp.id} ~ ${e.target.value}`) });
-  const controls = h('section', { class: 'panel' }, h('h2', {}, 'Model', help('analysis','formulas')),
+  // covariates (issue #82): add one to the model; once it is in, its slope and the runs left out
+  const inFormula = new Set(rhs.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []);
+  const covChips = study.covariates?.length ? h('div', { class: 'row small', id: 'covariate-terms', style: 'margin-top:6px' }, 'covariates:',
+    study.covariates.map(c => h('button', { class: 'btn small', disabled: inFormula.has(c.id) || !c.values.length, title: c.values.length ? `${c.name}: measured, not set — as a term, the factors are compared at the same ${c.name}` : `${c.name}: no values yet (the Run step)`,
+      onclick: () => setFormula(`${formula} + ${c.id}`) }, `+ ${c.id}`)), help('analysis', 'covariates')) : null;
+  const covSlot = h('div', { id: 'covariate-note' });
+  const showCov = (f) => {
+    const cs = covariateSlopes(f);
+    if (!cs.length) return;
+    const link = f.kind === 'glmm' || (f.noise && f.noise !== 'normal');
+    covSlot.replaceChildren(h('div', { class: 'msg' }, cs.map(c => h('div', {}, h('b', {}, c.name), ` (${c.id}), measured at ${c.n} ${f.rows.length > new Set(f.rows.map(r => r.run)).size ? 'readings' : 'runs'}: mean ${num(c.mean, 4)}, from ${num(c.min, 4)} to ${num(c.max, 4)}${c.units ? ` ${c.units}` : ''}. `,
+      Number.isFinite(c.slope) ? `${resp.name} changes by ${num(c.slope, 3)} ± ${num(c.slopeSe, 2)} per ${c.units || 'unit'}${link ? ' on the model’s scale' : ''}${c.interacts ? ' (at the centre of the factors: the slope depends on a factor)' : ''}. ` : '')),
+      h('div', { class: 'small' }, 'The effects of the factors, and predictions, are at the mean of the covariate', cs.length > 1 ? 's' : '', '.', f.dropped?.length ? ` ${droppedNote(f.dropped).replace(/^r/, 'R')}.` : '')));
+  };
+  const controls0 = h('section', { class: 'panel' }, h('h2', {}, 'Model', help('analysis','formulas')),
     h('div', { class: 'row', style: 'margin-bottom:8px' },
       withData.length > 1 ? h('label', { class: 'inline' }, 'response', select(withData.map(r => ({ value: r.id, label: r.name })), resp.id, (v) => set({ response: v }), { 'aria-label': 'response' })) : h('span', {}, h('b', {}, resp.name), resp.units ? ` (${resp.units})` : ''),
       (study.mixture ? ['mixlinear', 'mixquadratic', 'mixspecial'] : ['main', '2fi', 'quadratic']).map(s => h('button', { class: 'btn', onclick: () => setFormula(`${resp.id} ~ ${s}`), title: { main: 'main effects', '2fi': 'main effects and two-factor interactions', quadratic: 'full quadratic (response surface)', mixlinear: 'Scheffé linear blending', mixquadratic: 'Scheffé quadratic: linear blending and the binary blending terms', mixspecial: 'Scheffé special cubic: the quadratic and the three-way terms' }[s] }, s)),
@@ -119,8 +134,11 @@ export function render(ctx) {
     reduction(ui.reduce, resp.id, (f) => set({ formulas: { ...(ui.formulas ?? {}), [resp.id]: f }, reduce: null }), () => set({ reduce: null })),
     h('p', { class: 'muted small' }, 'R-style formula over factor ids: ', h('span', { class: 'mono' }, 'A*B'), ' = A + B + A:B, ', h('span', { class: 'mono' }, '(A+B+C)^2'), ', ', h('span', { class: 'mono' }, 'I(T^2)'), ', ', h('span', { class: 'mono' }, '- A:B'), study.mixture ? '. Mixture components: mixquadratic, mixspecial, mixcubic, mixlinear (Scheffé models, no intercept), e.g. mixquadratic + mixlinear:(T); coefficients are in L-pseudo-components (0 … 1).' : '. Coefficients are in coded units (−1 … +1).'));
 
+  controls0.append(...[covChips].filter(Boolean));
+  const controls = h('div', {}, controls0, covSlot);
   let fit = null, fitErr = null;
   try { fit = fitModel(study, formula, { ...(ui.noPosition ? { position: false } : {}), ...(ui.firth && resp.distribution ? { firth: true } : {}) }); } catch (e) { fitErr = e; }
+  if (fit) showCov(fit);
   // counts and proportions: a generalised linear model, with a random intercept per whole plot (a
   // split-plot, automatically) or per block (when asked)
   if (resp.distribution) {
@@ -133,6 +151,7 @@ export function render(ctx) {
       let gm;
       try { gm = cached(study, JSON.stringify(['fit', formula, choice]), () => fitCountMixedModel(study, formula, { random: choice })); }
       catch (e) { return h('div', {}, controls, picker, h('div', { class: 'msg error' }, e.message)); }
+      showCov(gm);
       return h('div', {}, controls, picker, glmmAnalysis(ctx, gm, { ui, set, setFormula, rhs, resp }), surface(gm));
     }
     if (fitErr) return h('div', {}, controls, picker, h('div', { class: 'msg error' }, fitErr.message));
@@ -145,6 +164,7 @@ export function render(ctx) {
   if (rand.length && !ui.ols) {
     let m;
     try { m = fitMixedModel(study, formula); } catch (e) { return h('div', {}, controls, h('div', { class: 'msg error' }, e.message)); }
+    showCov(m);
     const avail = availablePositionTerms(study, observationsOf(study, resp.id).filter(o => o.value !== null));
     const used = new Set(formula.match(/[A-Za-z_][A-Za-z0-9_]*/g));
     const chips = avail.length ? h('div', { class: 'row small', id: 'position-terms', style: 'margin-top:6px' }, 'position terms:',

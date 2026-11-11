@@ -1,0 +1,382 @@
+{
+  "aikidoe": 1,
+  "name": "Fed-batch titre",
+  "description": "A 2^3 factorial, twice, with the viable cell density of the seed culture measured at inoculation as a covariate; simulated data.",
+  "seed": 82,
+  "factors": [
+    {
+      "id": "temp",
+      "name": "Temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": false,
+      "low": 34,
+      "high": 37,
+      "transform": "none"
+    },
+    {
+      "id": "pH",
+      "name": "pH",
+      "type": "continuous",
+      "htc": false,
+      "low": 6.8,
+      "high": 7.2,
+      "transform": "none"
+    },
+    {
+      "id": "feed",
+      "name": "Feed rate",
+      "type": "continuous",
+      "units": "%/day",
+      "htc": false,
+      "low": 2,
+      "high": 4,
+      "transform": "none"
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "titre",
+      "name": "Titre",
+      "units": "g/L",
+      "goal": "maximize",
+      "target": 4.5,
+      "lower": 2.5,
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "covariates": [
+    {
+      "id": "vcd",
+      "name": "Seed density",
+      "units": "10⁶ cells/mL",
+      "values": [
+        {
+          "run": 1,
+          "value": 0.5
+        },
+        {
+          "run": 2,
+          "value": 0.6
+        },
+        {
+          "run": 3,
+          "value": 0.53
+        },
+        {
+          "run": 4,
+          "value": 0.46
+        },
+        {
+          "run": 5,
+          "value": 0.51
+        },
+        {
+          "run": 6,
+          "value": 0.58
+        },
+        {
+          "run": 7,
+          "value": 0.5
+        },
+        {
+          "run": 8,
+          "value": 0.6
+        },
+        {
+          "run": 9,
+          "value": 0.61
+        },
+        {
+          "run": 10,
+          "value": 0.33
+        },
+        {
+          "run": 11,
+          "value": 0.48
+        },
+        {
+          "run": 12,
+          "value": 0.62
+        },
+        {
+          "run": 13,
+          "value": 0.48
+        },
+        {
+          "run": 14,
+          "value": 0.45
+        },
+        {
+          "run": 15,
+          "value": 0.47
+        },
+        {
+          "run": 16,
+          "value": 0.5
+        }
+      ]
+    }
+  ],
+  "design": {
+    "kind": "full-factorial",
+    "params": {
+      "levels": [
+        2,
+        2,
+        2
+      ],
+      "replicates": 2,
+      "seed": 82
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 6,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 6.8,
+          "feed": 2
+        }
+      },
+      {
+        "run": 2,
+        "order": 5,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 6.8,
+          "feed": 2
+        }
+      },
+      {
+        "run": 3,
+        "order": 13,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 7.2,
+          "feed": 2
+        }
+      },
+      {
+        "run": 4,
+        "order": 10,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 7.2,
+          "feed": 2
+        }
+      },
+      {
+        "run": 5,
+        "order": 4,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 6.8,
+          "feed": 4
+        }
+      },
+      {
+        "run": 6,
+        "order": 8,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 6.8,
+          "feed": 4
+        }
+      },
+      {
+        "run": 7,
+        "order": 2,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 7.2,
+          "feed": 4
+        }
+      },
+      {
+        "run": 8,
+        "order": 11,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 7.2,
+          "feed": 4
+        }
+      },
+      {
+        "run": 9,
+        "order": 9,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 6.8,
+          "feed": 2
+        }
+      },
+      {
+        "run": 10,
+        "order": 16,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 6.8,
+          "feed": 2
+        }
+      },
+      {
+        "run": 11,
+        "order": 1,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 7.2,
+          "feed": 2
+        }
+      },
+      {
+        "run": 12,
+        "order": 15,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 7.2,
+          "feed": 2
+        }
+      },
+      {
+        "run": 13,
+        "order": 7,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 6.8,
+          "feed": 4
+        }
+      },
+      {
+        "run": 14,
+        "order": 3,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 6.8,
+          "feed": 4
+        }
+      },
+      {
+        "run": 15,
+        "order": 12,
+        "kind": "factorial",
+        "settings": {
+          "temp": 34,
+          "pH": 7.2,
+          "feed": 4
+        }
+      },
+      {
+        "run": 16,
+        "order": 14,
+        "kind": "factorial",
+        "settings": {
+          "temp": 37,
+          "pH": 7.2,
+          "feed": 4
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "titre",
+      "value": 2.76
+    },
+    {
+      "run": 2,
+      "response": "titre",
+      "value": 3.29
+    },
+    {
+      "run": 3,
+      "response": "titre",
+      "value": 2.63
+    },
+    {
+      "run": 4,
+      "response": "titre",
+      "value": 2.73
+    },
+    {
+      "run": 5,
+      "response": "titre",
+      "value": 3.23
+    },
+    {
+      "run": 6,
+      "response": "titre",
+      "value": 4.34
+    },
+    {
+      "run": 7,
+      "response": "titre",
+      "value": 2.91
+    },
+    {
+      "run": 8,
+      "response": "titre",
+      "value": 4.35
+    },
+    {
+      "run": 9,
+      "response": "titre",
+      "value": 3.07
+    },
+    {
+      "run": 10,
+      "response": "titre",
+      "value": 2.79
+    },
+    {
+      "run": 11,
+      "response": "titre",
+      "value": 2.53
+    },
+    {
+      "run": 12,
+      "response": "titre",
+      "value": 3.14
+    },
+    {
+      "run": 13,
+      "response": "titre",
+      "value": 3.09
+    },
+    {
+      "run": 14,
+      "response": "titre",
+      "value": 4.12
+    },
+    {
+      "run": 15,
+      "response": "titre",
+      "value": 2.92
+    },
+    {
+      "run": 16,
+      "response": "titre",
+      "value": 4.01
+    }
+  ],
+  "history": []
+}

@@ -4,7 +4,7 @@
 import { h, select, dataTable, help, toast } from './dom.js';
 import { plot } from './plot.js';
 import { num, pval } from '../js/format.js';
-import { createStudy } from '../js/study.js';
+import { createStudy, covariatesWithoutValues } from '../js/study.js';
 import { platesWithoutWells } from '../js/plate.js';
 import { doseDesign, addDoseStage, doseData, doseRoles } from '../js/design/dose-design.js';
 import { MODELS, fitDose, effectiveDose, relativePotency, parallelism, inversePredict, detectionLimits, predictDose,
@@ -63,7 +63,7 @@ export function doseDesignPanel(ctx) {
       if (method === 'optimal') { opts.doses = perCurve; opts.replicates = 1; }
       let next;
       if (asStage) next = addDoseStage(study, opts);
-      else { const design = doseDesign(study, opts); next = createStudy({ ...study, design, observations: [], ...platesWithoutWells(study), history: [{ stage: 'design', runs: design.runs.map(r => r.run), note: `dose–response, ${design.runs.length} runs` }] }); }
+      else { const design = doseDesign(study, opts); next = createStudy({ ...study, design, observations: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study), history: [{ stage: 'design', runs: design.runs.map(r => r.run), note: `dose–response, ${design.runs.length} runs` }] }); }
       state.ui.dose = { ...ui, open: true };
       if (!asStage) state.step = 'run';
       setDoc(structuredClone(next));

@@ -22,6 +22,13 @@ Commands
        SPEC for a response: id[:units][@distribution[,trials][,link]]   counts and proportions:
                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
+       [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+  covariate STUDY id[:units] [--name "…"] | covariate STUDY id --remove | covariate STUDY
+       a covariate: measured at each run but not set (a starting weight, the room temperature).
+       Its values go on the run sheet and come back with import, in a column of its own; in a
+       formula it is a term like a factor: fit STUDY "y ~ A*B + roomT". The effects of the factors
+       and predictions are then at the mean of the covariate (predict: --at "A=…,roomT=…" for
+       another value); runs without a value are left out. Without an id: the covariates and their values
   design STUDY --mixture lattice|centroid|vertices|optimal [--degree m] [--axial] [--centre n]
        [--runs N --model mixquadratic|… --criterion D|I] [--replicates r] [--seed S]   a mixture design
        (lattice and centroid in pseudo-components need a simplex region; process factors are crossed)
@@ -155,7 +162,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `augment`, `comb-over`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `augment`, `comb-over`, `covariate`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

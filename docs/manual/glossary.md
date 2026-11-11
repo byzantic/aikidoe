@@ -3,6 +3,9 @@
 **Alias** — two effects a fraction cannot tell apart; their estimates are the same combination of
 the runs. See [aliasing and resolution](concepts.md#aliasing-and-resolution).
 
+**ANCOVA** (analysis of covariance) — the analysis of an experiment with a
+[covariate](analysis.md#covariates) in the model beside the factors.
+
 **Axial points** — runs at ±α on one factor's axis, the others at the centre; with a factorial and
 centre points they make a central composite design.
 
@@ -14,6 +17,10 @@ stage); the design and analysis account for it.
 **Coded units** — each continuous factor scaled so its range runs from −1 to +1.
 
 **Confirmation run** — a run at settings chosen from a model, to check its prediction.
+
+**Covariate** — a variable measured at each run but not set (a starting weight, the room
+temperature). In the model it explains part of the scatter, and the factors' effects are compared
+at the same value of it. See [Covariates](analysis.md#covariates).
 
 **Cox direction** — in a mixture, the line along which one component changes while the others keep
 their proportions to each other; the traces of the response along it show each component's effect.

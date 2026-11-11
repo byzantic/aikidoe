@@ -17,6 +17,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Montgomery, D. C. (2017). *Design and Analysis of Experiments*, 9th ed. Wiley. (The
   filtration-rate data of the [robust-design example](optimisation.md#an-example) are its
   example 6.2.)
+- Milliken, G. A. & Johnson, D. E. (2002). *Analysis of Messy Data, Volume III: Analysis of
+  Covariance*. Chapman & Hall/CRC. ([Covariates](analysis.md#covariates): one slope or several,
+  adjusted means.)
 - Montgomery, D. C. & Runger, G. C. (2018). *Applied Statistics and Probability for Engineers*,
   7th ed. Wiley.
 - Myers, R. H., Montgomery, D. C. & Anderson-Cook, C. M. (2016). *Response Surface Methodology*,
@@ -52,6 +55,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Brideau, C., Gunter, B., Pikounis, B. & Liaw, A. (2003). Improved statistical methods for hit
   selection in high-throughput screening. *Journal of Biomolecular Screening* 8, 634–647. (B-scores:
   median polish of plate rows and columns; see [microplates](plates.md#analysis).)
+- Cox, D. R. & McCullagh, P. (1982). Some aspects of analysis of covariance. *Biometrics* 38,
+  541–561. (What adjusting for a covariate does and does not do; why it must not be affected by
+  the treatments.)
 - Cox, D. R. (1971). A note on polynomial response functions for mixtures. *Biometrika* 58,
   155–159.
 - Deng, L.-Y. & Tang, B. (1999). Generalized resolution and minimum aberration criteria for

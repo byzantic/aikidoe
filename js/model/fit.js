@@ -11,6 +11,7 @@ import { observationsOf } from './sites.js';
 import { parseFormula, modelMatrix } from './formula.js';
 import { runPositions } from '../plate.js';
 import { noiseModel, noiseModelOf, noiseOf } from './noise.js';
+import { withCovariates } from './covariates.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
 
@@ -42,6 +43,11 @@ export function responseTable(study, responseId, { aggregate = 'mean', perObserv
  * rows, blocks ('auto' | false), includeConfirm, noise (a noise model id; default: the response's
  * distribution), link, firth (Firth's penalised likelihood, for separated binomial data).
  *
+ * Covariates (issue #82): a covariate of the study named in the formula is a term like a factor
+ * (covariates.js): centred at its mean over the rows used, scaled by half its range. Rows with no
+ * value for it are left out. The fit then has covariates: [{ id, mean, min, max, halfRange, n }]
+ * and dropped: [{ run, covariate }].
+ *
  * Blocks: when the runs used fall in more than one block (blocked designs, or stages added by
  * augmentation), a categorical Block term is added first in the model (effect coded, so
  * predictions are for the average block), unless blocks: false.
@@ -49,23 +55,27 @@ export function responseTable(study, responseId, { aggregate = 'mean', perObserv
  * checked against a model fitted without them.
  */
 export function fitModel(study, formula, opts = {}) {
+  // the response is read before the formula is parsed: the covariates in it (issue #82) are known
+  // only with the rows
+  const lhs = String(formula).includes('~') ? String(formula).slice(0, String(formula).indexOf('~')).trim() || null : null;
+  const response = opts.response ?? lhs;
+  if (!response) { parseFormula(formula, study.factors); throw new Error('name the response: "y ~ …" or { response }'); }
+  const noise = opts.noise ? noiseModel(opts.noise, { link: opts.link }) : noiseModelOf(study, response);
+  let rows = opts.rows ?? responseTable(study, response, { ...opts, perObservation: noise.id !== 'normal' });
+  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
+  const cov = rows.length ? withCovariates(study, formula, rows) : { factors: study.factors, rows, used: [], dropped: [] };
   let parsed;
-  try { parsed = parseFormula(formula, study.factors); } catch (e) {
+  try { parsed = parseFormula(formula, cov.factors); } catch (e) {
     const m = /unknown factor "(radius2|edge|waferX|waferY|slot|slotZone)"/.exec(e.message);
     if (m) throw new Error(`${m[1]} is a position term: it varies within runs, so it needs a model of the individual readings (the mixed model), not of run means`);
     throw e;
   }
-  const response = opts.response ?? parsed.response;
-  if (!response) throw new Error('name the response: "y ~ …" or { response }');
-  const noise = opts.noise ? noiseModel(opts.noise, { link: opts.link }) : noiseModelOf(study, response);
-  let rows = opts.rows ?? responseTable(study, response, { ...opts, perObservation: noise.id !== 'normal' });
-  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
   if (!rows.length) throw new Error(`no results for ${response} yet`);
-  const b = withBlockTerm(study, parsed, rows, opts);
+  const b = withBlockTerm({ ...study, factors: cov.factors }, parsed, cov.rows, opts);
   const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   const data = noise.prepare(b.rows);
   const fit = noise.fit(mm, data.y, { ...data, firth: opts.firth });
-  return { ...fit, noise: noise.id, response, rows: b.rows, factors: b.factors };
+  return { ...fit, noise: noise.id, response, rows: b.rows, factors: b.factors, ...(cov.used.length ? { covariates: cov.used, dropped: cov.dropped } : {}) };
 }
 
 /**

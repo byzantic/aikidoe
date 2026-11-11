@@ -85,6 +85,12 @@ Each run carries: `run` (planned id, positive integer), `order` (randomised exec
 
 Long format, one row per measured value: `run`, optional `lot`, `wafer`, `site`, `slot` (boat or cassette position), `response`, `value`, optional `operator`, `repeat`. A run with no observations is "planned"; with some, "partial".
 
+### 4.2a Covariates (#82)
+
+Variables that are measured but not set (a starting weight, the room temperature, the passage number of the cells, the incoming film thickness): `covariates: [{ id, name, units?, note?, values: [{ run, value, lot?, wafer?, site? }] }]`, numeric, with ids distinct from factors and responses (and from the words formulas reserve). A value belongs to a run, or to one wafer (lot, site) of it. They are kept apart from the observations, so that "has results" is about responses only; a new design clears the values and keeps the covariates. Entered in a column of their own on the run sheet (a wafer's row holds the wafer's value), read back by the results import (wide: the column; long: the id in the response column; two different values for one run and wafer are an error).
+
+**In models** (`js/model/covariates.js`, phase 1): a covariate named in a formula is a term like a factor — linear, and in interactions with factors on request; the shortcuts `main`, `2fi`, `quadratic` are over the factors only. Its value for a row is the mean of the run's values for a model of run means, and the most specific match (the wafer's own before the run's) for a model of individual readings. It is coded (x − mean) / ((max − min) / 2) over the rows used: the intercept and the other terms are then at the average covariate — the adjusted effects, also when it interacts with a factor — and its coefficient is on the footing of a factor's; the slope per unit is coefficient / half-range, reported with its standard error. Rows without a value are left out and named. A prediction without a value is at the mean (coded 0), so the profiler, contours, optimisation, surrogates and reports need no change. Least squares, GLMs, REML (Kenward–Roger) and GLMMs all take covariates through the same step. Checked against R (`tests/ref/covariate_r.R`): `lm` coefficients, standard errors and the slope on the covariate as measured, `car::Anova` types II and III (with and without a covariate × factor interaction, continuous and three-level categorical factors), `predict.lm` intervals at covariate values and at the mean, `na.omit`, a Poisson `glm` with likelihood-ratio tests, and `lme4` + `pbkrtest` with a covariate per wafer and per run. Phases to come: adjusted means and the test of equal slopes; design notes, a run order balancing a covariate known in advance, power (σ√(1 − ρ²)) and optimisation at a chosen covariate value.
+
 ### 4.3 Coding
 
 Continuous factors are coded to [−1, +1] after the optional transform (`log` → log10); axial points may lie beyond ±1. Categorical factors use effect (sum-to-zero) coding by default, so main effects stay orthogonal to the intercept in balanced designs: the first level is the row of all −1 and level i ≥ 1 is the unit vector e_(i−1), so a 2-level categorical codes −1 / +1 like a continuous low / high (R's `contr.sum` uses the last level instead). All design generators work in coded units; reports show both.
@@ -270,6 +276,7 @@ Every statistical routine is checked against an independent implementation or a 
 | CCD, Box–Behnken | R `rsm` |
 | Optimal designs | R `AlgDesign` / `skpr`; efficiency within 1 % of reference over random restarts |
 | OLS, ANOVA | `statsmodels` / R `lm` and `car::Anova`, to 1e−8 |
+| Covariates (ANCOVA) | R `lm`, `car::Anova` (types II, III), `predict.lm`, `glm`, `lme4` + `pbkrtest` |
 | Lenth | Lenth (1989) worked example |
 | REML, variance components | R `lme4` + `lmerTest` (Satterthwaite) and `pbkrtest` (Kenward–Roger); `statsmodels` MixedLM; to 1e−5 on estimates, 1e−3 on df |
 | Split-plot examples | Montgomery, *Design and Analysis of Experiments*, ch. 14; Jones & Nachtsheim (2009) split-plot review |

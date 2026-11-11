@@ -4,7 +4,7 @@
 import { h, select, dataTable, help, toast } from './dom.js';
 import { plot } from './plot.js';
 import { num, pval } from '../js/format.js';
-import { createStudy } from '../js/study.js';
+import { createStudy, covariatesWithoutValues } from '../js/study.js';
 import { lackOfFit } from '../js/model/ols.js';
 import { platesWithoutWells } from '../js/plate.js';
 import { mixtureOf, mixtureDesign, isSimplexRegion, mixtureAnova, coxTrace, ternaryGrid, extremeVertices } from '../js/design/mixture.js';
@@ -65,7 +65,7 @@ export function mixtureDesignPanel(ctx) {
   try { d = mixtureDesign(study, opts); } catch (e) { err = e.message; }
   const nObs = study.observations.length;
   const make = () => {
-    const next = createStudy({ ...study, design: d, observations: [], ...platesWithoutWells(study), history: [{ stage: 'design', runs: d.runs.map(r => r.run), note: `mixture (${kind}), ${d.runs.length} runs` }] });
+    const next = createStudy({ ...study, design: d, observations: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study), history: [{ stage: 'design', runs: d.runs.map(r => r.run), note: `mixture (${kind}), ${d.runs.length} runs` }] });
     state.step = 'run';
     setDoc(structuredClone(next));
     toast(`Mixture design: ${d.runs.length} runs`);

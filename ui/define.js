@@ -21,7 +21,7 @@ export function render(ctx) {
   const d = state.doc;
   const locked = !!d.design;             // factor structure fixed once there is a design
   const lockNote = locked ? h('div', { class: 'msg warning' }, 'This study has a design, so factor ids, types and levels are fixed (names, units and ranges can still change). ',
-    h('button', { class: 'btn danger', onclick: () => update(x => { delete x.design; x.observations = []; x.history = []; }) }, `Remove the design${d.observations?.length ? ` and its ${d.observations.length} results` : ''}`)) : null;
+    h('button', { class: 'btn danger', onclick: () => update(x => { delete x.design; x.observations = []; x.history = []; for (const c of x.covariates ?? []) c.values = []; }) }, `Remove the design${d.observations?.length ? ` and its ${d.observations.length} results` : ''}`)) : null;
 
   const errs = messages(state.errors.map(e => e.replace(/^study: /, '')), 'error');
   const warns = messages(state.warnings, 'warning');
@@ -94,6 +94,23 @@ export function render(ctx) {
       siteResponses(d, update),
       h('span', { class: 'muted small' }, 'Responses measured per wafer or site are analysed reading by reading with a mixed model (whole plots, runs and wafers as random effects).')));
 
+  // ---------------------------------------------------------------- covariates (issue #82)
+  const taken = () => [...d.factors, ...(d.responses ?? []), ...(d.covariates ?? [])].map(x => x.id);
+  const cRows = (d.covariates ?? []).map((c, i) => {
+    const set = (fn) => update(x => fn(x.covariates[i]));
+    return h('tr', { 'data-covariate': c.id },
+      h('td', {}, h('input', { class: 'id', value: c.id ?? '', 'aria-label': 'covariate id', onchange: (e) => set(o => { o.id = e.target.value.trim(); }) })),
+      h('td', {}, h('input', { type: 'text', value: c.name ?? '', 'aria-label': 'covariate name', onchange: (e) => set(o => { o.name = e.target.value; }) })),
+      h('td', {}, h('input', { class: 'short', value: c.units ?? '', 'aria-label': 'covariate units', onchange: (e) => set(o => { if (e.target.value) o.units = e.target.value; else delete o.units; }) })),
+      h('td', { class: 'n' }, c.values?.length ? `${new Set(c.values.map(v => v.run)).size} runs` : h('span', { class: 'muted' }, 'none yet')),
+      h('td', {}, h('button', { class: 'btn', title: c.values?.length ? 'remove the covariate and its values' : 'remove covariate', onclick: () => update(x => { x.covariates.splice(i, 1); if (!x.covariates.length) delete x.covariates; }) }, '✕')));
+  });
+  const covariates = h('section', { class: 'panel', id: 'covariates' }, h('h2', {}, 'Covariates', help('analysis', 'covariates')),
+    h('p', { class: 'muted small' }, 'Things you measure but do not set: a starting weight, the room temperature, the passage number of the cells, the age of a reagent. Record the value for each run on the run sheet, then add the covariate to the model at the Analyse step: the effects of the factors are then compared at the same value of the covariate. A covariate must not be something the factors change.'),
+    cRows.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
+      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'values', ''].map(t => h('th', {}, t)))), h('tbody', {}, cRows))) : null,
+    h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn', id: 'add-covariate', onclick: () => update(x => { x.covariates ??= []; x.covariates.push({ id: nextId(taken(), 'z'), name: 'Covariate' }); }) }, '+ covariate')));
+
   // ---------------------------------------------------------------- sites
   const sites = anySite ? sitePanel(d, update) : null;
 
@@ -111,7 +128,7 @@ export function render(ctx) {
 
   const next = state.study ? h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => go(d.design ? 'run' : 'design') }, d.design ? 'Go to Run →' : 'Choose a design →')) : null;
   const gauge = state.ui.gauge?.open ? gaugePanel(ctx, state.ui.gauge.open) : null;
-  return h('div', {}, errs, warns, factors, responses, gauge, sites, simulatorPanel(d, update), cons, desc, next);
+  return h('div', {}, errs, warns, factors, responses, gauge, covariates, sites, simulatorPanel(d, update), cons, desc, next);
 }
 
 // computer experiments (§10): the simulator that runs the design. Adapters with their own UI

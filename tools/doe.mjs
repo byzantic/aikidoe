@@ -10,6 +10,13 @@
 //        SPEC for a response: id[:units][@distribution[,trials][,link]]   counts and proportions:
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
+//        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+//   covariate STUDY id[:units] [--name "…"] | covariate STUDY id --remove | covariate STUDY
+//        a covariate: measured at each run but not set (a starting weight, the room temperature).
+//        Its values go on the run sheet and come back with import, in a column of its own; in a
+//        formula it is a term like a factor: fit STUDY "y ~ A*B + roomT". The effects of the factors
+//        and predictions are then at the mean of the covariate (predict: --at "A=…,roomT=…" for
+//        another value); runs without a value are left out. Without an id: the covariates and their values
 //   design STUDY --mixture lattice|centroid|vertices|optimal [--degree m] [--axial] [--centre n]
 //        [--runs N --model mixquadratic|… --criterion D|I] [--replicates r] [--seed S]   a mixture design
 //        (lattice and centroid in pseudo-components need a simplex region; process factors are crossed)
@@ -129,7 +136,7 @@
 // …results, text: [the notes] }, or { ok: false, error: { message } } with a non-zero exit).
 // STUDY is a *.aikidoe.json file. Commands that change it write it back in place.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { createStudy, parseStudy, serializeStudy, StudyError, code } from '../js/study.js';
+import { createStudy, parseStudy, serializeStudy, StudyError, code, covariatesWithoutValues } from '../js/study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
@@ -151,6 +158,7 @@ import { fitDose, effectiveDose, relativePotency, parallelism, inversePredict, d
 import { pipettingCSV, plateMapHTML, plateMapText } from '../js/io/platemap.js';
 import { controlSummary, plateNumbers, runCapacity, ROLES, platesWithoutWells } from '../js/plate.js';
 import { fitModel, anova, predict } from '../js/model/fit.js';
+import { covariateSlopes, covariateTable, droppedNote } from '../js/model/covariates.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -206,7 +214,7 @@ export const CLI_SCHEMA_VERSION = 'aikidoe-cli/1';
 // JSON-safe: NaN and ±Infinity → null, typed arrays → arrays
 const jsonSafe = (v) => JSON.parse(JSON.stringify(v, (k, x) => (typeof x === 'number' && !Number.isFinite(x) ? null : ArrayBuffer.isView(x) ? Array.from(x) : x)));
 const studySummary = (s) => ({ name: s.name, seed: s.seed, factors: s.factors, responses: s.responses, design: s.design ? { kind: s.design.kind, runs: s.design.runs.length, randomisation: s.design.randomisation } : null,
-  observations: s.observations.length, ...(s.simulator ? { simulator: s.simulator.adapter } : {}) });
+  observations: s.observations.length, ...(s.covariates?.length ? { covariates: s.covariates.map(c => ({ id: c.id, name: c.name, ...(c.units ? { units: c.units } : {}), runs: new Set(c.values.map(v => v.run)).size })) } : {}), ...(s.simulator ? { simulator: s.simulator.adapter } : {}) });
 
 const load = (file) => {
   if (!file) fail('give the study file');
@@ -242,11 +250,60 @@ function cmdInit({ pos, opt }) {
     }
     return r;
   });
+  const covariates = list(opt.covariate).map(covariateSpec);
   const mixture = opt.mixture ? { components: String(opt.mixture).split(',').map(x => x.trim()), ...(opt.total !== undefined ? { total: Number(opt.total) } : {}) } : undefined;
-  const study = createStudy({ name: opt.name ?? file.replace(/\.aikidoe\.json$|\.json$/, ''), ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), factors, ...(mixture ? { mixture } : {}), responses });
+  const study = createStudy({ name: opt.name ?? file.replace(/\.aikidoe\.json$|\.json$/, ''), ...(opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {}), factors, ...(mixture ? { mixture } : {}), responses, ...(covariates.length ? { covariates } : {}) });
   save(file, study);
   put({ file, study: studySummary(study) });
-  out(`created ${file}: ${factors.length} factors, ${responses.length} responses, seed ${study.seed}`);
+  out(`created ${file}: ${factors.length} factors, ${responses.length} responses${covariates.length ? `, ${covariates.length} covariate${covariates.length > 1 ? 's' : ''}` : ''}, seed ${study.seed}`);
+}
+
+// "roomT:°C" → { id, units }
+const covariateSpec = (spec) => { const [id, units] = String(spec).split(':'); return units ? { id, units } : { id }; };
+
+/** Covariates (issue #82): add, rename, remove, or list them with their values. */
+function cmdCovariate({ pos, opt }) {
+  const [file, spec] = pos, study = load(file);
+  const summary = (st) => (st.covariates ?? []).map(c => {
+    const t = covariateTable(st, c.id), v = t.map(x => x.value);
+    return { id: c.id, name: c.name, ...(c.units ? { units: c.units } : {}), runs: t.length, values: c.values.length, ...(v.length ? { mean: v.reduce((a, x) => a + x, 0) / v.length, min: Math.min(...v), max: Math.max(...v) } : {}) };
+  });
+  if (!spec) {
+    const cs = summary(study);
+    put({ file, covariates: cs });
+    if (!cs.length) { out('no covariates (add one: doe covariate STUDY id[:units])'); return; }
+    out(table([{ key: 'id', label: 'covariate', align: 'left' }, { key: 'name', label: 'name', align: 'left' }, { key: 'units', label: 'units', align: 'left' }, { key: 'runs', label: 'runs with a value' }, { key: 'mean', label: 'mean' }, { key: 'range', label: 'range', align: 'left' }],
+      cs.map(c => ({ ...c, units: c.units ?? '', mean: c.mean ?? '', range: c.runs ? `${num(c.min, 5)} … ${num(c.max, 5)}` : '' }))));
+    const n = study.design?.runs.length ?? 0;
+    for (const c of cs) if (n && c.runs < n) out(`${c.id}: no value for ${n - c.runs} of the ${n} runs (they are left out of a model with ${c.id})`);
+    return;
+  }
+  const c = covariateSpec(spec), old = (study.covariates ?? []).find(x => x.id === c.id);
+  let next;
+  if (opt.remove) {
+    if (!old) fail(`no covariate "${c.id}" in ${file}`);
+    next = createStudy({ ...study, covariates: study.covariates.filter(x => x.id !== c.id) });
+    out(`${file}: covariate ${c.id} removed${old.values.length ? ` with its ${old.values.length} value(s)` : ''}`);
+  } else {
+    const nu = { ...(old ?? { values: [] }), ...c, ...(opt.name !== undefined ? { name: String(opt.name) } : {}) };
+    next = createStudy({ ...study, covariates: old ? study.covariates.map(x => (x.id === c.id ? nu : x)) : [...(study.covariates ?? []), nu] });
+    out(`${file}: covariate ${c.id}${nu.units ? ` (${nu.units})` : ''} ${old ? 'updated' : 'added'}${old ? '' : `: fill in its column on the run sheet (doe sheet), import it with the results, then use it in a formula ("y ~ … + ${c.id}")`}`);
+  }
+  save(file, next);
+  put({ file, covariates: summary(next) });
+}
+
+// the covariates of a fit (issue #82): the coding, the slope per unit, the runs left out
+function covariateLines(fit) {
+  const cs = covariateSlopes(fit);
+  if (!cs.length) return;
+  const link = fit.kind === 'glmm' || (fit.noise && fit.noise !== 'normal');
+  for (const c of cs) out(`covariate ${c.id}${c.units ? ` (${c.units})` : ''}: mean ${num(c.mean, 5)}, ${num(c.min, 5)} … ${num(c.max, 5)}; coded (${c.id} − ${num(c.mean, 5)}) / ${num(c.halfRange, 5)}`
+    + (Number.isFinite(c.slope) ? `; slope ${num(c.slope, 4)} ± ${num(c.slopeSe, 3)} per ${c.units || 'unit'}${link ? ' (on the link scale)' : ''}${c.interacts ? ' at the centre of the factors' : ''}` : ''));
+  out('the other terms are at the mean of the covariate' + (cs.length > 1 ? 's' : ''));
+  if (fit.dropped?.length) out(`note: ${droppedNote(fit.dropped)}`);
+  put({ covariates: cs.map(c => ({ id: c.id, ...(c.units ? { units: c.units } : {}), n: c.n, mean: c.mean, min: c.min, max: c.max, halfRange: c.halfRange, slope: c.slope, slopeSe: c.slopeSe, interacts: c.interacts })),
+    ...(fit.dropped?.length ? { dropped: fit.dropped } : {}) });
 }
 
 function cmdDesign({ pos, opt }) {
@@ -298,7 +355,7 @@ function cmdDesign({ pos, opt }) {
   else if (opt.lhs) d = lhsDesign(study, { ...(opt.runs ? { runs: int(opt.runs, 'runs') } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
   else fail('design: choose --full, --runs N, --generators …, --pb, --ccd or --bbd');
   const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
-  const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed, ...(opt['no-split-plot'] && htc.some(Boolean) ? { randomise: 'complete' } : {}) }), observations: [], ...platesWithoutWells(study) });
+  const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed, ...(opt['no-split-plot'] && htc.some(Boolean) ? { randomise: 'complete' } : {}) }), observations: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study) });
   save(file, next);
   put({ file, design: { kind: d.kind, params: d.params, randomisation: next.design.randomisation, seed, runs: next.design.runs } });
   out(`${file}: ${d.kind}, ${next.design.runs.length} runs, randomisation ${next.design.randomisation}, seed ${seed}`);
@@ -352,7 +409,7 @@ function cmdMixtureDesign(file, study, opt) {
   const d = mixtureDesign(study, { kind, degree: opt.degree ? int(opt.degree, 'degree') : 2, axial: !!opt.axial, centre: opt.centre ? int(opt.centre, 'centre') : 0,
     replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1, ...(opt.runs ? { runs: int(opt.runs, 'runs') } : {}), ...(opt.model ? { model: String(opt.model) } : {}),
     ...(opt.criterion ? { criterion: String(opt.criterion) } : {}), seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed });
-  const next = createStudy({ ...study, design: d, observations: [], ...platesWithoutWells(study) });
+  const next = createStudy({ ...study, design: d, observations: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study) });
   save(file, next);
   put({ file, design: { ...next.design, seed: d.params.seed } });
   const M = mixtureOf(next);
@@ -388,7 +445,7 @@ function cmdDoseDesign(file, study, opt) {
   const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
   let next;
   if (stage) next = addDoseStage(study, { doses, replicates: reps, seed, params });
-  else next = createStudy({ ...study, design: doseDesign(study, { dose, curve, doses, replicates: reps, seed, params }), observations: [], ...platesWithoutWells(study) });
+  else next = createStudy({ ...study, design: doseDesign(study, { dose, curve, doses, replicates: reps, seed, params }), observations: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study) });
   save(file, next);
   const roles = doseRoles(next), n = next.design.runs.length;
   put({ file, design: { ...next.design, seed }, runs: n });
@@ -520,8 +577,8 @@ function cmdImport({ pos, opt }) {
   const imp = importResults(study, text);
   for (const p of imp.problems) out(`${p.severity.padEnd(7)} ${p.line ? `line ${p.line}${p.column ? `, ${p.column}` : ''}: ` : ''}${p.message}`);
   const nerr = imp.problems.filter(p => p.severity === 'error').length;
-  put({ file, format: imp.format, values: imp.observations.length, ...(imp.readings?.length ? { controlReadings: imp.readings.length } : {}), problems: imp.problems, imported: false });
-  out(`${imp.observations.length} value(s) read (${imp.format} format)${imp.readings?.length ? ` and ${imp.readings.length} control-well reading(s)` : ''}${nerr ? `, ${nerr} error(s)` : ''}`);
+  put({ file, format: imp.format, values: imp.observations.length, ...(imp.covariates?.length ? { covariateValues: imp.covariates.length } : {}), ...(imp.readings?.length ? { controlReadings: imp.readings.length } : {}), problems: imp.problems, imported: false });
+  out(`${imp.observations.length} value(s) read (${imp.format} format)${imp.covariates?.length ? `, ${imp.covariates.length} covariate value(s)` : ''}${imp.readings?.length ? ` and ${imp.readings.length} control-well reading(s)` : ''}${nerr ? `, ${nerr} error(s)` : ''}`);
   if (opt['dry-run']) { out('dry run: study not changed'); return; }
   if (nerr && !opt.force) fail('not imported because of the errors above (fix the file, or --force to import the valid values)');
   const next = applyResults(study, imp, { mode: opt.mode ?? 'replace', force: !!opt.force });
@@ -539,6 +596,7 @@ function printGLM(study, fit, opt) {
   if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this fit treats all runs as independent, so the tests of whole-plot effects are too optimistic (drop --random none for the random whole-plot effect)');
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  covariateLines(fit);
   out('');
   const ci = glmConfint(fit, { method: opt.wald || fit.firth ? 'wald' : 'profile' });
   const big = Math.max(...fit.coef.filter(Number.isFinite).map(Math.abs), 1e-300), tidy = (v) => (Number.isFinite(v) && Math.abs(v) < 1e-10 * big ? 0 : v);
@@ -587,6 +645,7 @@ function printGLMM(study, formula, random, opt) {
   if (fit.theta !== undefined) out(`θ = ${num(fit.theta, 4)} (s.e. ${num(fit.thetaSE, 3)}): within a ${inner}, a count varies as μ + μ²/θ`);
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  covariateLines(fit);
   out('');
   const ci = glmmConfint(fit);
   const rows = fit.columns.map((c, j) => ({ term: c, est: fit.coef[j], se: fit.se[j], z: fit.z[j], df: fit.df[j], p: fit.p[j], ci: ci.find(x => x.name === c) })).filter(r => !Number.isNaN(r.est));
@@ -690,6 +749,7 @@ function cmdFit({ pos, opt }) {
   if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this least-squares fit treats all runs as independent, so the standard errors and tests of whole-plot effects are too optimistic (drop --ols for the mixed model)');
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  covariateLines(fit);
   out('');
   // round-off (|b| < 1e-10 of the largest) shown as 0, so outputs do not depend on the platform's last bits
   const big = Math.max(...fit.coef.filter(Number.isFinite).map(Math.abs), 1e-300), tidy = (v) => (Number.isFinite(v) && Math.abs(v) < 1e-10 * big ? 0 : v);
@@ -761,10 +821,12 @@ function cmdFit({ pos, opt }) {
 }
 
 // "A=15,B=2" → { A: 15, B: 2 } in natural units (categorical levels as written)
-function parseSettings(study, text) {
+function parseSettings(study, text, { covariates = false } = {}) {
   const res = {};
   for (const part of String(text).split(',')) {
     const [id, v] = part.split('=').map(x => x?.trim());
+    // a covariate's value (predict): optional — without it, the prediction is at its mean
+    if (covariates && study.covariates?.some(c => c.id === id)) { res[id] = Number(v); if (v === undefined || v === '' || !Number.isFinite(res[id])) fail(`${id}: "${v}" is not a number`); continue; }
     const f = study.factors.find(x => x.id === id);
     if (!f) fail(`unknown factor "${id}" in "${text}"`);
     if (f.type === 'categorical') { if (!f.levels.includes(v)) fail(`${id}: "${v}" is not one of ${f.levels.join(', ')}`); res[id] = v; }
@@ -820,7 +882,7 @@ function mixedFor(study, formula, opt) {
 function cmdPredict({ pos, opt }) {
   const [file, formula] = pos, study = load(file);
   if (!formula) fail('predict: give the formula of the model to predict from');
-  const at = list(opt.at).map(t => parseSettings(study, t));
+  const at = list(opt.at).map(t => parseSettings(study, t, { covariates: true }));
   if (!at.length) fail('predict: give settings with --at "A=…,B=…"');
   const mixed = mixedFor(study, formula, opt);
   if (mixed) {
@@ -830,6 +892,7 @@ function cmdPredict({ pos, opt }) {
     const what = `${runs > 1 ? `mean of ${runs} runs${mixed.random.some(r => r.id === 'wholePlot') ? (sep ? ', each in its own whole plot' : ' in one new whole plot') : ''}` : 'one new run'}, measured like the others`;
     out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean, KR)', align: 'left' }, { key: 'pi', label: `95% PI (${what})`, align: 'left' }],
       at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)} (df ${num(p[i].predDf, 3)})` }))));
+    covariateMeanNote(mixed, at);
     out(`mixed model: the prediction interval includes ${mixed.random.map(r => r.name.toLowerCase()).join(', ')} and residual variation (Satterthwaite df)${mixed.positionTerms.length ? '; position terms averaged over the sites' : ''}`);
     return;
   }
@@ -848,6 +911,7 @@ function cmdPredict({ pos, opt }) {
     out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: `typical ${gn}` }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'marg', label: `average over ${gns}` }, { key: 'pi', label: `95% PI (${what}, new ${gn})`, align: 'left' }],
       at.map((s, i) => ({ at: showSettings(s), fit: q[i].fit, ci: `${num(q[i].lower)} … ${num(q[i].upper)}`, marg: q[i].marginal, pi: `${num(q[i].predLower)} … ${num(q[i].predUpper)}` }))));
     const anyS = R.some(r => r.sigma > 0);
+    covariateMeanNote(fit, at);
     out(`${noiseOf(fit).label} with random ${gn} intercept${nested ? 's' : ''} (σ = ${R.map(r => num(r.sigma, 4)).join(', ')}): "typical" is a ${gn} whose effect${nested ? 's are' : ' is'} 0 on the ${fit.link} scale; the average over ${gns}${anyS ? ' differs from it because the scale is not linear' : ' is the same (σ = 0)'}; the prediction interval includes ${nested ? 'the effects of a new ' + R.map(r => r.name).join(' and a new ') : `a new ${gn}'s effect`}`);
     return;
   }
@@ -863,6 +927,7 @@ function cmdPredict({ pos, opt }) {
     const what = prop ? `one run of ${po.trials ?? 'the typical number of'} trials` : `one run, exposure ${po.exposure ?? 1}`;
     out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: prop ? 'proportion' : fit.offset.some(v => v !== 0) ? 'rate (per unit exposure)' : 'mean count' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: `95% PI (${what})`, align: 'left' }],
       at.map((s, i) => ({ at: showSettings(s), fit: q[i].fit, ci: `${num(q[i].lower)} … ${num(q[i].upper)}`, pi: `${num(q[i].predLower)} … ${num(q[i].predUpper)}` }))));
+    covariateMeanNote(fit, at);
     out(`${noiseOf(fit).label}: the mean's interval is computed on the ${fit.link} scale and transformed back; the prediction interval is for what a new run would give${prop ? ' (successes / trials)' : ' (count / exposure)'}, allowing for the uncertainty in the fit`);
     return;
   }
@@ -870,6 +935,13 @@ function cmdPredict({ pos, opt }) {
   out(table([{ key: 'at', label: 'settings', align: 'left' }, { key: 'fit', label: 'predicted' }, { key: 'ci', label: '95% CI (mean)', align: 'left' }, { key: 'pi', label: '95% PI (one run)', align: 'left' }],
     at.map((s, i) => ({ at: showSettings(s), fit: p[i].fit, ci: `${num(p[i].lower)} … ${num(p[i].upper)}`, pi: `${num(p[i].predLower)} … ${num(p[i].predUpper)}` }))));
   if (fit.model.terms.some(t => t.block)) out(fit.model.terms.some(t => t.position) ? '(for the average block and an average well)' : '(for the average block)');
+  covariateMeanNote(fit, at);
+}
+
+// predictions without a value for a covariate of the model are at its mean
+function covariateMeanNote(fit, at) {
+  const cs = (fit.covariates ?? []).filter(c => at.some(s => s[c.id] === undefined));
+  if (cs.length) out(`(${cs.map(c => `${c.id} at its mean, ${num(c.mean, 5)}${c.units ? ` ${c.units}` : ''}`).join('; ')}, where not given)`);
 }
 
 function cmdPower({ pos, opt }) {
@@ -989,6 +1061,7 @@ function printMixed(study, formula, random, opt) {
   out(`mixed model (REML): ${m.n} readings from ${nRuns} runs; random effects: ${m.random.map(r => `${r.name} (${new Set(r.labels).size})`).join(', ')}; residual = ${m.random.some(r => r.id === 'wafer') ? 'within wafer (sites, repeats)' : m.random.some(r => r.id === 'run') ? 'within run' : 'run to run'}`);
   if (!m.converged) out('warning: the REML optimisation did not fully converge');
   if (m.aliased.length) out(`aliased (not estimable): ${m.aliased.join(', ')}`);
+  covariateLines(m);
   const total = m.varcomp.reduce((a, v) => a + v.variance, 0);
   put({ kind: 'mixed', response: m.response, formula: `${m.response} ~ ${m.model.terms.map(t => t.label).join(' + ') || '1'}`, n: m.n, runs: nRuns, converged: m.converged, aliased: m.aliased, REML: m.REML,
     random: m.random.map(r => ({ id: r.id, name: r.name, levels: new Set(r.labels).size })), varcomp: m.varcomp, boundary: m.boundary, units: 'coded',
@@ -1544,7 +1617,7 @@ function cmdReport({ pos, opt }) {
 // ---------------------------------------------------------------- exercises (§16.2)
 
 // an exercise as stored in a study (self-study) or a key file (class mode), with its study
-const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [], ...platesWithoutWells(study) }) });
+const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study) }) });
 const loadKey = (file) => {
   const k = JSON.parse(readFileSync(file, 'utf8'));
   if (k.format !== 'aikidoe-exercise/1' || !k.truth) fail(`${file} is not an exercise key`);
@@ -1700,6 +1773,7 @@ function cmdInfo({ pos }) {
   out(table([{ key: 'id', label: 'factor', align: 'left' }, ...(named ? [{ key: 'name', label: 'name', align: 'left' }] : []), { key: 'range', label: 'range / levels', align: 'left' }, { key: 'note', label: '', align: 'left' }],
     s.factors.map(f => ({ ...f, range: f.type === 'categorical' ? f.levels.join(', ') : `${num(f.low, 6)} … ${num(f.high, 6)}${f.units ? ' ' + f.units : ''}`, note: [f.transform === 'log' ? 'log' : '', f.htc ? 'hard to change' : ''].filter(Boolean).join(', ') }))));
   out(`responses: ${s.responses.map(r => r.id + (r.units ? ` (${r.units})` : '') + (r.derived ? ` [wafer ${r.derived.stat} of ${r.derived.from}]` : '') + (r.measurement ? ` [σ_meas ${num(r.measurement.sigma, 3)}${r.measurement.pctGRR !== undefined ? `, GRR ${num(r.measurement.pctGRR, 3)} %` : ''}]` : '')).join(', ') || 'none'}`);
+  if (s.covariates?.length) out(`covariates (measured, not set): ${s.covariates.map(c => `${c.id}${c.units ? ` (${c.units})` : ''}${s.design ? ` [${new Set(c.values.map(v => v.run)).size} runs]` : ''}`).join(', ')}`);
   if (s.sites) out(`sites: ${s.sites.scheme}, ${s.sites.positions.length} positions${s.sites.diameter ? `, ${s.sites.diameter} mm wafer` : ''}`);
   if (s.mixture) out(`mixture: ${s.mixture.components.join(' + ')} = ${s.mixture.total}${isSimplexRegion(s) ? '' : ' (a constrained region: L-pseudo-components)'}`);
   if (s.plates) out(`plates: ${s.plates.rows} × ${s.plates.cols}, ${plateNumbers(s).length} in use, layout ${s.plates.layout}${s.plates.controls.length ? `, controls ${s.plates.controls.map(c => `${c.id} ×${c.perPlate}`).join(', ')}` : ''}`);
@@ -1713,7 +1787,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
+const COMMANDS = { covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

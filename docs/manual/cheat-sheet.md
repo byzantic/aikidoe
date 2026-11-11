@@ -66,6 +66,8 @@ before acting.
 - Follow the randomised run order; it protects against drift you do not know about.
 - On plates, follow the plate map: never "tidy" the layout into rows of conditions.
 - Keep everything not in the design as constant as you can, and write down what you could not.
+  What you can measure but not hold — room temperature, a starting weight, the lot's age —
+  record at each run as a [covariate](analysis.md#covariates).
 - Record the result for each run straight away, with anything unusual in the note.
 - A failed run is `NA`, not a guess and not a quiet repeat.
 - Do not adjust settings between runs to "help" the process.
@@ -78,6 +80,8 @@ before acting.
   measurements: set the response's kind so it is fitted as counts or proportions
   ([counts and proportions](analysis.md#counts-and-proportions)), and check for overdispersion
   and separation.
+- A covariate you recorded goes in the model by name; judge the terms by type II tests, and the
+  factors' effects are then at the average covariate.
 - Check the residuals: against fitted values, run order, and a normal plot.
 - State aliasing with every conclusion from a fraction.
 - Report effects with confidence intervals, not only p-values; choosing the model from the same data

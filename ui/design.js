@@ -10,7 +10,7 @@ import { plackettBurman, correlationTable, PB_RUNS } from '../js/design/pb.js';
 import { ccd, boxBehnken } from '../js/design/rsm.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
 import * as T from '../js/design/twolevel.js';
-import { createStudy, feasible, decode } from '../js/study.js';
+import { createStudy, feasible, decode, covariatesWithoutValues } from '../js/study.js';
 import { definitiveScreening, dsdOrder } from '../js/design/dsd.js';
 import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
 import { parseFormula, modelMatrix } from '../js/model/formula.js';
@@ -146,7 +146,7 @@ export function render(ctx) {
     const seed = ui.seed ?? study.seed;
     const make = () => {
       const design = toStudyDesign(study, d, { seed });
-      const next = createStudy({ ...study, seed, design, observations: [], ...platesWithoutWells(study), history: [{ stage: 'design', runs: design.runs.map(r => r.run), note: `${cand.label}, ${design.runs.length} runs` }] });
+      const next = createStudy({ ...study, seed, design, observations: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study), history: [{ stage: 'design', runs: design.runs.map(r => r.run), note: `${cand.label}, ${design.runs.length} runs` }] });
       state.ui.design = { ...ui, id: cand.id };
       state.step = 'run';
       setDoc(structuredClone(next));

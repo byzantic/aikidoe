@@ -6,7 +6,8 @@ Models are written as formulas in R's notation over the factor ids:
 `yield ~ cat + temp + conc + cat:temp`. The shortcuts `main`, `2fi` and `quadratic` stand for the
 main effects, main effects plus all two-factor interactions, and the full quadratic; `(A+B+C)^2`
 expands to the main effects and their two-factor interactions, `A*B` to `A + B + A:B`, and
-`I(T^2)` is a squared term. The full syntax is in [formula syntax](reference-formulas.md).
+`I(T^2)` is a squared term. A [covariate](#covariates) is a term like a factor, by its id. The
+full syntax is in [formula syntax](reference-formulas.md).
 
 The default model is what the design was built for: main effects for a resolution III or IV
 fraction and for Plackett–Burman, two-factor interactions for resolution V, the full quadratic for
@@ -87,6 +88,155 @@ The result is a suggestion: every step is shown, and any term can be kept (`--ke
 **confidence interval** (for the mean response) and a 95 % **prediction interval** (for one new
 run — wider, as it includes the run-to-run noise). Before acting on a prediction, confirm it:
 [confirmation runs](designs-sequential.md#confirmation-runs).
+
+## Covariates
+
+A **covariate** is something you measure at each run but do not set: the starting weight of an
+animal, the room temperature, the passage number of the cells, the age of a reagent, the thickness
+of the incoming film. It moves the response, so it adds to the scatter; put it in the model and
+that part of the scatter is explained instead. Two things follow:
+
+- **the noise falls**, so smaller effects of the factors show;
+- **the factors are compared at the same value of the covariate**. Randomisation balances a
+  covariate between the settings only on average; in a small experiment the high-temperature runs
+  can happen to get the denser seed cultures, and without the covariate that looks like an effect
+  of temperature.
+
+To use one:
+
+1. **Define** it: *Covariates → + covariate* on the Define step, `--covariate id[:units]` with
+   `doe init`, or `doe covariate STUDY id[:units]` later.
+2. **Record** it: the run sheet has a column for it, filled in like a result, and a results file is
+   read the same way (in long format, the covariate's id in the response column). A response
+   measured per wafer has a row per wafer, and the value is that wafer's.
+3. **Add it to the model**: the *+ id* button under the formula on the Analyse step, or its id in
+   the formula, `titre ~ temp*feed + pH + vcd`. The shortcuts `main`, `2fi` and `quadratic` are over
+   the factors only: a covariate is always named.
+
+```console
+$ doe init titre.aikidoe.json --factor temp:34:37:°C --factor pH:6.8:7.2 --factor feed:2:4 --response titre:g/L --covariate vcd:1e6/mL --seed 82
+created titre.aikidoe.json: 3 factors, 1 responses, 1 covariate, seed 82
+$ doe covariate titre.aikidoe.json
+covariate  name  units   runs with a value  mean  range
+---------  ----  ------  -----------------  ----  -----
+vcd        vcd   1e6/mL                  0
+```
+
+The example *Fed-batch titre* (in the app's examples, and `examples/titre-covariate.aikidoe.json`)
+is a 2³ factorial in temperature, pH and feed rate, run twice. The density of the seed culture at
+inoculation, `vcd`, was measured for each run. Without it:
+
+```console
+$ doe fit examples/titre-covariate.aikidoe.json "titre ~ temp*feed + pH"
+titre ~ temp + feed + pH + temp:feed
+16 runs, 5 estimable coefficients, 11 residual df
+
+term         estimate  std. error       t         p
+-----------  --------  ----------  ------  --------  ---
+(Intercept)     3.244     0.04795   67.66   <0.0001  ***
+temp           0.3519     0.04795   7.338   <0.0001  ***
+feed           0.3769     0.04795    7.86   <0.0001  ***
+pH           -0.09188     0.04795  -1.916    0.0817  .
+temp:feed      0.2319     0.04795   4.836  0.000523  ***
+coded units: each continuous factor runs from −1 (low) to +1 (high)
+
+σ = 0.1918   R² = 0.9284   adjusted R² = 0.9024   predicted R² = 0.8486
+F = 35.67 on 4 and 11 df, p <0.0001
+
+ANOVA (type I, sequential)
+source         df  sum of sq.  mean sq.       F         p
+-------------  --  ----------  --------  ------  --------
+temp            1       1.981     1.981   53.85   <0.0001
+feed            1       2.273     2.273   61.77   <0.0001
+pH              1      0.1351    0.1351   3.671    0.0817
+temp:feed       1      0.8603    0.8603   23.38  0.000523
+Residuals      11      0.4047   0.03679
+  lack of fit   3     0.05072   0.01691  0.3821     0.769
+  pure error    8      0.3539   0.04424
+```
+
+and with it, σ is a third of what it was and the pH effect, about the same size as before, is
+now clear:
+
+```console
+$ doe fit examples/titre-covariate.aikidoe.json "titre ~ temp*feed + pH + vcd" --anova 2
+titre ~ temp + feed + pH + vcd + temp:feed
+16 runs, 6 estimable coefficients, 10 residual df
+covariate vcd (10⁶ cells/mL): mean 0.51375, 0.33 … 0.62; coded (vcd − 0.51375) / 0.145; slope 2.156 ± 0.207 per 10⁶ cells/mL
+the other terms are at the mean of the covariate
+
+term         estimate  std. error       t        p
+-----------  --------  ----------  ------  -------  ---
+(Intercept)     3.244     0.01462     222  <0.0001  ***
+temp           0.3438     0.01464   23.49  <0.0001  ***
+feed           0.3823     0.01463   26.14  <0.0001  ***
+pH            -0.1053     0.01467  -7.179  <0.0001  ***
+vcd            0.3126     0.03003   10.41  <0.0001  ***
+temp:feed      0.1942     0.01506   12.89  <0.0001  ***
+coded units: each continuous factor runs from −1 (low) to +1 (high)
+
+σ = 0.05847   R² = 0.994   adjusted R² = 0.9909   predicted R² = 0.9804
+F = 328.8 on 5 and 10 df, p <0.0001
+
+ANOVA (type II)
+source     df  sum of sq.  mean sq.      F        p
+---------  --  ----------  --------  -----  -------
+temp        1        1.86      1.86    544  <0.0001
+feed        1       2.355     2.355  688.9  <0.0001
+pH          1      0.1762    0.1762  51.54  <0.0001
+vcd         1      0.3705    0.3705  108.4  <0.0001
+temp:feed   1      0.5682    0.5682  166.2  <0.0001
+Residuals  10     0.03419  0.003419
+```
+
+**Reading the fit.** In the model the covariate is centred at its mean over the runs used and
+scaled by half its range there (the `covariate` line of the output, and the note under the formula in
+the app). So:
+
+- the intercept and the other coefficients are **at the mean of the covariate**: the effects of
+  the factors are adjusted effects;
+- the covariate's coefficient is the change in the response over half its observed range, on the
+  same footing as a factor's. The **slope** per unit (here per 10⁶ cells/mL) is printed with its
+  standard error;
+- a run with no value for the covariate is left out of the fit, and named.
+
+**Tests.** A covariate is not balanced against the factors as they are against each other, so the
+order of the terms matters for the sequential (type I) table. Use **type II**: each term tested
+after all the others that do not contain it.
+
+**Predictions** are at the mean of the covariate, unless you give a value: for the batch in hand,
+whose seed density you have just measured, the second line.
+
+```console
+$ doe predict examples/titre-covariate.aikidoe.json "titre ~ temp*feed + pH + vcd" --at "temp=37,pH=6.8,feed=4" --at "temp=37,pH=6.8,feed=4,vcd=0.6"
+settings                          predicted  95% CI (mean)  95% PI (one run)
+--------------------------------  ---------  -------------  ----------------
+temp=37, pH=6.8, feed=4                4.27  4.197 … 4.343  4.121 … 4.419
+temp=37, pH=6.8, feed=4, vcd=0.6      4.456  4.375 … 4.536  4.303 … 4.609
+(vcd at its mean, 0.51375 10⁶ cells/mL, where not given)
+```
+
+The best settings on the Optimise step, the contour of the fitted response, and the report use
+the mean in the same way.
+
+**Does the slope depend on a factor?** The model above has one slope for every setting. To check,
+add the interaction — `temp:vcd`, or `temp*vcd` — and look at its test. If it matters, the effect
+of that factor depends on the covariate, and the factor's own coefficient is its effect at the
+mean of the covariate only.
+
+**What a covariate must not be.**
+
+- **Not something the factors change.** Measure it before the settings are applied (the seed
+  density, not the cell density on day 3). If the treatment moves the covariate, adjusting for it
+  removes part of the treatment's effect.
+- **Not a replacement for randomisation or blocking.** If you can hold something constant, or
+  block on it, do that; a covariate is for what is left over.
+- **Not a licence to extrapolate.** The slope is known only over the range the covariate took.
+
+Counts and proportions take covariates in the same way (the slope is then on the model's scale:
+the log of the rate, or the log odds), and so does the mixed model of split-plots and of wafers
+and sites, where each reading takes its own wafer's value when the covariate was measured per
+wafer.
 
 ## Fitted response
 

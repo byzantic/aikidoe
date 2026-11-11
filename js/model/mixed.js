@@ -28,6 +28,7 @@ import { withBlockTerm, anova } from './fit.js';
 import { fitOLS } from './ols.js';
 import { noiseModelOf } from './noise.js';
 import { observationsOf, withPositionTerms } from './sites.js';
+import { withCovariates } from './covariates.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
 
@@ -493,12 +494,15 @@ function buildMixed(study, formula, opts) {
   const rows00 = observationTable(study, response);
   if (!rows00.length) throw new Error(`no results for ${response} yet`);
   // position terms (radius2, edge, slot …) become factors when the formula uses them
-  const pos = withPositionTerms(study, formula, rows00);
+  const pos0 = withPositionTerms(study, formula, rows00);
+  // covariates in the formula (issue #82): each reading takes its wafer's own value when there is one
+  const cov = withCovariates(study, formula, pos0.rows, pos0.factors);
+  const pos = { ...pos0, factors: cov.factors, rows: cov.rows };
   const parsed = parseFormula(formula, pos.factors);
   const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, pos.rows, opts);
   const random = randomEffects(b.rows, opts.random ?? 'auto');
   const mmx = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
-  return { response, pos, b, random, mmx, y: b.rows.map(r => r.y) };
+  return { response, pos, b, random, mmx, y: b.rows.map(r => r.y), cov };
 }
 
 /** Maximum-likelihood fit of a formula to a study (for AICc comparisons): mlFit's result plus the model. */
@@ -508,14 +512,15 @@ export function fitMixedML(study, formula, opts = {}) {
 }
 
 export function fitMixedModel(study, formula, opts = {}) {
-  const { response, pos, b, random, mmx, y } = buildMixed(study, formula, opts);
+  const { response, pos, b, random, mmx, y, cov } = buildMixed(study, formula, opts);
   const fit = reml(mmx.X, y, random.map(r => ({ name: r.name, labels: r.labels })), { columns: mmx.columns, assign: mmx.assign, terms: b.model.terms, level: opts.level ?? 0.95 });
   const naive = fitOLS(mmx, y);
   const naiveAnova = naive.dfRes > 0 ? anova(naive, 3) : [];
   fit.terms.forEach(t => { const a = naiveAnova.find(x => x.term === t.term); if (a) { t.naiveF = a.F; t.naiveDf = naive.dfRes; t.naiveP = a.p; } });
   // marginal fitted values Xβ̂ and residuals y − Xβ̂ (random effects not removed)
   const fitted = mmx.X.map(r => r.reduce((acc, v, j) => acc + (Number.isFinite(fit.coef[j]) ? v * fit.coef[j] : 0), 0));
-  return { kind: 'mixed', ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, naive, positionTerms: pos.used, fitted, residuals: y.map((v, i) => v - fitted[i]) };
+  return { kind: 'mixed', ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, naive, positionTerms: pos.used, fitted, residuals: y.map((v, i) => v - fitted[i]),
+    ...(cov.used.length ? { covariates: cov.used, dropped: cov.dropped } : {}) };
 }
 
 // ---------------------------------------------------------------- predictions
