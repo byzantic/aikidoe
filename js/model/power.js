@@ -35,18 +35,26 @@ import { rng } from '../design/rng.js';
  * coef (optional anticipated coefficient per column, overriding Δ/2), noise (a noise model id,
  * default 'normal') and mean (the anticipated mean per run, for noise models whose information
  * depends on it).
+ * Covariates (issue #82): rho, the correlation between the response and a covariate measured at
+ * each run (for several, their multiple correlation R, with covariates their number): the residual
+ * σ becomes σ√(1 − ρ²) and the residual df fall by the number of covariates — the power of the
+ * analysis with the covariate in the model, when it is balanced against the factors (uncorrelated
+ * with the model's columns; js/design/allocate.js arranges that for values known in advance).
  * Returns { n, rank, dfRes, terms: [{ term, df, lambda, power }], parameters: [{ name, term, lambda, power }] }.
  * Terms that are not estimable, nuisance (block) terms and, with dfRes = 0, everything get power NaN.
  */
-export function powerFromMatrix(mm, { delta = 2, sigma = 1, alpha = 0.05, coef, wholePlot, eta = 1, noise = 'normal', mean } = {}) {
+export function powerFromMatrix(mm, { delta = 2, sigma: sigma0 = 1, alpha = 0.05, coef, wholePlot, eta = 1, noise = 'normal', mean, rho = 0, covariates = rho ? 1 : 0 } = {}) {
   const { columns, assign, model } = mm;
-  if (!(sigma > 0)) throw new Error('σ must be positive');
+  if (!(sigma0 > 0)) throw new Error('σ must be positive');
+  if (!(rho > -1 && rho < 1)) throw new Error('ρ must be between −1 and 1');
+  if (rho && wholePlot) throw new Error('a covariate with a split-plot design: not yet (its effect on each stratum depends on where it varies)');
+  const sigma = sigma0 * Math.sqrt(1 - rho * rho);
   if (!(alpha > 0 && alpha < 1)) throw new Error('α must be between 0 and 1');
   // rows weighted by their information (W^½ X), when the noise model's weights are not all equal
   const w = noiseModel(noise).weights(mm.X, { mean });
   const X = w ? mm.X.map((r, i) => r.map(v => v * Math.sqrt(w[i]))) : mm.X;
   const n = X.length, f = qr(X), rank = f.rank;
-  let dfRes = n - rank, V = f.unscaledCov(), dfOf = () => dfRes, strata = null;
+  let dfRes = n - rank - covariates, V = f.unscaledCov(), dfOf = () => dfRes, strata = null;
   const aliased = new Set(f.aliased);
   if (wholePlot) {
     // split-plot: GLS information Xᵀ V⁻¹ X with V = I + η Z Zᵀ (σ² units), and each term tested in
@@ -87,7 +95,7 @@ export function powerFromMatrix(mm, { delta = 2, sigma = 1, alpha = 0.05, coef, 
   // coefficients other than the intercept (whose "power" against zero means nothing here)
   const parameters = columns.map((name, j) => ({ j, name })).filter(c => assign[c.j] >= 0)
     .map(({ j, name }) => ({ name, term: model.terms[assign[j]].label, ...(model.terms[assign[j]].block ? { lambda: NaN, power: NaN } : pw([j])) }));
-  return { n, rank, dfRes, alpha, sigma, terms, parameters, ...(strata ? { strata, eta } : {}) };
+  return { n, rank, dfRes, alpha, sigma: sigma0, terms, parameters, ...(strata ? { strata, eta } : {}), ...(rho ? { rho, covariates, sigmaResidual: sigma } : {}) };
 }
 
 function solveSymMatrix(M) {

@@ -55,7 +55,7 @@ const KEYS = {
   stage: ['stage', 'runs', 'date', 'note', 'params'],
   constraint: ['expr', 'units'],
   covariate: ['id', 'name', 'units', 'values', 'note'],
-  covariateValue: ['run', 'value', 'lot', 'wafer', 'site'],
+  covariateValue: ['run', 'value', 'lot', 'wafer', 'site', 'unit'],
 };
 
 // ---------------------------------------------------------------- JSON with comments
@@ -404,7 +404,8 @@ const RESERVED = ['main', 'quadratic', 'I', 'delta', 'mixlinear', 'mixquadratic'
 /**
  * Covariates (issue #82): variables that are measured but not set — a starting weight, the room
  * temperature, the age of a reagent — [{ id, name, units?, note?, values: [{ run, value, lot?,
- * wafer?, site? }] }]. A value belongs to a run, or to one wafer (lot, site) of it when it was
+ * wafer?, site?, unit? }] }]; unit: the label of the unit (animal, flask, wafer) the run was given,
+ * when units were allocated to runs by their covariate (js/design/allocate.js). A value belongs to a run, or to one wafer (lot, site) of it when it was
  * measured there. Models take them as terms by id (js/model/covariates.js).
  */
 function normCovariates(list, design, errors) {
@@ -430,7 +431,7 @@ function normCovariates(list, design, errors) {
       checkKeys(v, KEYS.covariateValue, vp, errors);
       if (!runs.has(v.run)) errors.push(`${vp}.run: no run ${JSON.stringify(v.run)} in the design`);
       if (!isNum(v.value)) errors.push(`${vp}.value: must be a number (leave the entry out when it was not measured)`);
-      for (const k of ['lot', 'wafer', 'site']) if (v[k] !== undefined && !isLabel(v[k])) errors.push(`${vp}.${k}: must be a number or string`);
+      for (const k of ['lot', 'wafer', 'site', 'unit']) if (v[k] !== undefined && !isLabel(v[k])) errors.push(`${vp}.${k}: must be a number or string`);
       const key = JSON.stringify(['run', 'lot', 'wafer', 'site'].map(k => v[k] ?? null));
       if (seen.has(key)) errors.push(`${vp}: a second value for run ${v.run}${['lot', 'wafer', 'site'].filter(k => v[k] !== undefined).map(k => `, ${k} ${v[k]}`).join('')}`);
       seen.add(key);

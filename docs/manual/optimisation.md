@@ -28,6 +28,10 @@ a value. Each response's prediction is shown with its 95 % confidence interval: 
 from predictions, and the intervals say how sure they are. Confirm the result with
 [confirmation runs](designs-sequential.md#confirmation-runs).
 
+When a model has a [covariate](analysis.md#covariates), everything here is at its mean; give a
+value under *covariates* (`--fix "id=value"` for `doe optimise`) to find the best settings for a
+batch whose covariate you know ([best settings for a covariate value](analysis.md#best-settings-for-a-covariate-value)).
+
 ### Beyond the runs
 
 A fitted model is only supported where there are runs. When the best settings (or settings you

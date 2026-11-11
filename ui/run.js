@@ -72,6 +72,7 @@ export function render(ctx) {
   });
   const label = (key) => {
     const f = study.factors.find(x => x.id === key); if (f) return [f.name, f.units ? h('span', { class: 'muted' }, ` (${f.units})`) : null];
+    const cu = study.covariates?.find(x => `${x.id}.unit` === key); if (cu) return [cu.name, h('span', { class: 'muted' }, ': unit')];
     const cv = study.covariates?.find(x => x.id === key); if (cv) return [cv.name, h('span', { class: 'muted' }, cv.units ? ` (${cv.units}, measured)` : ' (measured)')];
     const c = sheet.resultColumns.find(x => x.header === key);
     if (c?.aux) { const r = study.responses.find(x => x.id === c.response); return [r.name, h('span', { class: 'muted' }, ` (${c.aux}${c.aux === 'exposure' ? ', blank = 1' : ''})`)]; }

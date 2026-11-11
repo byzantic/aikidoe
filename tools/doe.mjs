@@ -18,6 +18,13 @@
 //        pairwise comparisons, Tukey-adjusted (ratios for counts); and for each covariate, whether
 //        its slope is the same at every setting (the model with every factor × covariate
 //        interaction against the model without). Mixed models: Kenward–Roger
+//   allocate STUDY COVARIATE --units FILE.csv [--model "…"] [--within-blocks] [--order] [--dry-run]
+//        a covariate known before the runs (animals' starting weights, flasks' seed densities,
+//        wafers' incoming thickness): which unit goes to which run, so that the covariate is
+//        balanced against the model's effects (R² of the covariate on them near 0). FILE: a column
+//        of unit labels and one of values (more units than runs: the best are used). Records each
+//        run's unit and value. --order: the values are for the positions in the run order (a
+//        forecast for each slot) and the runs are rearranged among them
 //   covariate STUDY id[:units] [--name "…"] | covariate STUDY id --remove | covariate STUDY
 //        a covariate: measured at each run but not set (a starting weight, the room temperature).
 //        Its values go on the run sheet and come back with import, in a column of its own; in a
@@ -67,6 +74,8 @@
 //        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
 //        runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
 //   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
+//        [--rho ρ]   with a covariate correlated ρ with the response (balanced against the factors):
+//                    residual σ√(1 − ρ²), one residual df fewer
 //   power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
 //        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
 //        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
@@ -91,7 +100,8 @@
 //        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
 //   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
 //        best settings by overall desirability over the fitted models; warns when they lie beyond
-//        the runs (outside their convex hull, or a prediction variance over the largest at a run)
+//        the runs (outside their convex hull, or a prediction variance over the largest at a run).
+//        A covariate in --fix ("vcd=0.4"): the best settings for that value of it (else its mean)
 //   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
 //        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
 //        propagation of error and dual-response optimisation (mean on target, minimum s)
@@ -167,6 +177,7 @@ import { controlSummary, plateNumbers, runCapacity, ROLES, platesWithoutWells } 
 import { fitModel, anova, predict } from '../js/model/fit.js';
 import { covariateSlopes, covariateTable, droppedNote } from '../js/model/covariates.js';
 import { adjustedMeans, equalSlopes } from '../js/model/adjusted.js';
+import { allocate, applyAllocation } from '../js/design/allocate.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -399,6 +410,7 @@ function cmdDesign({ pos, opt }) {
     const p = varianceProfile(d.X, { block: d.block, radii: [0, 0.5, 1, Math.max(...d.X.map(r => Math.hypot(...r)))] });
     out(`scaled prediction variance (full quadratic) by radius: ${p.map(x => `ρ ${num(x.radius, 3)}: ${num(x.min, 3)}${x.max - x.min > 1e-6 * x.max ? '–' + num(x.max, 3) : ''}`).join(', ')}`);
   }
+  if (next.covariates?.length) out(`covariates ${next.covariates.map(c => c.id).join(', ')}: measure each before the run's settings can affect it, and record it on the run sheet; known in advance for each unit? doe allocate ${pos[0]} ${next.covariates[0].id} --units FILE.csv balances it against the factors`);
   if (opt.sheet) { writeFileSync(opt.sheet, runSheetCSV(next)); out(`run sheet: ${opt.sheet}`); }
   if (opt.html) { writeFileSync(opt.html, runSheetHTML(next)); out(`printable run sheet: ${opt.html}`); }
 }
@@ -887,6 +899,43 @@ function mixedFor(study, formula, opt) {
   return fitMixedModel(study, formula);
 }
 
+/** Allocate units to runs by a covariate known in advance (issue #82, phase 3). */
+function cmdAllocate({ pos, opt }) {
+  const [file, cid] = pos, study = load(file);
+  if (!cid) fail('allocate: give the covariate, e.g. doe allocate STUDY weight --units mice.csv');
+  const c = (study.covariates ?? []).find(x => x.id === cid) ?? fail(`no covariate "${cid}" in ${file} (add it: doe covariate ${file} ${cid}:units)`);
+  if (!opt.units) fail('allocate: give --units FILE.csv (a column of unit labels and one of values)');
+  const text = readFileSync(String(opt.units), 'utf8');
+  const { header, rows } = parseCSV(text);
+  // the label and value columns: by name if they are there, else the first two
+  const low = header.map(x => x.trim().toLowerCase());
+  const iU = low.findIndex(x => ['unit', 'label', 'id', 'name', 'animal', 'flask', 'wafer', 'position', 'slot'].includes(x)), iV = low.findIndex(x => ['value', cid.toLowerCase(), (c.name ?? '').toLowerCase()].includes(x));
+  const ju = iU >= 0 ? iU : 0, jv = iV >= 0 ? iV : ju === 0 ? 1 : 0;
+  const units = rows.filter(r => r.some(x => String(x).trim() !== '')).map((r, i) => {
+    const v = Number(String(r[jv]).trim());
+    if (String(r[jv]).trim() === '' || !Number.isFinite(v)) fail(`${opt.units}, line ${i + 2}: "${r[jv]}" is not a number`);
+    return { unit: String(r[ju]).trim(), value: v };
+  });
+  const model = opt.model ? String(opt.model) : 'main';
+  let a;
+  try { a = allocate(study, units, { model, withinBlocks: !!opt['within-blocks'], order: !!opt.order, ...(opt.starts ? { starts: int(opt.starts, 'starts') } : {}) }); } catch (e) { fail(e.message); }
+  const vmax = a.vif.reduce((m, v) => Math.max(m, v.vif), 1);
+  out(`${opt.order ? `${units.length} positions in the run order` : `${units.length} units for ${a.assignment.length} runs`}, balanced against ${model}:`);
+  const small = (x, lim) => (Math.abs(x) < lim ? `below ${lim}` : num(x, 3));
+  out(`R² of ${cid} on the model's effects: ${small(a.r2, 0.001)} (a random allocation: ${num(a.random, 3)} here, ${num(a.expected, 3)} on average); an effect's variance grows by ${(vmax - 1) * 100 < 0.1 ? 'less than 0.1' : `at most ${num((vmax - 1) * 100, 3)}`} % with ${cid} in the model`);
+  if (a.maxCorr.column && Math.abs(a.maxCorr.r) >= 0.001) out(`largest correlation with an effect: ${a.maxCorr.column}, ${num(a.maxCorr.r, 3)}`);
+  out('');
+  const byRun = new Map(study.design.runs.map(r => [r.run, r]));
+  const rowsOut = a.assignment.map(x => ({ run: x.run, order: byRun.get(x.run).order, unit: x.unit, value: x.value, settings: showSettings(byRun.get(x.run).settings) }));
+  out(table([{ key: 'run', label: 'run' }, ...(opt.order ? [{ key: 'pos', label: 'new position' }] : []), { key: 'unit', label: opt.order ? 'slot' : 'unit', align: 'left' }, { key: 'value', label: cid }, { key: 'settings', label: 'settings', align: 'left' }],
+    rowsOut.map(r => ({ ...r, pos: r.unit }))));
+  if (a.unused.length) out(`\nnot used: ${a.unused.map(u => `${u.unit} (${u.value})`).join(', ')}`);
+  put({ file, covariate: cid, model, order: !!opt.order, r2: a.r2, random: a.random, expected: a.expected, maxVif: vmax, assignment: a.assignment, unused: a.unused, saved: !opt['dry-run'] });
+  if (opt['dry-run']) { out('\n(dry run: nothing saved)'); return; }
+  save(file, createStudy(applyAllocation(study, cid, a, units)));
+  out(`\nsaved: each run's ${opt.order ? 'value, and the new run order' : 'unit and value of ' + cid} (the run sheet shows them)`);
+}
+
 /** Adjusted means, Tukey comparisons and the test of equal slopes (issue #82, phase 2). */
 function cmdMeans({ pos, opt }) {
   const [file, formula, factorId] = pos, study = load(file);
@@ -1022,10 +1071,13 @@ function cmdPower({ pos, opt }) {
       : `σ = σ_meas = ${num(sm)} (gauge study of ${r.id}) only: the process varies too, so this power is an upper bound — add --sigma-process`);
   }
   const alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target = opt.target !== undefined ? Number(opt.target) : 0.8;
-  const p = studyPower(study, { model, delta, sigma, alpha, ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}) });
+  const rho = opt.rho !== undefined ? Number(opt.rho) : 0;
+  if (!(rho > -1 && rho < 1)) fail(`--rho: "${opt.rho}" is not between −1 and 1`);
+  const p = studyPower(study, { model, delta, sigma, alpha, ...(opt.eta !== undefined ? { eta: Number(opt.eta) } : {}), ...(rho ? { rho } : {}) });
+  if (rho) out(`with a covariate correlated ρ = ${rho} with the response: residual σ = ${num(sigma)}·√(1 − ρ²) = ${num(p.sigmaResidual)}, one residual df spent on it`);
   if (p.strata) out(`split-plot: whole-plot terms tested against the whole-plot error (assumed σ²_wp/σ² = η = ${p.eta}; --eta to change), subplot terms against the residual`);
   out(`power for ${model}: ${p.n} runs, ${p.rank} coefficients, ${p.dfRes} residual df; α = ${alpha}, σ = ${sigma}${typeof delta === 'number' ? `, Δ = ${delta} (low → high)` : ''}`);
-  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, alpha, sigma, delta, target, ...(p.strata ? { strata: p.strata, eta: p.eta } : {}), terms: [] });
+  put({ model, n: p.n, rank: p.rank, dfRes: p.dfRes, alpha, sigma, delta, target, ...(rho ? { rho, sigmaResidual: p.sigmaResidual } : {}), ...(p.strata ? { strata: p.strata, eta: p.eta } : {}), terms: [] });
   if (p.dfRes < 1) { out('no residual degrees of freedom: power is not defined (add runs, or a smaller model)'); return; }
   const det = Object.fromEntries(detectableEffect(p, { power: target }).map(d => [d.term, d]));
   put({ terms: p.terms.filter(t => !t.block).map(t => ({ term: t.term, df: t.df, ...(t.ddf !== undefined ? { ddf: t.ddf } : {}), delta: t.delta, power: t.power, detectable: det[t.term].delta, ratio: det[t.term].ratio })) });
@@ -1418,17 +1470,21 @@ function cmdOptimise({ pos, opt }) {
   if (!models.length) fail('no response with a goal and limits has a model: set goals with "doe goal" and give results');
   const region = opt.region ? String(opt.region) : 'cube';
   if (!['cube', 'sphere'].includes(region)) fail('--region cube or sphere');
-  const fixed = opt.fix ? Object.fromEntries(String(opt.fix).split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? fail(`unknown factor "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })) : {};
+  // a covariate in --fix (issue #82): every prediction at that value, instead of at its mean
+  const fixed = opt.fix ? Object.fromEntries(String(opt.fix).split(',').map(t => { const [k, v] = t.split('=').map(x => x.trim()); const f = study.factors.find(x => x.id === k) ?? (study.covariates ?? []).find(x => x.id === k) ?? fail(`unknown factor or covariate "${k}"`); return [k, f.type === 'categorical' ? v : Number(v)]; })) : {};
   const o = optimiseDesirability(study, models, { region, ...(opt.radius !== undefined ? { radius: Number(opt.radius) } : {}), fixed, seed: study.seed });
   const beyond = beyondRuns(study, models, o.settings);
   put({ models: models.map(m => ({ id: m.id, formula: m.formula, mixed: m.fit.kind === 'mixed' })), region, fixed, settings: o.settings, D: o.D, feasible: o.feasible, beyondRuns: beyond,
-    responses: models.map((m, i) => { const b = m.predictBand(o.settings); return { id: m.id, predicted: o.d[i].y, lower: b.lower, upper: b.upper, d: o.d[i].d, goal: m.spec }; }) });
+    ...(o.held ? { held: o.held } : {}),
+    responses: models.map((m, i) => { const b = m.predictBand({ ...o.settings, ...(o.held ?? {}) }); return { id: m.id, predicted: o.d[i].y, lower: b.lower, upper: b.upper, d: o.d[i].d, goal: m.spec }; }) });
   out(`models: ${models.map(m => m.formula + (m.fit.kind === 'mixed' ? ' (mixed)' : '')).join('; ')}`);
   out(study.mixture ? `region: the mixture (${study.mixture.components.join(" + ")} = ${study.mixture.total}, within the bounds)${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ""}` : `region: ${region}${opt.radius !== undefined ? ` (${region === 'sphere' ? 'radius' : 'half-width'} ${opt.radius} coded)` : ''}${Object.keys(fixed).length ? `; held: ${showSettings(fixed)}` : ''}`);
+  const covIn = [...new Set(models.flatMap(m => (m.fit.covariates ?? []).map(c => c.id)))];
+  if (covIn.length) out(`covariates: ${covIn.map(id => (o.held?.[id] !== undefined ? `${id} = ${o.held[id]} (held)` : `${id} at its mean, ${num(models.flatMap(m => m.fit.covariates ?? []).find(c => c.id === id).mean, 5)}`)).join(', ')}`);
   out(`\nbest settings: ${showSettings(o.settings)}${o.feasible ? '' : '  (violates a constraint)'}`);
   out(`overall desirability D = ${num(o.D, 4)}`);
   out(table([{ key: 'id', label: 'response', align: 'left' }, { key: 'y', label: 'predicted' }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'goal', label: 'goal', align: 'left' }, { key: 'd', label: 'd' }],
-    models.map((m, i) => { const b = m.predictBand(o.settings), sp = m.spec;
+    models.map((m, i) => { const b = m.predictBand({ ...o.settings, ...(o.held ?? {}) }), sp = m.spec;
       return { id: m.id, y: o.d[i].y, ci: `${num(b.lower)} … ${num(b.upper)}`, d: o.d[i].d,
         goal: sp.kind === 'max' ? `max (${sp.low} → ${sp.high})` : sp.kind === 'min' ? `min (${sp.low} ← ${sp.high})` : sp.kind === 'target' ? `target ${sp.target} (${sp.low} … ${sp.high})` : `range ${sp.low} … ${sp.high}` }; })));
   if (o.D === 0) out('D = 0: no settings in the region meet every response\'s acceptable range');
@@ -1845,7 +1901,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
+const COMMANDS = { allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

@@ -15,6 +15,7 @@ import { definitiveScreening, dsdOrder } from '../js/design/dsd.js';
 import { diagnoseCoded, compileModel } from '../js/design/optimal.js';
 import { parseFormula, modelMatrix } from '../js/model/formula.js';
 import { nextStagePanel } from './augment.js';
+import { covariateDesignPanel } from './allocate.js';
 import { platePanel } from './plates.js';
 import { doseDesignPanel } from './dose.js';
 import { mixtureDesignPanel } from './mixture.js';
@@ -65,7 +66,7 @@ export function render(ctx) {
   const { state, setDoc, setUI } = ctx;
   const study = state.study;
   // a mixture: the components add up to a total, so the factorial / response-surface designs do not apply
-  if (study.mixture) return h('div', {}, study.design ? platePanel(ctx) : null, mixtureDesignPanel(ctx));
+  if (study.mixture) return h('div', {}, study.design ? platePanel(ctx) : null, covariateDesignPanel(ctx), mixtureDesignPanel(ctx));
   const next = study.design && study.design.kind !== 'dose-response' ? nextStagePanel(ctx) : null;
   const ui = state.ui.design ??= {};
   const cands = candidates(study, { budget: ui.budget });
@@ -163,7 +164,7 @@ export function render(ctx) {
   // the study's own design, with any stages added since
   let curSpace = null;
   if (study.design && study.design.kind !== 'dose-response') try { curSpace = spacePanel(study, { ui, set, key: 'spaceCurrent', intended: study.design.params?.model ?? (['ccd', 'box-behnken', 'definitive-screening'].includes(study.design.kind) ? 'quadratic' : undefined), title: `Where the runs are: this study's design (${study.design.runs.length} runs)` }); } catch { /* not drawable */ }
-  return h('div', {}, plates, doseDesignPanel(ctx), next, curSpace, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, candSpace, create);
+  return h('div', {}, plates, doseDesignPanel(ctx), covariateDesignPanel(ctx), next, curSpace, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, candSpace, create);
 }
 
 function diagnostics(study, d, modelFor) {
@@ -305,7 +306,10 @@ function powerSection(study, d, cand, ui, set) {
       h('input', { class: 'num', type: 'number', min: 0.1, step: 0.1, value: ratio, 'aria-label': 'effect size', onchange: (e) => setP({ ratio: Number(e.target.value) }) })),
     h('label', { class: 'inline' }, 'α', select([0.01, 0.05, 0.1], alpha, (v) => setP({ alpha: Number(v) }), { 'aria-label': 'power alpha' })),
     d.wholePlot ? h('label', { class: 'inline', title: 'assumed ratio of whole-plot variance to run-to-run variance' }, 'η = σ²wp/σ²',
-      h('input', { class: 'num', type: 'number', min: 0, step: 0.5, value: pw.eta ?? 1, 'aria-label': 'power eta', onchange: (e) => setP({ eta: Number(e.target.value) }) })) : null);
+      h('input', { class: 'num', type: 'number', min: 0, step: 0.5, value: pw.eta ?? 1, 'aria-label': 'power eta', onchange: (e) => setP({ eta: Number(e.target.value) }) })) : null,
+    // a covariate (issue #82): its correlation with the response takes σ to σ√(1 − ρ²)
+    study.covariates?.length && !d.wholePlot ? h('label', { class: 'inline', title: 'the correlation you expect between the response and the covariate, run to run (0: no covariate in the analysis)' }, 'covariate ρ',
+      h('input', { class: 'num', type: 'number', min: 0, max: 0.99, step: 0.05, value: pw.rho ?? 0, 'aria-label': 'power covariate rho', onchange: (e) => setP({ rho: Math.max(0, Math.min(0.99, Number(e.target.value) || 0)) }) })) : null);
   // from a gauge study: Δ in the response's units, σ = √(σ_process² + σ_meas²)
   const measured = study.responses.filter(r => r.measurement);
   let units = null;
@@ -320,7 +324,8 @@ function powerSection(study, d, cand, ui, set) {
       h('span', { class: 'muted' }, pw.deltaUnits > 0 ? `→ Δ/σ = ${num(pw.deltaUnits / Math.sqrt((pw.sigmaProcess ?? 0) ** 2 + sm ** 2), 3)}${pw.sigmaProcess ? '' : ' (measurement noise only: an upper bound on power)'}` : 'sets Δ/σ'));
   }
   let res, err = null;
-  try { res = designPower(study, d.X, { model, block: d.block, delta: ratio, alpha, ...(d.wholePlot ? { wholePlot: d.wholePlot, eta: pw.eta ?? 1 } : {}) }); } catch (e) { err = e.message; }
+  const rho = study.covariates?.length && !d.wholePlot ? pw.rho ?? 0 : 0;
+  try { res = designPower(study, d.X, { model, block: d.block, delta: ratio, alpha, ...(d.wholePlot ? { wholePlot: d.wholePlot, eta: pw.eta ?? 1 } : {}), ...(rho ? { rho } : {}) }); } catch (e) { err = e.message; }
   let body;
   if (err) body = h('div', { class: 'msg error' }, err);
   else if (res.dfRes < 1 && !res.strata) body = h('div', { class: 'msg warning' }, `${res.n} runs for ${res.rank} coefficients: no residual degrees of freedom, so no test and no power for this model. Add centre points or replicates, use a smaller model, or rely on Lenth’s method.`);
@@ -333,6 +338,7 @@ function powerSection(study, d, cand, ui, set) {
         { key: 'det', label: 'Δ/σ for 80%', cls: 'n', fmt: (v) => (Number.isFinite(v) ? num(v, 3) : '') }],
       rows.map(t => ({ ...t, det: det[t.term] })), { rowAttrs: () => ({ 'data-power': '' }) }),
       h('p', { class: 'muted small' }, `${res.strata ? `Split-plot: whole-plot terms are tested against the whole-plot error (${res.strata[0].df} df), the others against the residual (${res.strata[1].df} df), with σ²wp = η σ². ` : `${res.dfRes} residual df. `}${res.terms.some(t => t.block) ? 'Blocks fitted. ' : ''}Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
+        rho ? `With the covariate in the analysis (ρ = ${rho}), the residual σ is σ·√(1 − ρ²) = ${num(Math.sqrt(1 - rho * rho), 3)} σ and one residual df goes to it; Δ/σ is still in units of σ without it. ` : '',
         'Power below 0.8 is marked; Δ/σ for 80% is the smallest effect this design would usually find.'));
   }
   return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, units, body);

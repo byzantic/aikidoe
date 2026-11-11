@@ -78,9 +78,12 @@ function metaColumns(study) {
 export function runSheet(study) {
   if (!study.design) throw new Error('the study has no design yet');
   const meta = metaColumns(study), res = resultColumns(study), covs = (study.covariates ?? []).map(c => c.id);
+  // units allocated by a covariate (js/design/allocate.js): which unit each run takes, before it
+  const unitCols = (study.covariates ?? []).filter(c => c.values.some(v => v.unit !== undefined)).map(c => c.id);
+  const unitOf = (id, run) => (study.covariates.find(c => c.id === id).values.find(v => v.run === run && v.unit !== undefined)?.unit ?? '');
   const W = wellOf(study), plated = W.size > 0;
   const header = ['order', 'run', ...(plated ? ['plate', 'well'] : []), ...(has(study, 'wholePlot') ? ['wholePlot'] : []), ...(has(study, 'block') ? ['block'] : []), 'kind',
-    ...study.factors.map(f => f.id), ...meta, ...covs, ...res.map(c => c.header), 'note'];
+    ...study.factors.map(f => f.id), ...meta, ...unitCols.map(id => `${id}.unit`), ...covs, ...res.map(c => c.header), 'note'];
   const rows = [];
   for (const run of sortedRuns(study)) {
     const obs = study.observations.filter(o => o.run === run.run);
@@ -102,10 +105,10 @@ export function runSheet(study) {
       });
       const notes = [...new Set(list.map(o => o.note).filter(Boolean))].join('; ');
       rows.push([run.order, run.run, ...(plated ? [W.get(run.run)?.plate ?? '', W.get(run.run)?.well ?? ''] : []), ...(has(study, 'wholePlot') ? [run.wholePlot ?? ''] : []), ...(has(study, 'block') ? [run.block ?? ''] : []), run.kind,
-        ...study.factors.map(f => run.settings[f.id]), ...mv.map(v => v ?? ''), ...covs.map(id => covariateCell(study, id, run.run, covKeys(meta, mv)) ?? ''), ...cells, notes]);
+        ...study.factors.map(f => run.settings[f.id]), ...mv.map(v => v ?? ''), ...unitCols.map(id => unitOf(id, run.run)), ...covs.map(id => covariateCell(study, id, run.run, covKeys(meta, mv)) ?? ''), ...cells, notes]);
     }
   }
-  return { header, rows, resultColumns: res, metaColumns: meta, covariateColumns: covs };
+  return { header, rows, resultColumns: res, metaColumns: meta, covariateColumns: covs, unitColumns: unitCols.map(id => `${id}.unit`) };
 }
 
 export function runSheetCSV(study, { delimiter = ',' } = {}) {
@@ -133,6 +136,8 @@ export function runSheetHTML(study, { title, date } = {}) {
     if (f) return `${esc(f.name)}${f.units ? ` <span class="u">(${esc(f.units)})</span>` : ''}`;
     const ax = /^(.*)\.(trials|exposure)$/.exec(h), ar = ax && study.responses.find(x => x.id === ax[1]);
     if (ar) return `${esc(ar.name)} <span class="u">(${ax[2]})</span>`;
+    const cu = (study.covariates ?? []).find(x => `${x.id}.unit` === h);
+    if (cu) return `${esc(cu.name)}: unit`;
     const cv = (study.covariates ?? []).find(x => x.id === h);
     if (cv) return `${esc(cv.name)}${cv.units ? ` <span class="u">(${esc(cv.units)})</span>` : ''}`;
     const r = study.responses.find(x => x.id === h.split('@')[0]);
@@ -140,7 +145,7 @@ export function runSheetHTML(study, { title, date } = {}) {
     return esc({ order: 'Order', run: 'Run', plate: 'Plate', well: 'Well', wholePlot: 'Whole plot', block: 'Block', kind: 'Type', note: 'Notes',
       lot: 'Lot', wafer: 'Wafer', slot: 'Slot', operator: 'Operator', repeat: 'Repeat' }[h] ?? h);
   };
-  const resStart = s.header.length - 1 - s.resultColumns.length - s.covariateColumns.length;
+  const resStart = s.header.length - 1 - s.resultColumns.length - s.covariateColumns.length - s.unitColumns.length;
   let body = '', prev;
   for (const r of s.rows) {
     if (group && r[gi] !== prev) {
@@ -220,6 +225,7 @@ function mapColumns(study, header, given = {}) {
     else if (resp.has(h)) mapping[h] = { result: { response: resp.get(h).id } };
     else if (fac.has(h)) mapping[h] = { factor: fac.get(h).id };
     else if (cov.has(h)) mapping[h] = { covariate: cov.get(h).id };
+    else if ((study.covariates ?? []).some(c => `${c.id}.unit`.toLowerCase() === h.trim().toLowerCase())) mapping[h] = { unitOf: h };   // shown, not read back
     else { mapping[h] = 'ignore'; unmatched.push(h); }
   }
   return { mapping, unmatched };

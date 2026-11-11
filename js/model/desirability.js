@@ -76,12 +76,22 @@ function shortfall(spec, y) {
  * Maximise the overall desirability.
  *   study: factors (and constraints); models: [{ id, spec (from responseDesirability), predict(settings) → number }];
  *   opts: region ('cube' | 'sphere'), radius (coded half-width of the cube, default 1; radius of the
- *   sphere, default √k), fixed ({ id: natural value } held),
+ *   sphere, default √k), fixed ({ id: natural value } held; a covariate's id holds it at that
+ *   value for every prediction — otherwise predictions are at its mean — and the result has held),
  *   starts (20), screen (2000 points), seed.
  * Returns { settings, coded, D, d: [{ id, y, d }], feasible }.
  */
-export function optimiseDesirability(study, models, { region = 'cube', radius, fixed = {}, starts = 20, screen = 2000, seed = 1 } = {}) {
+export function optimiseDesirability(study, models, { region = 'cube', radius, fixed: fixed0 = {}, starts = 20, screen = 2000, seed = 1 } = {}) {
   if (!models.length) throw new Error('no response has a desirability goal (set a goal with limits on the responses)');
+  // covariates held at a value (issue #82): every prediction made there, not searched over
+  const isFactor = (id) => study.factors.some(f => f.id === id);
+  const held = Object.fromEntries(Object.entries(fixed0).filter(([id]) => !isFactor(id)));
+  for (const id of Object.keys(held)) if (!(study.covariates ?? []).some(c => c.id === id)) throw new Error(`fixed: no factor or covariate "${id}"`);
+  const fixed = Object.fromEntries(Object.entries(fixed0).filter(([id]) => isFactor(id)));
+  if (Object.keys(held).length) {
+    const r = optimiseDesirability(study, models.map(m => ({ ...m, predict: (st) => m.predict({ ...st, ...held }) })), { region, radius, fixed, starts, screen, seed });
+    return { ...r, held };
+  }
   if (study.mixture) {
     // a mixture: search the blends (and process factors) in the constrained region
     const val = (s) => { const ys = models.map(m => m.predict(s)), ds = ys.map((y, i) => dValue(models[i].spec, y)); const D = dOverall(ds, models.map(m => m.spec.importance ?? 1)); return { D, ys, ds, v: D > 0 ? D : -ys.reduce((a, y, i) => a + shortfall(models[i].spec, y), 0) }; };
