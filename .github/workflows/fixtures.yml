@@ -26,6 +26,10 @@ jobs:
           cache: pip
           cache-dependency-path: tests/ref/requirements.txt
       - run: pip install -r tests/ref/requirements.txt
+      # apt mirrors on the runners can be unreachable for minutes (DNS failures for
+      # azure.archive.ubuntu.com): retry each download, and time out a dead connection
+      - name: Patient apt
+        run: printf 'Acquire::Retries "6";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' | sudo tee /etc/apt/apt.conf.d/80-retries
       - uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true   # binary packages from Posit Package Manager: fast installs
@@ -35,7 +39,12 @@ jobs:
           path: ${{ env.R_LIBS_USER }}
           key: r-${{ runner.os }}-${{ hashFiles('tests/ref/r-packages.txt') }}
       - name: System libraries for R package binaries
-        run: sudo apt-get install -y --no-install-recommends libglpk40   # igraph (needed by FrF2)
+        run: |   # igraph (needed by FrF2); three tries a minute apart
+          for i in 1 2 3; do
+            sudo apt-get install -y --no-install-recommends libglpk40 && exit 0
+            echo "apt failed (attempt $i)"; sleep 60; sudo apt-get update || true
+          done
+          exit 1
       - run: Rscript tests/ref/install-r-packages.R
       - run: node tools/regen-fixtures.mjs --out .fixtures-fresh
       - run: node tools/check-fixtures.mjs --fresh .fixtures-fresh
