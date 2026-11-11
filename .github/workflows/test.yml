@@ -24,7 +24,27 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-save playwright@1.63.0
-      - run: npx playwright install --with-deps chromium
+      # apt mirrors on the runners can be unreachable for minutes (DNS failures for
+      # azure.archive.ubuntu.com): retry each download, and time out a dead connection
+      - name: Patient apt
+        run: printf 'Acquire::Retries "6";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' | sudo tee /etc/apt/apt.conf.d/80-retries
+      # the browser itself comes from Playwright's CDN, not apt: cache it
+      - name: Chromium cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-1.63.0
+      - run: npx playwright install chromium
+      # Chromium's system libraries and fonts, from apt: three tries a minute apart. If the mirrors
+      # stay down, carry on with what the runner image has (it runs headless Chromium) and say so
+      # — a real test failure still fails the job, a mirror outage alone does not.
+      - name: Chromium's system packages
+        run: |
+          for i in 1 2 3; do
+            npx playwright install-deps chromium && exit 0   # it calls sudo apt-get itself
+            echo "apt failed (attempt $i)"; sleep 60
+          done
+          echo "::warning::could not install Chromium's system packages (apt mirrors unreachable); running the UI tests with the runner image's libraries and fonts"
       - run: node tests/ui/smoke.mjs --shots ui-shots
       - run: node tests/ui/learn.mjs --shots ui-shots
       - run: node tests/ui/guide.mjs --shots ui-shots
