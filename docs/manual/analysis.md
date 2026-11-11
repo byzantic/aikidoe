@@ -219,10 +219,63 @@ temp=37, pH=6.8, feed=4, vcd=0.6      4.456  4.375 … 4.536  4.303 … 4.609
 The best settings on the Optimise step, the contour of the fitted response, and the report use
 the mean in the same way.
 
-**Does the slope depend on a factor?** The model above has one slope for every setting. To check,
-add the interaction — `temp:vcd`, or `temp*vcd` — and look at its test. If it matters, the effect
-of that factor depends on the covariate, and the factor's own coefficient is its effect at the
-mean of the covariate only.
+### Adjusted means
+
+With a covariate in the model, the Analyse step adds a panel of **adjusted means**: the mean
+response at each level of a factor, with every level compared at the same value of the covariate
+(its mean) — what each level would have given had the covariate been the same everywhere. Beside
+them are the **raw means**, the plain averages of the results at each level. Where the two differ,
+the covariate was not the same on average at every level, and the raw means mix its effect into
+the factor's.
+
+- A categorical factor's levels are its levels; a continuous factor's are its low and high
+  settings.
+- The other factors are held the same for every level: a categorical factor, or a continuous one
+  run at only two settings, averaged over its levels with equal weight; any other continuous
+  factor at its mean. A block term is averaged in the same way.
+- The **comparisons** between levels come with intervals and p values that allow for all of them
+  at once (Tukey's method), so with five groups the ten comparisons do not give ten chances of a
+  false alarm. With two levels it is the ordinary t test.
+- For counts and proportions the means are rates or proportions, and two levels are compared as a
+  **ratio** (counts) or an **odds ratio** (proportions).
+- In a mixed model (whole plots, wafers) the standard errors and degrees of freedom are
+  Kenward–Roger's, as for the coefficients.
+
+`doe means` gives the same from the command line; `--at "vcd=0.6"` compares the levels at another
+value of the covariate.
+
+```console
+$ doe means examples/titre-covariate.aikidoe.json "titre ~ temp*feed + pH + vcd" pH
+adjusted means of pH (least squares)
+every level at vcd = 0.51375 10⁶ cells/mL (its mean), averaged over temp, feed
+
+pH        adjusted mean  std. error  95% CI         raw mean  runs
+--------  -------------  ----------  -------------  --------  ----
+pH = 6.8           3.35     0.02071  3.304 … 3.396     3.336     8
+pH = 7.2          3.139     0.02071  3.093 … 3.185     3.152     8
+
+comparison           difference  std. error  95% CI           p
+-------------------  ----------  ----------  ---------------  -------
+pH = 6.8 - pH = 7.2      0.2107     0.02935  0.1453 … 0.2761  <0.0001
+
+equal slopes of vcd: temp:vcd, feed:vcd, pH:vcd added, F = 1.68 on 3 and 7 df, p 0.257 — no evidence the slope differs
+```
+
+### Equal slopes
+
+The model above has one slope for every setting: the covariate shifts every level by the same
+amount per unit. The panel (and `doe means`) checks this by adding every factor × covariate
+interaction and testing them together (an F test; for counts and proportions a likelihood-ratio
+test; Kenward–Roger for a mixed model), and each on its own.
+
+- **No evidence they differ** (as here, p = 0.26): one slope is reasonable, and the adjusted means
+  are a fair comparison.
+- **They differ**: the gap between the levels depends on the covariate, so there is no single
+  adjusted difference. *Use separate slopes* puts the interactions in the model; compare the levels
+  at the covariate values that matter to you (`--at`, or the profiler).
+
+A single interaction, `temp:vcd`, can also be added by hand; its test says whether the slope
+depends on temperature.
 
 **What a covariate must not be.**
 

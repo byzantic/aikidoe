@@ -2,6 +2,7 @@
 //
 //   normal, studentT, chi2, fDist   pdf, cdf, sf (upper tail), ppf (quantile), isf (upper quantile)
 //   nct, ncf                        non-central t and F: cdf, sf (for power, §6.4)
+//   tukey                           the studentized range: cdf, sf, ppf, isf (Tukey comparisons, #82)
 //   lgamma, lbeta, gammaP/gammaQ, betaInc   special functions
 //
 // Accuracy target: 1e-10 relative in both tails down to ~1e-300 for the central distributions.
@@ -419,3 +420,111 @@ function ncfSum(x, d1, d2, nc, upper) {
     return w * (upper ? b.Ic : b.I);
   });
 }
+
+// ---------------------------------------------------------------- studentized range (Tukey)
+
+// The distribution of the range of nmeans standard normal means divided by an independent s with
+// df degrees of freedom (Tukey's honestly significant difference). cdf: Copenhaver & Holland
+// (1988), AS 190, as R's ptukey (nmath/ptukey.c; Gauss–Legendre over the range for given s, then
+// over s); the same constants, so the same values. df = Infinity: the range of normal means alone.
+// ppf/isf: inverted by bisection and secant to 1e-12 relative (R's qtukey stops at 1e-4).
+
+const XLEG = [0.981560634246719250690549090149, 0.904117256370474856678465866119, 0.769902674194304687036893833213,
+  0.587317954286617447296702418941, 0.367831498998180193752691536644, 0.125233408511468915472441369464];
+const ALEG = [0.047175336386511827194615961485, 0.106939325995318430960254718194, 0.160078328543346226334652529543,
+  0.203167426723065921749064455810, 0.233492536538354808760849898925, 0.249147045813402785000562436043];
+const XLEGQ = [0.989400934991649932596154173450, 0.944575023073232576077988415535, 0.865631202387831743880467897712,
+  0.755404408355003033895101194847, 0.617876244402643748446671764049, 0.458016777657227386342419442984,
+  0.281603550779258913230460501460, 0.950125098376374401853193354250e-1];
+const ALEGQ = [0.271524594117540948517805724560e-1, 0.622535239386478928628438369944e-1, 0.951585116824927848099251076022e-1,
+  0.124628971255533872052476282192, 0.149595988816576732081501730547, 0.169156519395002538189312079030,
+  0.182603415044923588866763667969, 0.189450610455068496285396723208];
+
+/** P(range of cc standard normals, rr groups) < w: R's wprob. */
+function wprob(w, rr, cc) {
+  const C1 = -30, C3 = 60, bb = 8, wlar = 3, wincr1 = 2, wincr2 = 3, nleg = 12, ihalf = 6;
+  const qsqz = w * 0.5;
+  if (qsqz >= bb) return 1;
+  let prW = 2 * normal.cdf(qsqz) - 1;               // erf(qsqz / √2)
+  prW = prW >= 1 ? 1 : prW ** cc;
+  const wincr = w > wlar ? wincr1 : wincr2;
+  let blb = qsqz;
+  const binc = (bb - qsqz) / wincr;
+  let bub = blb + binc, einsum = 0;
+  const cc1 = cc - 1;
+  for (let wi = 1; wi <= wincr; wi++) {
+    let elsum = 0;
+    const a = 0.5 * (bub + blb), b = 0.5 * (bub - blb);
+    for (let jj = 1; jj <= nleg; jj++) {
+      let j, xx;
+      if (ihalf < jj) { j = nleg - jj + 1; xx = XLEG[j - 1]; } else { j = jj; xx = -XLEG[j - 1]; }
+      const ac = a + b * xx, qexpo = ac * ac;
+      if (qexpo > C3) break;
+      const pplus = 2 * normal.cdf(ac), pminus = 2 * normal.cdf(ac - w);
+      let rinsum = pplus * 0.5 - pminus * 0.5;
+      if (rinsum >= Math.exp(C1 / cc1)) { rinsum = ALEG[j - 1] * Math.exp(-0.5 * qexpo) * rinsum ** cc1; elsum += rinsum; }
+    }
+    elsum *= 2 * b * cc / SQRT_2PI;
+    einsum += elsum;
+    blb = bub; bub += binc;
+  }
+  prW += einsum;
+  if (prW <= Math.exp(C1 / rr)) return 0;
+  prW **= rr;
+  return prW >= 1 ? 1 : prW;
+}
+
+/** P(Q < q) for the studentized range of nmeans means with df degrees of freedom (rr ranges, default 1). */
+function ptukey(q, nmeans, df, rr = 1) {
+  if (Number.isNaN(q) || Number.isNaN(nmeans) || Number.isNaN(df)) return NaN;
+  if (q <= 0) return 0;
+  if (!(df >= 2) || rr < 1 || nmeans < 2) return NaN;
+  if (!Number.isFinite(q)) return 1;
+  const eps1 = -30, eps2 = 1e-14, dhaf = 100, dquar = 800, deigh = 5000, dlarg = 25000, nlegq = 16, ihalfq = 8;
+  if (df > dlarg) return wprob(q, rr, nmeans);
+  const f2 = df * 0.5;
+  let f2lf = f2 * Math.log(df) - df * Math.LN2 - lgamma(f2);
+  const f21 = f2 - 1, ff4 = df * 0.25;
+  const ulen = df <= dhaf ? 1 : df <= dquar ? 0.5 : df <= deigh ? 0.25 : 0.125;
+  f2lf += Math.log(ulen);
+  let ans = 0, otsum = 0;
+  for (let i = 1; i <= 50; i++) {
+    otsum = 0;
+    const twa1 = (2 * i - 1) * ulen;
+    for (let jj = 1; jj <= nlegq; jj++) {
+      let j, t1;
+      if (ihalfq < jj) { j = jj - ihalfq - 1; t1 = f2lf + f21 * Math.log(twa1 + XLEGQ[j] * ulen) - (XLEGQ[j] * ulen + twa1) * ff4; }
+      else { j = jj - 1; t1 = f2lf + f21 * Math.log(twa1 - XLEGQ[j] * ulen) + (XLEGQ[j] * ulen - twa1) * ff4; }
+      if (t1 >= eps1) {
+        const qsqz = ihalfq < jj ? q * Math.sqrt((XLEGQ[j] * ulen + twa1) * 0.5) : q * Math.sqrt((-(XLEGQ[j] * ulen) + twa1) * 0.5);
+        otsum += wprob(qsqz, rr, nmeans) * ALEGQ[j] * Math.exp(t1);
+      }
+    }
+    if (i * ulen >= 1 && otsum <= eps2) break;
+    ans += otsum;
+  }
+  return ans > 1 ? 1 : ans;
+}
+
+export const tukey = {
+  cdf: (q, nmeans, df = Infinity) => ptukey(q, nmeans, df),
+  sf: (q, nmeans, df = Infinity) => { const p = ptukey(q, nmeans, df); return Number.isNaN(p) ? NaN : 1 - p; },
+  ppf: (p, nmeans, df = Infinity) => tukey.isf(1 - p, nmeans, df),
+  /** q with P(Q > q) = a. */
+  isf: (a, nmeans, df = Infinity) => {
+    if (!(a > 0 && a < 1) || nmeans < 2 || !(df >= 2)) return NaN;
+    const f = (q) => ptukey(q, nmeans, df) - (1 - a);
+    let lo = 0, hi = 2;
+    while (f(hi) < 0) { lo = hi; hi *= 2; if (hi > 1e4) return NaN; }
+    let flo = f(lo), fhi = f(hi);
+    for (let it = 0; it < 200 && hi - lo > 1e-12 * hi; it++) {
+      // secant step, kept inside the bracket; bisection when it would leave it
+      let m = hi - fhi * (hi - lo) / (fhi - flo);
+      if (!(m > lo && m < hi) || it % 3 === 2) m = 0.5 * (lo + hi);
+      const fm = f(m);
+      if (fm === 0) return m;
+      if (fm < 0) { lo = m; flo = fm; } else { hi = m; fhi = fm; }
+    }
+    return 0.5 * (lo + hi);
+  },
+};

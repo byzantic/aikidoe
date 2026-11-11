@@ -397,6 +397,28 @@ export function reml(X0, y, random, { columns, assign, terms, level = 0.95 } = {
   };
 }
 
+/**
+ * Linear functions of a mixed model's fixed effects (adjusted means, contrasts; issue #82): for each
+ * row l of L (over all the model's columns), the estimate lβ, its Kenward–Roger standard error
+ * √(l Φ_A lᵀ) and Kenward–Roger df. A row with weight on an aliased column is not estimable (NaN).
+ * With joint (default), also the joint F test of all rows (L of full rank): { rows: [{ est, se,
+ * df }], F, df1, df2, p }.
+ */
+export function krLinear(m, L, { joint = true } = {}) {
+  const { Phi, PhiA, Pm, W, beta, keep } = m._kr;
+  const est = (l) => keep.reduce((a, j, i) => a + l[j] * beta[i], 0);
+  const lost = (l) => l.some((v, j) => Math.abs(v) > 1e-12 && !keep.includes(j));
+  const rows = L.map(l => {
+    if (lost(l)) return { est: NaN, se: NaN, df: NaN };
+    const x = keep.map(j => l[j]), k = kenwardRoger([x], beta, Phi, PhiA, Pm, W);
+    const v = x.reduce((a, xi, i) => a + xi * PhiA[i].reduce((b, w, j) => b + w * x[j], 0), 0);
+    return { est: est(l), se: Math.sqrt(v), df: k.ddf };
+  });
+  const ok = L.filter(l => !lost(l));
+  const J = joint && ok.length ? kenwardRoger(ok.map(l => keep.map(j => l[j])), beta, Phi, PhiA, Pm, W) : null;
+  return { rows, ...(J ? { F: J.F, df1: J.q, df2: J.ddf, p: J.p } : {}) };
+}
+
 /** Kenward–Roger F test of Lβ = 0 (rows of L over the kept columns). */
 function kenwardRoger(L, beta, Phi, PhiA, Pm, W) {
   const q = L.length, R = Pm.length;

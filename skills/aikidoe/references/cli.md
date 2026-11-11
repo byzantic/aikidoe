@@ -23,6 +23,13 @@ Commands
                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+  means STUDY "y ~ … + cov" FACTOR [--at "cov=…,B=…"] [--ols]
+       adjusted means of a factor's levels (a continuous factor: low and high) with a covariate in
+       the model: every level at the same value of the covariate (its mean, or --at) and of the
+       other factors (continuous at their mean, categorical averaged), beside the raw means; the
+       pairwise comparisons, Tukey-adjusted (ratios for counts); and for each covariate, whether
+       its slope is the same at every setting (the model with every factor × covariate
+       interaction against the model without). Mixed models: Kenward–Roger
   covariate STUDY id[:units] [--name "…"] | covariate STUDY id --remove | covariate STUDY
        a covariate: measured at each run but not set (a starting weight, the room temperature).
        Its values go on the run sheet and come back with import, in a column of its own; in a
@@ -162,7 +169,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `augment`, `comb-over`, `covariate`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `augment`, `comb-over`, `covariate`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `means`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

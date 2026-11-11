@@ -294,6 +294,15 @@ try {
     check('info lists the covariates', /covariates \(measured, not set\): vcd \(1e6\/mL\) \[16 runs\]/.test(r.out), r.out);
     r = run('sensitivity', C, '--model', 'titre ~ temp*feed + pH + vcd');
     check('surrogates with a covariate predict at its mean (sensitivity)', r.code === 0 && /temp\s+0\.[1-9]/.test(r.out), r.out + r.err);
+    // adjusted means and equal slopes (phase 2)
+    r = run('means', C, 'titre ~ temp*feed + pH + vcd', 'pH');
+    check('means: adjusted means beside the raw ones, the comparison, equal slopes', r.code === 0 && /every level at vcd = 0\.51375 1e6\/mL \(its mean\), averaged over temp, feed/.test(r.out)
+      && /pH = 6\.8\s+3\.35\s+0\.02071\s+3\.304 … 3\.396\s+3\.336\s+8/.test(r.out) && /pH = 6\.8 - pH = 7\.2\s+0\.2107/.test(r.out)
+      && /equal slopes of vcd: temp:vcd, feed:vcd, pH:vcd added, F = 1\.68 on 3 and 7 df, p 0\.257 — no evidence/.test(r.out), r.out + r.err);
+    r = run('means', C, 'titre ~ temp*feed + pH + vcd', 'pH', '--at', 'vcd=0.6');
+    check('means --at: the covariate held at a given value', r.code === 0 && /vcd = 0\.6 1e6\/mL \(given\)/.test(r.out), r.out + r.err);
+    r = run('means', C, 'titre ~ temp*feed + pH + vcd', 'vcd');
+    check('means of a covariate: refused', r.code !== 0 && /it has a slope, not levels/.test(r.err), r.err);
     copyFileSync(join(dir, C), join(dir, 'cov2.aikidoe.json'));
     r = run('design', 'cov2.aikidoe.json', '--full', '--force');
     check('a new design clears the covariate\'s values, not the covariate', r.code === 0 && JSON.stringify(parseStudy(readFileSync(join(dir, 'cov2.aikidoe.json'), 'utf8')).covariates.map(c => [c.id, c.values.length])) === '[["vcd",0]]', r.out + r.err);
@@ -526,6 +535,8 @@ try {
   check('covariate --json: each covariate with its runs, mean and range', o.covariates?.[0].id === 'vcd' && o.covariates[0].runs === 16 && o.covariates[0].min === 0.33);
   o = js('fit', 'cov.aikidoe.json', 'titre ~ temp*feed + pH + vcd');
   check('fit --json: the covariates of the model with their coding and slope', o.covariates?.[0].id === 'vcd' && Math.abs(o.covariates[0].slope - 2.1557) < 1e-3 && o.covariates[0].interacts === false && o.dropped === undefined, JSON.stringify(o.covariates));
+  o = js('means', 'cov.aikidoe.json', 'titre ~ temp*feed + pH + vcd', 'pH');
+  check('means --json: levels, pairs and the equal-slopes test', o.kind === 'ols' && o.levels.length === 2 && o.pairs[0].a === 'pH = 6.8' && o.equalSlopes[0].df1 === 3 && Math.abs(o.held.vcd - 0.51375) < 1e-12);
   o = js('info', 'cov.aikidoe.json');
   check('info --json: the covariates', o.study?.covariates?.[0].runs === 16);
   const all = Object.keys(cliSchema.$defs).filter(c => c !== 'optimize');

@@ -81,7 +81,8 @@ before acting.
   ([counts and proportions](analysis.md#counts-and-proportions)), and check for overdispersion
   and separation.
 - A covariate you recorded goes in the model by name; judge the terms by type II tests, and the
-  factors' effects are then at the average covariate.
+  factors' effects are then at the average covariate. Compare levels by their adjusted means, and
+  check the slope is the same at every setting.
 - Check the residuals: against fitted values, run order, and a normal plot.
 - State aliasing with every conclusion from a fraction.
 - Report effects with confidence intervals, not only p-values; choosing the model from the same data
