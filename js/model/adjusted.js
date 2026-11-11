@@ -95,6 +95,48 @@ const num4 = (v) => String(Number(v.toPrecision(6)));
  * are ratios (log link) or odds ratios (logit).
  */
 export function adjustedMeans(fit, factorId, { at = {}, level = 0.95 } = {}) {
+  const { kind, g, L, lin, link } = levelSystem(fit, factorId, { at });
+  const crit = (df) => (Number.isFinite(df) ? studentT.ppf(1 - (1 - level) / 2, df) : normal.ppf(1 - (1 - level) / 2));
+  const means = lin(L);
+  // the raw means: the rows of the fit at each level
+  const yOf = (r) => r.y;
+  const levels = g.levels.map((Lv, i) => {
+    const m = means[i], c = crit(m.df);
+    const at0 = fit.rows.filter(r => (g.target.type === 'categorical' ? r.settings[factorId] === Lv.value || r.settings[factorId] === Lv.label : Math.abs(r.settings[factorId] - Lv.value) < 1e-9 * Math.max(1, Math.abs(Lv.value))));
+    const raw = at0.length ? mean(at0.map(yOf)) : NaN;
+    if (!link) return { label: Lv.label, mean: m.est, se: m.se, df: m.df, lower: m.est - c * m.se, upper: m.est + c * m.se, raw, n: at0.length };
+    const mu = link.inv(m.est);
+    return { label: Lv.label, mean: mu, se: Math.abs(link.deriv(m.est)) * m.se, df: m.df, lower: link.inv(m.est - c * m.se), upper: link.inv(m.est + c * m.se),
+      link: { mean: m.est, se: m.se }, raw, n: at0.length };
+  });
+  // pairs: level a − level b, for a before b
+  const k = levels.length, pairIdx = [];
+  for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) pairIdx.push([a, b]);
+  const D = lin(pairIdx.map(([a, b]) => L[a].map((v, j) => v - L[b][j])));
+  const comparison = comparisonOf(link);
+  const back = comparison === 'ratio' || comparison === 'odds ratio' ? Math.exp : (x) => x;
+  const pairs = pairIdx.map(([a, b], i) => {
+    const d = D[i], stat = d.est / d.se;
+    // Tukey: P(Q > |t|√2) for k means; the interval from the studentized range's quantile
+    const p = k > 2 ? tukey.sf(Math.abs(stat) * Math.SQRT2, k, d.df) : 2 * (Number.isFinite(d.df) ? studentT.sf(Math.abs(stat), d.df) : normal.sf(Math.abs(stat)));
+    const q = k > 2 ? tukey.isf(1 - level, k, d.df) / Math.SQRT2 : crit(d.df);
+    return { a: levels[a].label, b: levels[b].label, estimate: back(d.est), se: comparison === 'ratio' || comparison === 'odds ratio' ? Math.exp(d.est) * d.se : d.se,
+      df: d.df, stat, p, lower: back(d.est - q * d.se), upper: back(d.est + q * d.se), ...(back !== Math.exp ? {} : { link: { estimate: d.est, se: d.se } }) };
+  });
+  return { factor: factorId, kind, scale: link ? `response (from the ${link.name} link)` : 'response', comparison, adjust: k > 2 ? 'tukey' : 'none',
+    levels, pairs, held: { ...g.fixed }, averagedOver: g.averagedOver, df: means[0]?.df };
+}
+
+/** How two levels are compared, from the link: a difference, a ratio (log) or an odds ratio (logit). */
+export const comparisonOf = (link) => (!link || link.name === 'identity' ? 'difference' : link.name === 'log' ? 'ratio' : link.name === 'logit' ? 'odds ratio' : 'difference (link scale)');
+
+/**
+ * The linear functions behind a factor's adjusted means: { kind, g (the reference grid), L (one
+ * row per level, over all the model's columns), lin(rows) → [{ est, se, df }], cov(rows) → the
+ * covariance matrix of those functions (the Kenward–Roger one for a mixed model), link (GLMs) }.
+ * Estimates are on the link scale for GLMs.
+ */
+export function levelSystem(fit, factorId, { at = {} } = {}) {
   const kind = kindOf(fit), g = referenceGrid(fit, factorId, { at });
   const ncol = fit.columns.length;
   // one row l per level: the average of the model-matrix rows over the grid
@@ -120,36 +162,16 @@ export function adjustedMeans(fit, factorId, { at = {}, level = 0.95 } = {}) {
       return { est: e, se: Math.sqrt(v), df };
     });
   }
-  const crit = (df) => (Number.isFinite(df) ? studentT.ppf(1 - (1 - level) / 2, df) : normal.ppf(1 - (1 - level) / 2));
   const link = kind === 'glm' || kind === 'glmm' ? LINKS[fit.link] : null;
-  const means = lin(L);
-  // the raw means: the rows of the fit at each level
-  const yOf = (r) => r.y;
-  const levels = g.levels.map((Lv, i) => {
-    const m = means[i], c = crit(m.df);
-    const at0 = fit.rows.filter(r => (g.target.type === 'categorical' ? r.settings[factorId] === Lv.value || r.settings[factorId] === Lv.label : Math.abs(r.settings[factorId] - Lv.value) < 1e-9 * Math.max(1, Math.abs(Lv.value))));
-    const raw = at0.length ? mean(at0.map(yOf)) : NaN;
-    if (!link) return { label: Lv.label, mean: m.est, se: m.se, df: m.df, lower: m.est - c * m.se, upper: m.est + c * m.se, raw, n: at0.length };
-    const mu = link.inv(m.est);
-    return { label: Lv.label, mean: mu, se: Math.abs(link.deriv(m.est)) * m.se, df: m.df, lower: link.inv(m.est - c * m.se), upper: link.inv(m.est + c * m.se),
-      link: { mean: m.est, se: m.se }, raw, n: at0.length };
-  });
-  // pairs: level a − level b, for a before b
-  const k = levels.length, pairIdx = [];
-  for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) pairIdx.push([a, b]);
-  const D = lin(pairIdx.map(([a, b]) => L[a].map((v, j) => v - L[b][j])));
-  const comparison = !link || link.name === 'identity' ? 'difference' : link.name === 'log' ? 'ratio' : link.name === 'logit' ? 'odds ratio' : 'difference (link scale)';
-  const back = comparison === 'ratio' || comparison === 'odds ratio' ? Math.exp : (x) => x;
-  const pairs = pairIdx.map(([a, b], i) => {
-    const d = D[i], stat = d.est / d.se;
-    // Tukey: P(Q > |t|√2) for k means; the interval from the studentized range's quantile
-    const p = k > 2 ? tukey.sf(Math.abs(stat) * Math.SQRT2, k, d.df) : 2 * (Number.isFinite(d.df) ? studentT.sf(Math.abs(stat), d.df) : normal.sf(Math.abs(stat)));
-    const q = k > 2 ? tukey.isf(1 - level, k, d.df) / Math.SQRT2 : crit(d.df);
-    return { a: levels[a].label, b: levels[b].label, estimate: back(d.est), se: comparison === 'ratio' || comparison === 'odds ratio' ? Math.exp(d.est) * d.se : d.se,
-      df: d.df, stat, p, lower: back(d.est - q * d.se), upper: back(d.est + q * d.se), ...(back !== Math.exp ? {} : { link: { estimate: d.est, se: d.se } }) };
-  });
-  return { factor: factorId, kind, scale: link ? `response (from the ${link.name} link)` : 'response', comparison, adjust: k > 2 ? 'tukey' : 'none',
-    levels, pairs, held: { ...g.fixed }, averagedOver: g.averagedOver, df: means[0]?.df };
+  let cov;
+  if (kind === 'mixed') {
+    const { PhiA, keep } = fit._kr;
+    cov = (rows) => rows.map(a => rows.map(b => keep.reduce((t, j, i) => t + a[j] * keep.reduce((u, k, l) => u + PhiA[i][l] * b[k], 0), 0)));
+  } else {
+    const V = covOf(fit, kind), ok = coef.map(c => !Number.isNaN(c));
+    cov = (rows) => rows.map(a => rows.map(b => { let v = 0; for (let i = 0; i < ncol; i++) if (ok[i] && a[i]) for (let j = 0; j < ncol; j++) if (ok[j] && b[j]) v += a[i] * V[i][j] * b[j]; return v; }));
+  }
+  return { kind, g, L, lin, cov, link };
 }
 
 /**

@@ -84,6 +84,9 @@ before acting.
 - A covariate you recorded goes in the model by name; judge the terms by type II tests, and the
   factors' effects are then at the average covariate. Compare levels by their adjusted means, and
   check the slope is the same at every setting.
+- Comparing a few treatments: don't run a t test for every pair. Use Tukey for all pairs, Dunnett
+  against a control, or contrasts planned before the runs
+  ([comparing treatments](analysis.md#comparing-treatments)).
 - Check the residuals: against fitted values, run order, and a normal plot.
 - State aliasing with every conclusion from a fraction.
 - Report effects with confidence intervals, not only p-values; choosing the model from the same data

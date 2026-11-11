@@ -81,6 +81,10 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    gives the adjusted means of A's levels (report these, not the raw means), Tukey comparisons,
    and `equalSlopes`: when its p < 0.05 the slope differs between settings — say so, and compare
    levels at stated covariate values (`--at "roomT=…"`) rather than with one adjusted difference. `doe predict --at "A=…,roomT=…"` for a known covariate value.
+   Comparing a few treatments: `doe compare STUDY ["y ~ …"] A --json` (Tukey, every pair, with
+   letters; levels sharing a letter are not shown to differ), `--control Standard` (Dunnett),
+   `--contrast "(M-2 + M-3)/2 - Standard"` (planned contrasts). Never report unadjusted t tests
+   for many pairs.
 7. **Decide the next stage** with the user: fold-over, axial points, optimal augmentation, or
    confirmation runs at the chosen settings (`doe augment`); optimise (`doe optimise`, `doe
    robust`); then confirm. When `doe optimise --json` gives a non-null `beyondRuns`, the best

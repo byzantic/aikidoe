@@ -470,6 +470,9 @@ const RANDOM = {
   wafer: { name: 'Wafer', label: (r) => r.wafer },
   site: { name: 'Site', label: (r) => r.site },
   lot: { name: 'Lot', label: (r) => r.lot },
+  // blocks as a random effect (issue #80): an incomplete-block design recovers the treatment
+  // information between blocks; asked for explicitly (random: ['block']), never 'auto'
+  block: { name: 'Block', label: (r) => (r.block === undefined ? undefined : String(r.block)) },
 };
 
 /**
@@ -485,7 +488,7 @@ export function randomEffects(rows, requested = 'auto') {
   const nGroups = (f) => new Set(rows.map(f)).size;
   const ids = requested === 'auto' ? ['wholePlot', 'run', 'wafer', 'site'].filter(id => rows.every(r => RANDOM[id].label(r) !== undefined)) : requested;
   for (const id of ids) {
-    if (!RANDOM[id]) throw new Error(`unknown random effect "${id}" (use wholePlot, run, wafer, site or lot)`);
+    if (!RANDOM[id]) throw new Error(`unknown random effect "${id}" (use wholePlot, run, wafer, site, lot or block)`);
     if (rows.some(r => RANDOM[id].label(r) === undefined)) throw new Error(`random effect ${id}: some observations have no ${id}`);
   }
   const out = [], seen = [];
@@ -521,7 +524,9 @@ function buildMixed(study, formula, opts) {
   const cov = withCovariates(study, formula, pos0.rows, pos0.factors);
   const pos = { ...pos0, factors: cov.factors, rows: cov.rows };
   const parsed = parseFormula(formula, pos.factors);
-  const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, pos.rows, opts);
+  // random blocks replace the fixed block term
+  const randomBlocks = Array.isArray(opts.random) && opts.random.includes('block');
+  const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, pos.rows, randomBlocks ? { ...opts, blocks: false } : opts);
   const random = randomEffects(b.rows, opts.random ?? 'auto');
   const mmx = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   return { response, pos, b, random, mmx, y: b.rows.map(r => r.y), cov };

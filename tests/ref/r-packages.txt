@@ -22,3 +22,5 @@ glmmTMB
 geometry
 nnls
 emmeans
+multcompView
+mvtnorm

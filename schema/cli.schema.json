@@ -122,6 +122,25 @@
             "const": true
           },
           "command": {
+            "const": "compare"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/compare"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
             "const": "allocate"
           }
         },
@@ -4614,6 +4633,185 @@
         },
         "saved": {
           "type": "boolean"
+        }
+      }
+    },
+    "compare": {
+      "type": "object",
+      "description": "doe compare (issue #80): the adjusted means of a factor's levels and comparisons between them with simultaneous intervals and adjusted p values",
+      "required": [
+        "kind",
+        "response",
+        "formula",
+        "factor",
+        "method",
+        "family",
+        "comparison",
+        "levels",
+        "comparisons"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "ols",
+            "glm",
+            "mixed"
+          ]
+        },
+        "response": {
+          "type": "string"
+        },
+        "formula": {
+          "type": "string"
+        },
+        "factor": {
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "tukey",
+            "dunnett",
+            "single-step",
+            "holm",
+            "bonferroni",
+            "none"
+          ]
+        },
+        "family": {
+          "enum": [
+            "pairs",
+            "control",
+            "contrasts"
+          ],
+          "description": "all pairs, each level against the control, or the contrasts given"
+        },
+        "comparison": {
+          "type": "string",
+          "description": "difference, ratio (counts), odds ratio (proportions), or contrast"
+        },
+        "control": {
+          "type": "string"
+        },
+        "alpha": {
+          "type": "number"
+        },
+        "critical": {
+          "type": "number",
+          "description": "the critical value of the simultaneous intervals (dunnett, single-step)"
+        },
+        "held": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "averagedOver": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "mean",
+              "se",
+              "lower",
+              "upper"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "mean": {
+                "type": "number"
+              },
+              "se": {
+                "type": "number"
+              },
+              "lower": {
+                "type": "number"
+              },
+              "upper": {
+                "type": "number"
+              },
+              "raw": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "n": {
+                "type": "integer"
+              },
+              "letters": {
+                "type": "string",
+                "description": "the compact letter display: levels sharing a letter do not differ significantly"
+              }
+            }
+          }
+        },
+        "comparisons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "estimate",
+              "se",
+              "p",
+              "lower",
+              "upper"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "a": {
+                "type": "string"
+              },
+              "b": {
+                "type": "string"
+              },
+              "weights": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "estimate": {
+                "type": "number"
+              },
+              "se": {
+                "type": "number"
+              },
+              "df": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "statistic": {
+                "type": "number"
+              },
+              "p": {
+                "type": "number",
+                "description": "adjusted for the family"
+              },
+              "pUnadjusted": {
+                "type": "number"
+              },
+              "lower": {
+                "type": "number"
+              },
+              "upper": {
+                "type": "number"
+              }
+            }
+          }
         }
       }
     }

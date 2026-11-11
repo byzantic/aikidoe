@@ -23,6 +23,16 @@ Commands
                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+  compare STUDY ["y ~ …"] FACTOR [--control LEVEL] [--method tukey|dunnett|holm|bonferroni|none]
+       [--contrast "a - ctrl" …] [--at "B=…"] [--random block] [--alpha 0.05]
+       which levels of a factor differ: the adjusted means of its levels (the model's means, the
+       other factors and any covariate held the same) with a compact letter display (levels
+       sharing a letter do not differ), and comparisons with intervals and p values adjusted for
+       all of them — all pairs (Tukey, the default), each level against --control (Dunnett), or
+       --contrast expressions of levels (single-step; quote a label with spaces: "'low dose' -
+       ctrl"). Holm and Bonferroni for any family; none unadjusted. Without a formula: the
+       response's main effects. Counts and proportions: ratios and odds ratios. --random block:
+       blocks as a random effect (incomplete blocks), Kenward–Roger df
   means STUDY "y ~ … + cov" FACTOR [--at "cov=…,B=…"] [--ols]
        adjusted means of a factor's levels (a continuous factor: low and high) with a covariate in
        the model: every level at the same value of the covariate (its mean, or --at) and of the
@@ -179,7 +189,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `allocate`, `augment`, `comb-over`, `covariate`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `means`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `allocate`, `augment`, `comb-over`, `compare`, `covariate`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `means`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

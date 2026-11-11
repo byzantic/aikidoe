@@ -22,7 +22,7 @@ import { glmAnalysis } from './glm.js';
 import { glmmAnalysis, cached } from './glmm.js';
 import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
 import { covariateSlopes, droppedNote } from '../js/model/covariates.js';
-import { adjustedPanel } from './adjusted.js';
+import { comparePanel } from './compare.js';
 
 /** A sensible first model for the study's design. */
 
@@ -79,7 +79,7 @@ export function render(ctx) {
   const rhs = formula.includes('~') ? formula.slice(formula.indexOf('~') + 1).trim() : formula;
   // the fitted response over two factors (issue #88)
   const surface = (f) => { try { return surfacePanel(study, f, { ui, set, resp }); } catch { return null; } };
-  const adjusted = (f, fitWith) => { try { return adjustedPanel(study, f, { formula, fitWith, anova, ui, set, setFormula, resp }); } catch (e) { return h('div', { class: 'msg warning' }, `Adjusted means: ${e.message}`); } };
+  const adjusted = (f, fitWith) => { try { return comparePanel(study, f, { formula, fitWith, anova, ui, set, setFormula, resp }); } catch (e) { return h('div', { class: 'msg warning' }, `Compare levels: ${e.message}`); } };
 
   const fIn = h('input', { type: 'text', class: 'formula', id: 'formula', value: formula, 'aria-label': 'model formula', spellcheck: 'false',
     onchange: (e) => setFormula(e.target.value.includes('~') ? e.target.value : `${resp.id} ~ ${e.target.value}`) });
