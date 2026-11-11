@@ -332,6 +332,24 @@ try {
     check('a new design clears the covariate\'s values, not the covariate', r.code === 0 && JSON.stringify(parseStudy(readFileSync(join(dir, 'cov2.aikidoe.json'), 'utf8')).covariates.map(c => [c.id, c.values.length])) === '[["vcd",0]]', r.out + r.err);
   }
 
+  section('comparing treatments (issue #80)');
+  {
+    copyFileSync(new URL('../examples/media-compare.aikidoe.json', import.meta.url), join(dir, 'media.aikidoe.json'));
+    r = run('compare', 'media.aikidoe.json', 'medium');
+    check('compare: all pairs by Tukey, with letters (the response\'s main effects by default)', r.code === 0 && /medium: least squares, biomass ~ main/.test(r.out) && /M-4\s+7\.797\s+0\.2375\s+7\.291 … 8\.304\s+4\s+a\b/.test(r.out)
+      && /M-2 − M-4\s+-1\.898\s+0\.3359\s+-2\.935 … -0\.8603\s+0\.000382/.test(r.out) && /levels sharing a letter do not differ \(Tukey's method/.test(r.out), r.out + r.err);
+    r = run('compare', 'media.aikidoe.json', 'biomass ~ medium', 'medium', '--control', 'Standard');
+    check('compare --control: Dunnett, with its critical value', r.code === 0 && /M-3 − Standard\s+1\.015\s+0\.3359\s+0\.09891 … 1\.931\s+0\.0283/.test(r.out) && /critical value 2\.7273/.test(r.out), r.out + r.err);
+    r = run('compare', 'media.aikidoe.json', 'medium', '--contrast', '(M-3 + M-4)/2 - Standard', '--contrast', 'M-4 - M-3');
+    check('compare --contrast: single-step over the contrasts given', r.code === 0 && /\(M-3 \+ M-4\)\/2 - Standard\s+1\.271/.test(r.out) && /single-step/.test(r.out), r.out + r.err);
+    r = run('compare', 'media.aikidoe.json', 'medium', '--method', 'holm');
+    check('compare --method holm: all pairs, Bonferroni intervals', r.code === 0 && /Holm's method; intervals: Bonferroni/.test(r.out), r.out + r.err);
+    r = run('compare', 'media.aikidoe.json', 'medium', '--control', 'Standard', '--method', 'tukey');
+    check('compare: Tukey is for all pairs', r.code !== 0 && /method "tukey" is for all pairs/.test(r.err), r.err);
+    r = run('compare', 'media.aikidoe.json', 'medium', '--contrast', 'M-4');
+    check('compare: weights that do not add up to 0 are pointed out', r.code === 0 && /do not add up to 0/.test(r.out), r.out + r.err);
+  }
+
   section('--json output, validated against schema/cli.schema.json (issue #37)');
   const cliSchema = JSON.parse(readFileSync(new URL('../schema/cli.schema.json', import.meta.url), 'utf8'));
   const studySchema = JSON.parse(readFileSync(new URL('../schema/study.schema.json', import.meta.url), 'utf8'));
@@ -559,6 +577,10 @@ try {
   check('covariate --json: each covariate with its runs, mean and range', o.covariates?.[0].id === 'vcd' && o.covariates[0].runs === 16 && o.covariates[0].min === 0.33);
   o = js('fit', 'cov.aikidoe.json', 'titre ~ temp*feed + pH + vcd');
   check('fit --json: the covariates of the model with their coding and slope', o.covariates?.[0].id === 'vcd' && Math.abs(o.covariates[0].slope - 2.1557) < 1e-3 && o.covariates[0].interacts === false && o.dropped === undefined, JSON.stringify(o.covariates));
+  o = js('compare', 'media.aikidoe.json', 'medium', '--control', 'Standard');
+  check('compare --json: levels, comparisons, the critical value', o.method === 'dunnett' && o.family === 'control' && o.levels.length === 5 && o.comparisons.length === 4 && Math.abs(o.critical - 2.7273) < 1e-4);
+  o = js('compare', 'media.aikidoe.json', 'medium');
+  check('compare --json: letters with all pairs', o.levels.find(l => l.label === 'M-4').letters === 'a' && o.comparisons.length === 10);
   o = js('allocate', 'cov.aikidoe.json', 'vcd', '--units', 'flasks.csv', '--dry-run');
   check('allocate --json (dry run): R², the assignment and the units left over', o.saved === false && o.assignment.length === 16 && o.unused.length === 2 && o.r2 < o.random);
   o = js('optimise', 'cov.aikidoe.json', '--model', 'titre ~ temp*feed + pH + vcd', '--fix', 'vcd=0.35');

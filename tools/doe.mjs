@@ -11,6 +11,16 @@
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+//   compare STUDY ["y ~ …"] FACTOR [--control LEVEL] [--method tukey|dunnett|holm|bonferroni|none]
+//        [--contrast "a - ctrl" …] [--at "B=…"] [--random block] [--alpha 0.05]
+//        which levels of a factor differ: the adjusted means of its levels (the model's means, the
+//        other factors and any covariate held the same) with a compact letter display (levels
+//        sharing a letter do not differ), and comparisons with intervals and p values adjusted for
+//        all of them — all pairs (Tukey, the default), each level against --control (Dunnett), or
+//        --contrast expressions of levels (single-step; quote a label with spaces: "'low dose' -
+//        ctrl"). Holm and Bonferroni for any family; none unadjusted. Without a formula: the
+//        response's main effects. Counts and proportions: ratios and odds ratios. --random block:
+//        blocks as a random effect (incomplete blocks), Kenward–Roger df
 //   means STUDY "y ~ … + cov" FACTOR [--at "cov=…,B=…"] [--ols]
 //        adjusted means of a factor's levels (a continuous factor: low and high) with a covariate in
 //        the model: every level at the same value of the covariate (its mean, or --at) and of the
@@ -178,6 +188,7 @@ import { fitModel, anova, predict } from '../js/model/fit.js';
 import { covariateSlopes, covariateTable, droppedNote } from '../js/model/covariates.js';
 import { adjustedMeans, equalSlopes } from '../js/model/adjusted.js';
 import { allocate, applyAllocation } from '../js/design/allocate.js';
+import { compareLevels } from '../js/model/compare.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -897,6 +908,55 @@ function mixedFor(study, formula, opt) {
   if (study.responses.find(r => r.id === resp)?.distribution) return null;      // counts and proportions: no mixed models yet
   try { if (!randomEffects(observationTable(study, resp)).length) return null; } catch { return null; }
   return fitMixedModel(study, formula);
+}
+
+/** Compare a factor's levels (issue #80). */
+function cmdCompare({ pos, opt }) {
+  const [file, a, b] = pos, study = load(file);
+  const hasFormula = a !== undefined && String(a).includes('~');
+  const factorId = hasFormula ? b : a;
+  if (!factorId) fail('compare: give the factor, e.g. doe compare STUDY G --control ctrl');
+  const f0 = study.factors.find(f => f.id === factorId) ?? fail(`no factor "${factorId}" in ${file}`);
+  let formula = hasFormula ? String(a) : null;
+  if (!formula) {
+    const resp = study.responses.find(r => !r.derived && study.observations.some(o => o.response === r.id)) ?? fail('no response has results yet');
+    formula = `${resp.id} ~ main`;
+  }
+  const respId = formula.slice(0, formula.indexOf('~')).trim(), resp = study.responses.find(r => r.id === respId);
+  const at = Object.fromEntries(String(opt.at ?? '').split(',').filter(t => t.trim()).map(t => {
+    const [id, v] = t.split('=').map(x => x?.trim());
+    const f = study.factors.find(x => x.id === id), c = study.covariates?.find(x => x.id === id);
+    if (!f && !c) fail(`--at: no factor or covariate "${id}"`);
+    if (f?.type === 'categorical') { const i = f.levels.map(String).indexOf(v); if (i < 0) fail(`--at: ${id} has no level "${v}"`); return [id, i]; }
+    const x = Number(v); if (v === undefined || v === '' || !Number.isFinite(x)) fail(`--at: ${id}: "${v}" is not a number`);
+    return [id, x];
+  }));
+  const random = opt.random ? String(opt.random).split(',').map(x => x.trim()) : null;
+  if (resp?.distribution && random) fail('compare: random effects with counts or proportions are not available here yet');
+  let fit;
+  try { fit = random ? fitMixedModel(study, formula, { random }) : (mixedFor(study, formula, opt) ?? fitModel(study, formula)); } catch (e) { fail(e.message); }
+  const contrasts = list(opt.contrast).map(String);
+  const alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05;
+  let cmp;
+  try { cmp = compareLevels(fit, factorId, { method: opt.method ? String(opt.method) : undefined, control: opt.control !== undefined ? String(opt.control) : undefined, contrasts, at, alpha, level: 1 - alpha }); } catch (e) { fail(e.message); }
+  const ratio = cmp.comparison === 'ratio' || cmp.comparison === 'odds ratio';
+  const meth = { tukey: "Tukey's method (all pairs)", dunnett: `Dunnett's method (each level against ${cmp.control})`, 'single-step': 'single-step (multivariate t)', holm: "Holm's method", bonferroni: 'Bonferroni', none: 'no adjustment' }[cmp.method];
+  out(`${factorId}: ${fit.kind === 'mixed' ? `mixed model (${fit.random.map(r => r.name.toLowerCase()).join(', ')} random), Kenward–Roger` : fit.distribution ? `${noiseOf(fit).label}` : 'least squares'}, ${formula}${fit.model.terms.some(t => t.block) ? ' (with the block term)' : ''}`);
+  const held = [...Object.entries(cmp.held).map(([id, v]) => `${id} = ${num(v, 5)}`), ...(cmp.averagedOver.length ? [`averaged over ${cmp.averagedOver.join(', ')}`] : [])];
+  if (held.length) out(`every level at ${held.join(', ')}`);
+  out('');
+  out(table([{ key: 'label', label: factorId, align: 'left' }, { key: 'mean', label: ratio || fit.distribution ? (resp.distribution === 'binomial' ? 'proportion' : 'rate') : 'mean' }, { key: 'se', label: 'std. error' }, { key: 'ci', label: `${num((1 - alpha) * 100)}% CI`, align: 'left' }, { key: 'n', label: fit.kind === 'mixed' ? 'readings' : 'runs' }, ...(cmp.family === 'pairs' ? [{ key: 'letters', label: 'group', align: 'left' }] : [])],
+    cmp.levels.map(l => ({ ...l, ci: `${num(l.lower)} … ${num(l.upper)}` }))));
+  if (cmp.family === 'pairs') out(`levels sharing a letter do not differ (${meth}, α = ${alpha})`);
+  out('');
+  out(table([{ key: 'label', label: 'comparison', align: 'left' }, { key: 'estimate', label: cmp.family === 'contrasts' ? 'estimate' : ratio ? cmp.comparison : 'difference' }, { key: 'se', label: 'std. error' }, ...(fit.kind === 'mixed' ? [{ key: 'df', label: 'df' }] : []), { key: 'ci', label: `${num((1 - alpha) * 100)}% CI (simultaneous)`, align: 'left' }, { key: 'p', label: 'p (adjusted)' }],
+    cmp.comparisons.map(x => ({ ...x, label: ratio ? x.label.replace(' − ', ' / ') : x.label, ci: `${num(x.lower)} … ${num(x.upper)}`, p: pval(x.p), df: num(x.df, 4) }))));
+  out(`${meth}${cmp.critical ? `; critical value ${num(cmp.critical, 5)}` : ''}${cmp.method === 'holm' ? '; intervals: Bonferroni' : ''}`);
+  for (const x of cmp.comparisons.filter(y => y.notContrast)) out(`note: the weights of "${x.label}" do not add up to 0 — it is not a comparison between levels`);
+  put({ kind: cmp.kind, response: respId, formula, factor: factorId, method: cmp.method, family: cmp.family, comparison: cmp.comparison, ...(cmp.control !== undefined ? { control: cmp.control } : {}), alpha, held: cmp.held, averagedOver: cmp.averagedOver,
+    ...(cmp.critical !== undefined ? { critical: cmp.critical } : {}),
+    levels: cmp.levels.map(l => ({ label: l.label, mean: l.mean, se: l.se, lower: l.lower, upper: l.upper, raw: Number.isFinite(l.raw) ? l.raw : null, n: l.n, ...(l.letters !== undefined ? { letters: l.letters } : {}) })),
+    comparisons: cmp.comparisons.map(x => ({ label: x.label, ...(x.a !== undefined ? { a: x.a, b: x.b } : { weights: x.weights }), estimate: x.estimate, se: x.se, df: Number.isFinite(x.df) ? x.df : null, statistic: x.stat, p: x.p, pUnadjusted: x.pRaw, lower: x.lower, upper: x.upper })) });
 }
 
 /** Allocate units to runs by a covariate known in advance (issue #82, phase 3). */
@@ -1901,7 +1961,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
+const COMMANDS = { compare: cmdCompare, allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

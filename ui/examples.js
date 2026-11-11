@@ -51,6 +51,18 @@ export const EXAMPLES = [
         truth: { intercept: 65, terms: { F: 10, T: -6, 'F:T': 5, Conc: 2 } } }] }, { ...s, design });
       return createStudy({ ...s, description: 'Five process factors screened for their effect on yield (simulated data).', design, observations });
     } },
+  { id: 'media-compare', title: 'Five growth media: which beat the standard?', step: 'analyse',
+    blurb: 'Four new media and the standard, four flasks each, in random order. Which media differ from each other, and which beat the standard? Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Growth media', seed: 80,
+        description: 'Five media (the standard and four candidates), four flasks each, completely randomised; dry biomass after 48 h. Simulated data.',
+        factors: [{ id: 'medium', name: 'Medium', type: 'categorical', levels: ['Standard', 'M-2', 'M-3', 'M-4', 'M-5'] }],
+        responses: [{ id: 'biomass', name: 'Biomass', units: 'g/L' }] });
+      const design = toStudyDesign(s, fullFactorial([5], { replicates: 4 }), { seed: 80 });
+      // by run number: the levels in order, four times over
+      const y = [6.12, 6.63, 7.55, 7.38, 6.96, 6.64, 6.2, 6.79, 7.95, 6, 5.9, 5.84, 7.1, 7.57, 6.53, 6.42, 4.93, 7.7, 8.29, 6.67];
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'biomass', value: y[r.run - 1] })) });
+    } },
   { id: 'titre-covariate', title: 'Fed-batch titre: a covariate', step: 'analyse',
     blurb: 'A replicated 2³ in temperature, pH and feed rate. The density of the seed culture at inoculation was measured, not set: add it to the model (+ vcd) and the noise falls by half, so the small pH effect shows. Simulated data.',
     build: () => {

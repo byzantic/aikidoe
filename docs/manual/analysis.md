@@ -89,6 +89,116 @@ The result is a suggestion: every step is shown, and any term can be kept (`--ke
 run — wider, as it includes the run-to-run noise). Before acting on a prediction, confirm it:
 [confirmation runs](designs-sequential.md#confirmation-runs).
 
+## Comparing treatments
+
+The commonest experiment of all: five media (compounds, suppliers, recipes), which differ, and
+which beat the standard? Fit the factor — on its own, or in a model with blocks or other factors
+— and the Analyse step's **Compare levels** panel answers both questions, as does `doe compare`.
+
+**Why not a t test for every pair?** Each test has a 5 % chance of a false alarm. Five media make
+ten pairs, and if the media are all alike the chance that at least one of the ten tests comes out
+"significant" is about 30 % (here, with four flasks each: 29 %) — not 5 %. The methods below allow for the whole family of comparisons at once:
+the intervals hold together with 95 % confidence, and a p value is small only if the difference
+stands out from the family.
+
+**All pairs (Tukey's method).** Every level against every other, the usual choice when no level is
+special. The **letters** summarise them: levels that share a letter do not differ significantly,
+and *a* is the largest mean.
+
+```console
+$ doe compare examples/media-compare.aikidoe.json medium
+medium: least squares, biomass ~ main
+
+medium     mean  std. error  95% CI         runs  group
+--------  -----  ----------  -------------  ----  -----
+Standard   6.27      0.2375  5.764 … 6.776     4  bc
+M-2         5.9      0.2375  5.394 … 6.406     4  c
+M-3       7.285      0.2375  6.779 … 7.791     4  ab
+M-4       7.797      0.2375  7.291 … 8.304     4  a
+M-5        6.54      0.2375  6.034 … 7.046     4  bc
+levels sharing a letter do not differ (Tukey's method (all pairs), α = 0.05)
+
+comparison      difference  std. error  95% CI (simultaneous)  p (adjusted)
+--------------  ----------  ----------  ---------------------  ------------
+Standard − M-2        0.37      0.3359  -0.6672 … 1.407        0.803
+Standard − M-3      -1.015      0.3359  -2.052 … 0.02222       0.0565
+Standard − M-4      -1.528      0.3359  -2.565 … -0.4903       0.00302
+Standard − M-5       -0.27      0.3359  -1.307 … 0.7672        0.925
+M-2 − M-3           -1.385      0.3359  -2.422 … -0.3478       0.00685
+M-2 − M-4           -1.898      0.3359  -2.935 … -0.8603       0.000382
+M-2 − M-5            -0.64      0.3359  -1.677 … 0.3972        0.356
+M-3 − M-4          -0.5125      0.3359  -1.55 … 0.5247         0.563
+M-3 − M-5            0.745      0.3359  -0.2922 … 1.782        0.226
+M-4 − M-5            1.258      0.3359  0.2203 … 2.295         0.0143
+Tukey's method (all pairs)
+```
+
+**Each against a control (Dunnett's method).** When the question is which levels beat the
+standard, compare only with it: four comparisons instead of ten, so each is sharper. Here M-3 beats
+the standard (p = 0.028) although Tukey's family of ten did not quite show it (p = 0.057).
+
+```console
+$ doe compare examples/media-compare.aikidoe.json medium --control Standard
+medium: least squares, biomass ~ main
+
+medium     mean  std. error  95% CI         runs
+--------  -----  ----------  -------------  ----
+Standard   6.27      0.2375  5.764 … 6.776     4
+M-2         5.9      0.2375  5.394 … 6.406     4
+M-3       7.285      0.2375  6.779 … 7.791     4
+M-4       7.797      0.2375  7.291 … 8.304     4
+M-5        6.54      0.2375  6.034 … 7.046     4
+
+comparison      difference  std. error  95% CI (simultaneous)  p (adjusted)
+--------------  ----------  ----------  ---------------------  ------------
+M-2 − Standard       -0.37      0.3359  -1.286 … 0.5461        0.649
+M-3 − Standard       1.015      0.3359  0.09891 … 1.931        0.0283
+M-4 − Standard       1.528      0.3359  0.6114 … 2.444         0.00137
+M-5 − Standard        0.27      0.3359  -0.6461 … 1.186        0.836
+Dunnett's method (each level against Standard); critical value 2.7273
+```
+
+**Contrasts.** Any comparison written with the levels' names: `(M-3 + M-4)/2 - Standard` (the new
+pair against the standard), `M-4 - M-3`. The weights should add up to 0. Several contrasts together
+get simultaneous intervals (the single-step method); in the app, type one per line. Quote a level
+whose name has spaces or + − * /: `'low dose' - Standard`.
+
+```console
+$ doe compare examples/media-compare.aikidoe.json medium --contrast "(M-3 + M-4)/2 - Standard" --contrast "M-4 - M-3"
+medium: least squares, biomass ~ main
+
+medium     mean  std. error  95% CI         runs
+--------  -----  ----------  -------------  ----
+Standard   6.27      0.2375  5.764 … 6.776     4
+M-2         5.9      0.2375  5.394 … 6.406     4
+M-3       7.285      0.2375  6.779 … 7.791     4
+M-4       7.797      0.2375  7.291 … 8.304     4
+M-5        6.54      0.2375  6.034 … 7.046     4
+
+comparison                estimate  std. error  95% CI (simultaneous)  p (adjusted)
+------------------------  --------  ----------  ---------------------  ------------
+(M-3 + M-4)/2 - Standard     1.271      0.2909  0.5515 … 1.991         0.00109
+M-4 - M-3                   0.5125      0.3359  -0.3186 … 1.344        0.268
+single-step (multivariate t); critical value 2.4742
+```
+
+**Other adjustments.** *Holm* is less conservative than Bonferroni and works for any family (its
+intervals are Bonferroni's); *Bonferroni* is the simplest and the most conservative; *none* gives
+each comparison on its own — reasonable only for one or two comparisons planned before the
+experiment.
+
+**In a bigger model.** The means compared are the model's [adjusted means](#adjusted-means): with
+blocks, other factors or a covariate in the model, each level is taken at the same settings of the
+rest (other categorical factors averaged over their levels, continuous ones at their mean), and
+the raw means are shown beside them. For counts and proportions the means are rates or
+proportions, and two levels are compared as a ratio or an odds ratio. With blocks as a random
+effect (`--random block`; [incomplete blocks](#mixed-models)) the standard errors and degrees of
+freedom are Kenward–Roger's.
+
+**Planning.** A comparison of a few treatments is best run as a
+[randomised complete block design](concepts.md#randomisation-and-blocking) when the runs fall into
+groups (days, plates, batches), each block holding every treatment once.
+
 ## Covariates
 
 A **covariate** is something you measure at each run but do not set: the starting weight of an

@@ -21,7 +21,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Covariance*. Chapman & Hall/CRC. ([Covariates](analysis.md#covariates): one slope or several,
   adjusted means.)
 - Hsu, J. C. (1996). *Multiple Comparisons: Theory and Methods*. Chapman & Hall. (Tukey's method
-  for all pairwise comparisons.)
+  for all pairwise comparisons; Dunnett's with a control.)
+- Genz, A. & Bretz, F. (2009). *Computation of Multivariate Normal and t Probabilities*. Springer.
+  (The multivariate t behind Dunnett's method and contrasts, and singular sets of contrasts.)
 - Montgomery, D. C. & Runger, G. C. (2018). *Applied Statistics and Probability for Engineers*,
   7th ed. Wiley.
 - Myers, R. H., Montgomery, D. C. & Anderson-Cook, C. M. (2016). *Response Surface Methodology*,
@@ -66,6 +68,12 @@ Books for learning and reference, and the papers behind specific methods in aiki
   studentized range statistic with application to multiple significance testing of simple
   effects. *Journal of Statistical Computation and Simulation* 30, 1–15. (Algorithm AS 190, as
   R's `ptukey`: the studentized range behind Tukey's comparisons.)
+- Dunnett, C. W. (1955). A multiple comparison procedure for comparing several treatments with a
+  control. *Journal of the American Statistical Association* 50, 1096–1121.
+- Genz, A. (1992). Numerical computation of multivariate normal probabilities. *Journal of
+  Computational and Graphical Statistics* 1, 141–149. (Separation of variables, as `mvtnorm`.)
+- Holm, S. (1979). A simple sequentially rejective multiple test procedure. *Scandinavian Journal
+  of Statistics* 6, 65–70.
 - Deng, L.-Y. & Tang, B. (1999). Generalized resolution and minimum aberration criteria for
   Plackett–Burman and other nonregular factorial designs. *Statistica Sinica* 9, 1071–1082.
   (Generalised resolution of Plackett–Burman designs.)
@@ -90,6 +98,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Kosmidis, I. & Firth, D. (2021). Jeffreys-prior penalty, finiteness and shrinkage in
   binomial-response generalized linear models. *Biometrika* 108, 71–82. (brglm2, which aikidoe's
   Firth estimates are checked against.)
+- Kramer, C. Y. (1956). Extension of multiple range tests to group means with unequal numbers of
+  replications. *Biometrics* 12, 307–310. (Tukey–Kramer, for unequal numbers of runs.)
 - Lenth, R. V. (1989). Quick and easy analysis of unreplicated factorials. *Technometrics* 31,
   469–473.
 - Lin, D. K. J. & Draper, N. R. (1992). Projection properties of Plackett and Burman designs.
@@ -112,6 +122,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Statistical Society A* 135, 370–384.
 - Piepel, G. F. (1982). Measuring component effects in constrained mixture experiments.
   *Technometrics* 24, 29–39.
+- Piepho, H.-P. (2004). An algorithm for a letter-based representation of all-pairwise
+  comparisons. *Journal of Computational and Graphical Statistics* 13, 456–466. (The compact
+  letter display, checked against `multcompView`.)
 - Plackett, R. L. & Burman, J. P. (1946). The design of optimum multifactorial experiments.
   *Biometrika* 33, 305–325.
 - Pocock, S. J. & Simon, R. (1975). Sequential treatment assignment with balancing for prognostic
@@ -149,4 +162,4 @@ Books for learning and reference, and the papers behind specific methods in aiki
 R (`lm`, `anova`, `car::Anova`, `MASS::boxcox`, `nls`), lme4 and pbkrtest (mixed models), drc and
 numDeriv (dose–response), FrF2
 (fractions and split-plot fractions), rsm, AlgDesign, skpr (power), SixSigma (gauge R&R),
-desirability, BsMD (Lenth); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.
+desirability, BsMD (Lenth), emmeans, mvtnorm and multcompView (multiple comparisons); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.

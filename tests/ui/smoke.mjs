@@ -387,10 +387,10 @@ try {
     check('with it in the model: its range and slope, and the noise falls', /\+ vcd/.test(await page.inputValue('#formula')) && /Seed density \(vcd\), measured at 16 runs: mean 0\.5138, from 0\.33 to 0\.62/.test(note) && /Titre changes by 2\.\d+ ± 0\.\d+ per 10⁶ cells\/mL/.test(note)
       && /at the mean of the covariate/.test(note) && (await sigma()) < before / 2 && await page.isDisabled('#covariate-terms button'), `${note} σ ${before} → ${await sigma()}`);
     check('… nothing went wrong with the plots', !/Something went wrong/.test(await page.textContent('main')));
-    await page.selectOption('select[aria-label="adjusted means of"]', 'pH'); await settle();
-    const adj = await page.textContent('#adjusted');
-    check('adjusted means of pH: at the mean seed density, beside the raw means; one slope is enough', /compared at the same vcd = 0\.5138/.test(adj) && /pH = 6\.83\.35/.test(adj) && /3\.336/.test(adj)
-      && /temp:vcd, pH:vcd, feed:vcd added: F = [\d.]+ on 3 and \d+ df, p 0\.\d+\. No evidence/.test(adj) && (await page.locator('#adjusted [id^="separate-slopes"]').count()) === 0, adj);
+    await page.selectOption('select[aria-label="compare levels of"]', 'pH'); await settle();
+    const adj = await page.textContent('#compare');
+    check('compare levels of pH: at the mean seed density, beside the raw means; one slope is enough', /Each level at the same vcd = 0\.5138/.test(adj) && /pH = 6\.83\.35/.test(adj) && /3\.336/.test(adj)
+      && /temp:vcd, pH:vcd, feed:vcd added: F = [\d.]+ on 3 and \d+ df, p 0\.\d+\. No evidence/.test(adj) && (await page.locator('#compare [id^="separate-slopes"]').count()) === 0, adj);
     await shot('16-covariate');
     await page.click('[data-step="optimise"]'); await settle();
     check('Optimise renders with a covariate in the model', !/Something went wrong/.test(await page.textContent('main')));
@@ -428,6 +428,24 @@ try {
     check('… power: a covariate ρ', (await page.locator('input[aria-label="power covariate rho"]').count()) <= 1);
     await page.click('[data-step="run"]'); await settle();
     check('… the run sheet shows each run\'s unit', /Seed density: unit/.test(await page.textContent('#run-sheet thead')));
+  }
+  section('comparing treatments (issue #80)');
+  {
+    await page.click('#btn-examples'); await page.click('[data-example="media-compare"]'); await page.waitForTimeout(300);
+    await page.click('[data-step="analyse"]'); await settle();
+    let t = await page.textContent('#compare');
+    check('all pairs by Tukey, with letters: M-4 has a, M-2 c', /Compare levels/.test(t) && /M-47\.797/.test(t) && /M-2 − M-4-1\.898/.test(t) && /Tukey's method allows for all 10 pairs/.test(t)
+      && (await page.textContent('#compare tbody tr:nth-child(4) .letters')) === 'a' && (await page.textContent('#compare tbody tr:nth-child(2) .letters')) === 'c', t);
+    await page.selectOption('select[aria-label="compare which"]', 'control'); await settle();
+    t = await page.textContent('#compare');
+    check('each with the control (the first level): Dunnett, M-3 now beats it', /Dunnett's method allows for all 4 comparisons with Standard/.test(t) && /M-3 − Standard1\.015/.test(t) && /0\.0283/.test(t), t);
+    await page.selectOption('select[aria-label="compare adjustment"]', 'none'); await settle();
+    check('… unadjusted, with a warning in words', /no adjustment: each p value on its own/.test(await page.textContent('#compare')));
+    await page.selectOption('select[aria-label="compare which"]', 'contrasts'); await settle();
+    await page.fill('textarea[aria-label="contrasts"]', '(M-3 + M-4)/2 - Standard\nM-4 - M-3'); await page.keyboard.press('Tab'); await settle();
+    t = await page.textContent('#compare');
+    check('contrasts typed in: single-step', /single-step: the intervals hold for all 2 contrasts/.test(t) && /\(M-3 \+ M-4\)\/2 - Standard1\.271/.test(t), t);
+    await shot('17-compare');
   }
   section('projectivity: the active factors fitted from the same runs (issue #79)');
   {

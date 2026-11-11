@@ -1,0 +1,309 @@
+{
+  "aikidoe": 1,
+  "name": "Growth media",
+  "description": "Five media (the standard and four candidates), four flasks each, completely randomised; dry biomass after 48 h. Simulated data.",
+  "seed": 80,
+  "factors": [
+    {
+      "id": "medium",
+      "name": "Medium",
+      "type": "categorical",
+      "htc": false,
+      "levels": [
+        "Standard",
+        "M-2",
+        "M-3",
+        "M-4",
+        "M-5"
+      ]
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "biomass",
+      "name": "Biomass",
+      "units": "g/L",
+      "goal": "none",
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "full-factorial",
+    "params": {
+      "levels": [
+        5
+      ],
+      "replicates": 4,
+      "seed": 80
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 13,
+        "kind": "factorial",
+        "settings": {
+          "medium": "Standard"
+        }
+      },
+      {
+        "run": 2,
+        "order": 7,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-2"
+        }
+      },
+      {
+        "run": 3,
+        "order": 14,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-3"
+        }
+      },
+      {
+        "run": 4,
+        "order": 10,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-4"
+        }
+      },
+      {
+        "run": 5,
+        "order": 18,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-5"
+        }
+      },
+      {
+        "run": 6,
+        "order": 20,
+        "kind": "factorial",
+        "settings": {
+          "medium": "Standard"
+        }
+      },
+      {
+        "run": 7,
+        "order": 2,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-2"
+        }
+      },
+      {
+        "run": 8,
+        "order": 3,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-3"
+        }
+      },
+      {
+        "run": 9,
+        "order": 5,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-4"
+        }
+      },
+      {
+        "run": 10,
+        "order": 11,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-5"
+        }
+      },
+      {
+        "run": 11,
+        "order": 15,
+        "kind": "factorial",
+        "settings": {
+          "medium": "Standard"
+        }
+      },
+      {
+        "run": 12,
+        "order": 9,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-2"
+        }
+      },
+      {
+        "run": 13,
+        "order": 1,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-3"
+        }
+      },
+      {
+        "run": 14,
+        "order": 6,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-4"
+        }
+      },
+      {
+        "run": 15,
+        "order": 12,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-5"
+        }
+      },
+      {
+        "run": 16,
+        "order": 19,
+        "kind": "factorial",
+        "settings": {
+          "medium": "Standard"
+        }
+      },
+      {
+        "run": 17,
+        "order": 16,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-2"
+        }
+      },
+      {
+        "run": 18,
+        "order": 8,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-3"
+        }
+      },
+      {
+        "run": 19,
+        "order": 4,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-4"
+        }
+      },
+      {
+        "run": 20,
+        "order": 17,
+        "kind": "factorial",
+        "settings": {
+          "medium": "M-5"
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "biomass",
+      "value": 6.12
+    },
+    {
+      "run": 2,
+      "response": "biomass",
+      "value": 6.63
+    },
+    {
+      "run": 3,
+      "response": "biomass",
+      "value": 7.55
+    },
+    {
+      "run": 4,
+      "response": "biomass",
+      "value": 7.38
+    },
+    {
+      "run": 5,
+      "response": "biomass",
+      "value": 6.96
+    },
+    {
+      "run": 6,
+      "response": "biomass",
+      "value": 6.64
+    },
+    {
+      "run": 7,
+      "response": "biomass",
+      "value": 6.2
+    },
+    {
+      "run": 8,
+      "response": "biomass",
+      "value": 6.79
+    },
+    {
+      "run": 9,
+      "response": "biomass",
+      "value": 7.95
+    },
+    {
+      "run": 10,
+      "response": "biomass",
+      "value": 6
+    },
+    {
+      "run": 11,
+      "response": "biomass",
+      "value": 5.9
+    },
+    {
+      "run": 12,
+      "response": "biomass",
+      "value": 5.84
+    },
+    {
+      "run": 13,
+      "response": "biomass",
+      "value": 7.1
+    },
+    {
+      "run": 14,
+      "response": "biomass",
+      "value": 7.57
+    },
+    {
+      "run": 15,
+      "response": "biomass",
+      "value": 6.53
+    },
+    {
+      "run": 16,
+      "response": "biomass",
+      "value": 6.42
+    },
+    {
+      "run": 17,
+      "response": "biomass",
+      "value": 4.93
+    },
+    {
+      "run": 18,
+      "response": "biomass",
+      "value": 7.7
+    },
+    {
+      "run": 19,
+      "response": "biomass",
+      "value": 8.29
+    },
+    {
+      "run": 20,
+      "response": "biomass",
+      "value": 6.67
+    }
+  ],
+  "history": []
+}

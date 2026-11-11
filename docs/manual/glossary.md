@@ -24,7 +24,13 @@ stage); the design and analysis account for it.
 
 **Coded units** — each continuous factor scaled so its range runs from −1 to +1.
 
+**Compact letter display** — a letter beside each level's mean; levels that share a letter are
+not shown to differ by the comparisons. See [comparing treatments](analysis.md#comparing-treatments).
+
 **Confirmation run** — a run at settings chosen from a model, to check its prediction.
+
+**Contrast** — a weighted sum of level means whose weights add to zero, such as "the average of
+the new media minus the standard". See [comparing treatments](analysis.md#comparing-treatments).
 
 **Covariate** — a variable measured at each run but not set (a starting weight, the room
 temperature). In the model it explains part of the scatter, and the factors' effects are compared
@@ -40,6 +46,10 @@ likelihood-ratio χ². See [counts and proportions](analysis.md#counts-and-propo
 
 **Defining relation** — the set of words (products of factors) equal to the identity in a regular
 fraction; it gives every alias.
+
+**Dunnett's method** — comparing each level with one control (the standard, the untreated),
+allowing for all those comparisons at once; sharper than Tukey's method when only the comparisons
+with the control matter. See [comparing treatments](analysis.md#comparing-treatments).
 
 **Desirability** — a 0–1 score of how acceptable a response value is; the overall desirability
 combines several responses.
@@ -91,6 +101,10 @@ explain.
 
 **Lenth's method** — judging effects in an unreplicated two-level design from the spread of the
 effects themselves.
+
+**Multiple comparisons** — many tests made at once. Each has its own chance of a false alarm,
+so the chance of at least one grows with their number unless the p values and intervals are
+adjusted (Tukey, Dunnett, Holm). See [comparing treatments](analysis.md#comparing-treatments).
 
 **Mixture** — factors that are shares of a whole and add up to a fixed total; they cannot be varied
 independently. See [mixture designs](designs-mixture.md).
@@ -172,7 +186,7 @@ there, before any run is made. See [prediction variance](concepts.md#prediction-
 
 **Tukey's method** — comparing every pair of a factor's levels with intervals and p values that
 allow for all the comparisons at once (the studentized range), so that many comparisons do not
-give many chances of a false alarm. See [Adjusted means](analysis.md#adjusted-means).
+give many chances of a false alarm. See [comparing treatments](analysis.md#comparing-treatments).
 
 **Variance dispersion graph** — the smallest, average and largest scaled prediction variance at
 each distance from the centre of a design: one picture to compare response-surface designs.
