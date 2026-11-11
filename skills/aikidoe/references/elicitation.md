@@ -38,6 +38,10 @@ heard. Unknowns are fine — say how the design will cope with them.
 - Can the runs be done in a random order? If not, why not (that is usually a hard-to-change factor)?
 - Nuisance: days, tools, operators, lots, chambers — anything that might shift results between
   groups of runs (blocks).
+- What varies from run to run that **cannot be set but can be measured** before or at each run
+  (room temperature, a starting weight or cell density, the age of a reagent, incoming film
+  thickness)? Record it as a covariate (`doe covariate`); it must not be something the factors
+  change.
 
 ## What is known
 

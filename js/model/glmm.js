@@ -46,6 +46,7 @@ import { LINKS, DISTRIBUTIONS, canonicalLink, family, fitGLM, predictiveInterval
 import { containedIn, parseFormula, modelMatrix } from './formula.js';
 import { responseTable, withBlockTerm } from './fit.js';
 import { noiseModel, noiseModelOf } from './noise.js';
+import { withCovariates } from './covariates.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
 const lchoose = (n, k) => lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1);
@@ -681,9 +682,9 @@ export function randomGroupOf(study, requested = 'auto') {
  * Returns the fitGLMM result plus { response, model, factors, rows, random: { id, name, m } }.
  */
 export function fitCountMixedModel(study, formula, opts = {}) {
-  const parsed = parseFormula(formula, study.factors);
-  const response = opts.response ?? parsed.response;
-  if (!response) throw new Error('name the response: "y ~ …"');
+  const lhs = String(formula).includes('~') ? String(formula).slice(0, String(formula).indexOf('~')).trim() || null : null;
+  const response = opts.response ?? lhs;
+  if (!response) { parseFormula(formula, study.factors); throw new Error('name the response: "y ~ …"'); }
   const noise = opts.noise ? noiseModel(opts.noise, { link: opts.link }) : noiseModelOf(study, response);
   if (noise.id === 'normal') throw new Error(`${response} is a measurement: its mixed model is the REML fit (fitMixedModel)`);
   const random = randomGroupOf(study, opts.random ?? 'auto');
@@ -692,14 +693,16 @@ export function fitCountMixedModel(study, formula, opts = {}) {
   let rows = responseTable(study, response, { perObservation: true });
   if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
   if (!rows.length) throw new Error(`no results for ${response} yet`);
+  const cov = withCovariates(study, formula, rows);      // covariates in the formula (issue #82)
+  const parsed = parseFormula(formula, cov.factors);
   const levels = random.levels ?? [random];
-  const b = withBlockTerm(study, parsed, rows, { ...opts, ...(levels.some(l => l.id === 'block') ? { blocks: false } : {}) });
+  const b = withBlockTerm({ ...study, factors: cov.factors }, parsed, cov.rows, { ...opts, ...(levels.some(l => l.id === 'block') ? { blocks: false } : {}) });
   const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   const data = noise.prepare(b.rows);
   const labelsOf = (id) => b.rows.map(r => String(GROUPINGS[id].label(runs.get(r.run))));
   const groups = levels.length === 1 ? labelsOf(random.id) : levels.map(l => ({ name: l.name, labels: labelsOf(l.id) }));
   const fit = fitGLMM(mm, data.y, groups, { distribution: noise.id, link: noise.link.name, weights: data.weights, offset: data.offset, nAGQ: opts.nAGQ, group: random.name });
-  return { ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random };
+  return { ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, ...(cov.used.length ? { covariates: cov.used, dropped: cov.dropped } : {}) };
 }
 
 /** Predictions of a fitCountMixedModel fit at settings (natural units): glmmPredict's rows. */

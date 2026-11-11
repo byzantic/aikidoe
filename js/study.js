@@ -42,7 +42,7 @@ const COUNTS = ['poisson', 'quasipoisson', 'negbin'], PROPORTIONS = ['binomial',
 const TRANSFORMS = ['none', 'log'];
 
 const KEYS = {
-  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
+  study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'covariates', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
   response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
@@ -54,6 +54,8 @@ const KEYS = {
   position: ['id', 'x', 'y'],
   stage: ['stage', 'runs', 'date', 'note', 'params'],
   constraint: ['expr', 'units'],
+  covariate: ['id', 'name', 'units', 'values', 'note'],
+  covariateValue: ['run', 'value', 'lot', 'wafer', 'site'],
 };
 
 // ---------------------------------------------------------------- JSON with comments
@@ -396,6 +398,53 @@ export function feasible(study, settings) {
   return studyConstraints(study).every(con => con.units === 'natural' ? satisfies(con, settings) : satisfies(con, codeSettings(study, settings)));
 }
 
+// words a covariate cannot be called: they mean something else in a formula
+const RESERVED = ['main', 'quadratic', 'I', 'delta', 'mixlinear', 'mixquadratic', 'mixspecial', 'mixcubic', 'radius2', 'edge', 'waferX', 'waferY', 'slot', 'slotZone'];
+
+/**
+ * Covariates (issue #82): variables that are measured but not set — a starting weight, the room
+ * temperature, the age of a reagent — [{ id, name, units?, note?, values: [{ run, value, lot?,
+ * wafer?, site? }] }]. A value belongs to a run, or to one wafer (lot, site) of it when it was
+ * measured there. Models take them as terms by id (js/model/covariates.js).
+ */
+function normCovariates(list, design, errors) {
+  if (list === undefined) return [];
+  if (!Array.isArray(list)) { errors.push('covariates: must be a list'); return []; }
+  const runs = new Set(design ? design.runs.map(r => r.run) : []);
+  return list.map((c, i) => {
+    const path = `covariates[${i}]${c && c.id ? ` (${c.id})` : ''}`;
+    if (!isObj(c)) { errors.push(`covariates[${i}]: must be an object`); return null; }
+    checkKeys(c, KEYS.covariate, path, errors);
+    if (typeof c.id !== 'string' || !ID.test(c.id)) errors.push(`${path}.id: must be an identifier, got ${JSON.stringify(c.id)}`);
+    else if (RESERVED.includes(c.id)) errors.push(`${path}.id: "${c.id}" has a meaning of its own in formulas; choose another id`);
+    const out = { id: c.id, name: c.name ?? c.id };
+    if (typeof out.name !== 'string') errors.push(`${path}.name: must be a string`);
+    if (c.units !== undefined) out.units = String(c.units);
+    if (c.note !== undefined) out.note = String(c.note);
+    out.values = [];
+    if (c.values !== undefined && !Array.isArray(c.values)) errors.push(`${path}.values: must be a list`);
+    const seen = new Set();
+    (Array.isArray(c.values) ? c.values : []).forEach((v, j) => {
+      const vp = `${path}.values[${j}]`;
+      if (!isObj(v)) { errors.push(`${vp}: must be an object`); return; }
+      checkKeys(v, KEYS.covariateValue, vp, errors);
+      if (!runs.has(v.run)) errors.push(`${vp}.run: no run ${JSON.stringify(v.run)} in the design`);
+      if (!isNum(v.value)) errors.push(`${vp}.value: must be a number (leave the entry out when it was not measured)`);
+      for (const k of ['lot', 'wafer', 'site']) if (v[k] !== undefined && !isLabel(v[k])) errors.push(`${vp}.${k}: must be a number or string`);
+      const key = JSON.stringify(['run', 'lot', 'wafer', 'site'].map(k => v[k] ?? null));
+      if (seen.has(key)) errors.push(`${vp}: a second value for run ${v.run}${['lot', 'wafer', 'site'].filter(k => v[k] !== undefined).map(k => `, ${k} ${v[k]}`).join('')}`);
+      seen.add(key);
+      const o = {};
+      for (const k of KEYS.covariateValue) if (v[k] !== undefined) o[k] = v[k];
+      out.values.push(o);
+    });
+    return out;
+  }).filter(Boolean);
+}
+
+/** For a study whose design is being replaced: its covariates without their values (spread into the new study). */
+export const covariatesWithoutValues = (study) => (study.covariates?.length ? { covariates: study.covariates.map(c => ({ ...c, values: [] })) } : {});
+
 function normDesign(d, factors, errors, warnings) {
   if (d === undefined) return null;
   if (!isObj(d)) { errors.push('design: must be an object'); return null; }
@@ -586,8 +635,6 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
     if (!src) errors.push(`responses (${r.id}).derived.from: unknown response ${JSON.stringify(r.derived.from)}`);
     else if (src.derived) errors.push(`responses (${r.id}).derived.from: ${src.id} is itself derived`);
   }
-  const ids = [...study.factors, ...study.responses].map(x => x.id).filter(Boolean);
-  for (const id of new Set(ids)) if (ids.filter(x => x === id).length > 1) errors.push(`id "${id}" is used more than once (factor and response ids must all differ)`);
 
   const mixture = normMixture(d.mixture, study.factors, errors);
   if (mixture) study.mixture = mixture;
@@ -599,6 +646,10 @@ export function validateStudy(doc, { upgrades = UPGRADES } = {}) {
   if (design) study.design = design;
   study.observations = normObservations(d.observations, design, study.responses, errors);
   for (const o of study.observations) if (study.responses.find(r => r.id === o.response)?.derived) { errors.push(`observations: ${o.response} is a derived (summary) response; its values are computed, not entered`); break; }
+  const covariates = normCovariates(d.covariates, design, errors);
+  if (covariates.length) study.covariates = covariates;
+  const ids = [...study.factors, ...study.responses, ...covariates].map(x => x.id).filter(Boolean);
+  for (const id of new Set(ids)) if (ids.filter(x => x === id).length > 1) errors.push(`id "${id}" is used more than once (factor, response and covariate ids must all differ)`);
   const sites = normSites(d.sites, errors);
   if (sites) study.sites = sites;
   const plates = normPlates(d.plates, design, study.responses, errors, warnings);

@@ -57,6 +57,10 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    factors and their ranges, what is hard to change, the constraints and the budget.
 2. **Define** the study: `doe init` (factors `id:low:high:units`, `!` for hard to change,
    `id=a,b` for categorical; responses), `doe goal`, `doe spec`, constraints in the file.
+   Things the user can measure at each run but not set (room temperature, a starting weight, the
+   passage number, the age of a reagent) are **covariates**: `doe covariate STUDY id:units`. They
+   get a column on the run sheet; ask for it to be filled in before or at each run, never after
+   the treatment could have changed it.
 3. **Recommend** designs: `doe recommend STUDY --goal screen|model|optimise --budget N --json`.
    Present two or three options to the user with run counts, what each can estimate, what is
    aliased, and power — [references/decisions.md](references/decisions.md). Agree one.
@@ -69,7 +73,10 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    accepting it).
 6. **Analyse**: `doe fit STUDY "y ~ …" --json` (mixed models are automatic for whole plots,
    wafers and sites; plate position terms are automatic for runs in wells), Lenth's method for
-   saturated designs, diagnostics, `--reduce p|aicc`.
+   saturated designs, diagnostics, `--reduce p|aicc`. A covariate goes in the formula by its id
+   (`"y ~ A*B + roomT"`; not part of `main`/`2fi`/`quadratic`): compare σ with and without it, use
+   `--anova 2`, and report the factors' effects as "at the average roomT". Check `A:roomT` if the
+   slope might depend on a factor. `doe predict --at "A=…,roomT=…"` for a known covariate value.
 7. **Decide the next stage** with the user: fold-over, axial points, optimal augmentation, or
    confirmation runs at the chosen settings (`doe augment`); optimise (`doe optimise`, `doe
    robust`); then confirm. When `doe optimise --json` gives a non-null `beyondRuns`, the best

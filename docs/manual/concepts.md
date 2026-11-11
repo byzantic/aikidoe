@@ -27,6 +27,10 @@ A **response** is what you measure. How it is measured matters as much as the de
 - **measurement error** — a gauge R&R study gives the measurement system's σ, which sets a floor
   on what any experiment can detect ([gauge R&R](process.md#gauge-rr)).
 
+Some things you can measure but not set: the room temperature, a starting weight, the age of a
+reagent. Record them at each run as **covariates**; in the model they explain part of the scatter
+and put the factors on an equal footing ([covariates](analysis.md#covariates)).
+
 ## Randomisation and blocking
 
 Runs are done in a **random order** so that anything that drifts — a tool warming up, a

@@ -112,7 +112,7 @@ section('worked examples against their published values');
   near('gauge: %contribution and %study variation of total gauge R&R, ndc (SixSigma ss.rr)', [g.components[0].contribution, g.pctGRR, g.ndc], [fx.output.contrib[0], fx.output.studyVar[0][2], fx.output.ncat], { abs: 0.005 });
   check('the gauge page shows the same data as the SixSigma fixture', fx.input.rows.every(r => pages['example-gauge'].includes(`${r.part.replace(' #', '')},${r.operator.replace(' #', '')},${r.value}`)));
   // the example study files are the app's examples
-  for (const [file, id] of [['reactor-bhh', 'reactor-bhh'], ['furnace-anneal', 'anneal-results'], ['conversion-ccd', 'ccd-results']])
+  for (const [file, id] of [['reactor-bhh', 'reactor-bhh'], ['furnace-anneal', 'anneal-results'], ['conversion-ccd', 'ccd-results'], ['titre-covariate', 'titre-covariate']])
     check(`examples/${file}.aikidoe.json is the app's ${id} example`, readFileSync(join(ROOT, 'examples', `${file}.aikidoe.json`), 'utf8') === serializeStudy(EXAMPLES.find(e => e.id === id).build()));
 }
 

@@ -66,7 +66,8 @@ export function compiledPredictor(fit) {
   const ids = [...new Set(terms.flatMap(t => t.c.map(([id]) => id)))];
   const prog = terms.map(t => ({ b: t.b, f: t.c.map(([id, p]) => [ids.indexOf(id), p]) }));
   return (st) => {
-    const x = ids.map(id => code(byId[id], st[id]));
+    // a covariate (or a nuisance term) without a value: its mean, coded 0
+    const x = ids.map(id => (st[id] === undefined && (byId[id].covariate || byId[id].block) ? 0 : code(byId[id], st[id])));
     let y = 0;
     for (const t of prog) { let v = t.b; for (const [i, p] of t.f) v *= p === 1 ? x[i] : p === 2 ? x[i] * x[i] : x[i] ** p; y += v; }
     return y;

@@ -15,6 +15,7 @@ notation. The response before `~` is optional where the response is known from c
 | `main` | all main effects |
 | `2fi` | all main effects and two-factor interactions |
 | `quadratic` | `2fi` plus the square of every continuous factor |
+| `A + vcd`, `A*vcd` | a [covariate](analysis.md#covariates) by its id, and its interaction with a factor; `main`, `2fi` and `quadratic` are over the factors only |
 
 Shortcuts and terms combine: `quadratic + I(etch^3)`, `main + A:B`, `(A+B+C)^2 - B:C`.
 
@@ -27,6 +28,8 @@ Shortcuts and terms combine: `quadratic + I(etch^3)`, `main + A:B`, `(A+B+C)^2 -
 - An interaction is the product of its components' columns.
 - In a mixed model, the position terms `radius2`, `edge`, `waferX`, `waferY`, `slot` and `slotZone`
   can be used like factors ([wafers and sites](process.md#position-terms)).
+- A covariate contributes (x − mean) / (half its range), over the runs used: 0 at its mean, so the
+  other coefficients are at the average covariate, and its own is per half-range like a factor's.
 - When the runs fall in several blocks, a block term is added first automatically.
 
 ## Order

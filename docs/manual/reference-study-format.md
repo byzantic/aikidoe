@@ -25,6 +25,7 @@ the library checks the rest when it reads a study:
 | `seed` (required) | integer (≥ 0, ≤ 4294967295) | seed of every random step (randomisation, searches) |
 | `factors` (required) | list of [factor](#factor) (at least 1) | the factors varied (continuous or categorical) |
 | `responses` | list of [response](#response) | what is measured |
+| `covariates` | list of [covariate](#covariate) | covariates: variables that are measured but not set (a starting weight, the room temperature), with their values; models take them as terms by id (issue #82) |
 | `constraints` | list of [constraint](#constraint) | linear constraints on the settings |
 | `design` | [design](#design) | the runs, in standard order, with their randomised run order |
 | `observations` | list of [observation](#observation) | results: one per reading (run, response, and wafer / site / repeat when measured that way) |
@@ -177,6 +178,16 @@ Without `type`, a factor whose levels include a string is categorical.
 |---|---|---|
 | `components` (required) | list of [id](#id) (at least 2) | ids of continuous factors (not log, not hard to change, low ≥ 0) that are components of the mixture |
 | `total` | number (> 0) | what the components add up to in every run (1, 100 %, or the batch size) |
+
+## covariate
+
+| field | type | |
+|---|---|---|
+| `id` (required) | [id](#id) | used in formulas; differs from every factor and response id |
+| `name` | string | display name (default: the id) |
+| `units` | string |  |
+| `note` | string | free text |
+| `values` | list of object | the values measured: one per run, or one per wafer (lot, site) of a run when it was measured there. A run with no value is left out of a model that has the covariate |
 
 ## constraint
 

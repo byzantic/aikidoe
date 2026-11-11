@@ -374,6 +374,39 @@ try {
       if (id === 'ccd-results' && step === 'analyse') await shot('5-ccd-analyse');
     }
   }
+  section('covariates: measured, not set (issue #82)');
+  {
+    await page.click('#btn-examples'); await page.click('[data-example="titre-covariate"]'); await page.waitForTimeout(300);
+    await page.click('[data-step="analyse"]'); await settle();
+    const sigma = async () => Number((/σ\s*=?\s*([\d.]+)/.exec(await page.textContent('main')) ?? [])[1]);
+    check('Analyse offers the covariate as a term; none in the model yet', (await page.locator('#covariate-terms button').first().textContent()) === '+ vcd' && (await page.locator('#covariate-note .msg').count()) === 0);
+    const before = await sigma();
+    await page.click('#covariate-terms button'); await settle();
+    const note = await page.textContent('#covariate-note');
+    check('with it in the model: its range and slope, and the noise falls', /\+ vcd/.test(await page.inputValue('#formula')) && /Seed density \(vcd\), measured at 16 runs: mean 0\.5138, from 0\.33 to 0\.62/.test(note) && /Titre changes by 2\.\d+ ± 0\.\d+ per 10⁶ cells\/mL/.test(note)
+      && /at the mean of the covariate/.test(note) && (await sigma()) < before / 2 && await page.isDisabled('#covariate-terms button'), `${note} σ ${before} → ${await sigma()}`);
+    check('… nothing went wrong with the plots', !/Something went wrong/.test(await page.textContent('main')));
+    await shot('16-covariate');
+    await page.click('[data-step="optimise"]'); await settle();
+    check('Optimise renders with a covariate in the model', !/Something went wrong/.test(await page.textContent('main')));
+    await page.click('[data-step="run"]'); await settle();
+    check('Run: a column for the covariate, filled in', (await page.locator('#run-sheet td.cov input').count()) === 16 && (await page.inputValue('input[aria-label="run 10 vcd"]')) === '0.33');
+    await page.fill('input[aria-label="run 10 vcd"]', '0.41'); await page.keyboard.press('Tab'); await settle();
+    let s = await state();
+    check('… a value typed in is the run\'s value', s.study.covariates[0].values.find(v => v.run === 10).value === 0.41 && s.study.covariates[0].values.length === 16);
+    await page.fill('input[aria-label="run 10 vcd"]', ''); await page.keyboard.press('Tab'); await settle();
+    s = await state();
+    check('… and a cleared cell removes it', s.study.covariates[0].values.length === 15 && !s.study.covariates[0].values.some(v => v.run === 10));
+    await page.click('[data-step="analyse"]'); await settle();
+    check('Analyse says which run is left out', /Run 10 is left out: no value of vcd/.test(await page.textContent('#covariate-note')));
+    await page.click('[data-step="define"]'); await settle();
+    check('Define lists the covariate with its values', (await page.inputValue('#covariates input[aria-label="covariate id"]')) === 'vcd' && /15 runs/.test(await page.textContent('#covariates tbody')));
+    await page.click('#add-covariate'); await settle();
+    s = await state();
+    check('… + covariate adds one', s.study.covariates.length === 2 && s.study.covariates[1].id === 'z' && s.study.covariates[1].values.length === 0);
+    await page.click('[data-step="analyse"]'); await settle();
+    check('… without values it cannot go in the model yet', await page.isDisabled('#covariate-terms button:nth-of-type(2)'));
+  }
   section('projectivity: the active factors fitted from the same runs (issue #79)');
   {
     const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];

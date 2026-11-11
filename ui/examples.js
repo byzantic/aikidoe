@@ -51,6 +51,20 @@ export const EXAMPLES = [
         truth: { intercept: 65, terms: { F: 10, T: -6, 'F:T': 5, Conc: 2 } } }] }, { ...s, design });
       return createStudy({ ...s, description: 'Five process factors screened for their effect on yield (simulated data).', design, observations });
     } },
+  { id: 'titre-covariate', title: 'Fed-batch titre: a covariate', step: 'analyse',
+    blurb: 'A replicated 2³ in temperature, pH and feed rate. The density of the seed culture at inoculation was measured, not set: add it to the model (+ vcd) and the noise falls by half, so the small pH effect shows. Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Fed-batch titre', seed: 82,
+        description: 'A 2^3 factorial, twice, with the viable cell density of the seed culture measured at inoculation as a covariate; simulated data.',
+        factors: [{ id: 'temp', name: 'Temperature', units: '°C', low: 34, high: 37 }, { id: 'pH', name: 'pH', low: 6.8, high: 7.2 }, { id: 'feed', name: 'Feed rate', units: '%/day', low: 2, high: 4 }],
+        responses: [{ id: 'titre', name: 'Titre', units: 'g/L', goal: 'maximize', lower: 2.5, target: 4.5 }] });
+      const design = toStudyDesign(s, fullFactorial([2, 2, 2], { replicates: 2 }), { seed: 82 });
+      // by run number (standard order, temperature fastest, the second replicate after the first)
+      const vcd = [0.5, 0.6, 0.53, 0.46, 0.51, 0.58, 0.5, 0.6, 0.61, 0.33, 0.48, 0.62, 0.48, 0.45, 0.47, 0.5];
+      const y = [2.76, 3.29, 2.63, 2.73, 3.23, 4.34, 2.91, 4.35, 3.07, 2.79, 2.53, 3.14, 3.09, 4.12, 2.92, 4.01];
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'titre', value: y[r.run - 1] })),
+        covariates: [{ id: 'vcd', name: 'Seed density', units: '10⁶ cells/mL', values: design.runs.map(r => ({ run: r.run, value: vcd[r.run - 1] })) }] });
+    } },
   { id: 'ccd-results', title: 'Response surface: CCD with results', step: 'analyse',
     blurb: 'Rotatable central composite design in temperature and time (log scale), simulated conversion and by-product; fit quadratics, then trade them off on Optimise.',
     build: () => {

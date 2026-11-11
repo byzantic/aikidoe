@@ -254,6 +254,51 @@ try {
   r = run('comb-over', 'cpl2.aikidoe.json', 'cpl.cir', '--factor', 'etch', '--metric', 'c=db(S21)');
   check('comb-over: a metric without a frequency is refused', r.code === 1 && /give EXPR @ FREQ/.test(r.err), r.err);
 
+  section('covariates (issue #82)');
+  {
+    const C = 'cov.aikidoe.json';
+    r = run('init', C, '--seed', '82', '--factor', 'temp:34:37:°C', '--factor', 'pH:6.8:7.2', '--factor', 'feed:2:4', '--response', 'titre:g/L', '--covariate', 'vcd:1e6/mL');
+    check('init --covariate', r.code === 0 && /3 factors, 1 responses, 1 covariate, seed 82/.test(r.out), r.out + r.err);
+    r = run('covariate', C, 'roomT:°C', '--name', 'Room temperature');
+    check('covariate: add one', r.code === 0 && /covariate roomT \(°C\) added/.test(r.out) && parseStudy(readFileSync(join(dir, C), 'utf8')).covariates[1].name === 'Room temperature', r.out + r.err);
+    r = run('covariate', C, 'temp');
+    check('covariate: an id in use is refused', r.code !== 0 && /used more than once/.test(r.err), r.err);
+    r = run('covariate', C, 'roomT', '--remove');
+    check('covariate --remove', r.code === 0 && parseStudy(readFileSync(join(dir, C), 'utf8')).covariates.length === 1, r.out + r.err);
+    r = run('design', C, '--full', '--replicates', '2', '--sheet', 'cov-sheet.csv');
+    const sheet = parseCSV(readFileSync(join(dir, 'cov-sheet.csv'), 'utf8'));
+    check('the run sheet has a column for the covariate, before the results', sheet.header.indexOf('vcd') === sheet.header.indexOf('titre') - 1, sheet.header.join());
+    // the app's example: its values by run
+    const ex = EXAMPLES.find(e => e.id === 'titre-covariate').build();
+    const y = new Map(ex.observations.map(o => [o.run, o.value])), v = new Map(ex.covariates[0].values.map(x => [x.run, x.value]));
+    const iRun = sheet.header.indexOf('run'), iV = sheet.header.indexOf('vcd'), iY = sheet.header.indexOf('titre');
+    writeFileSync(join(dir, 'cov-filled.csv'), writeCSV(sheet.header, sheet.rows.map(row => row.map((c, j) => (j === iV ? (Number(row[iRun]) === 5 ? '' : v.get(Number(row[iRun]))) : j === iY ? y.get(Number(row[iRun])) : c)))));
+    r = run('import', C, 'cov-filled.csv');
+    check('import: results and covariate values from the filled sheet', r.code === 0 && /16 value\(s\) read \(wide format\), 15 covariate value\(s\)/.test(r.out) && /15 value\(s\) of the covariate vcd/.test(r.out), r.out + r.err);
+    r = run('covariate', C);
+    check('covariate: the list, and the runs without a value', r.code === 0 && /vcd\s+vcd\s+1e6\/mL\s+15/.test(r.out) && /no value for 1 of the 16 runs/.test(r.out), r.out);
+    r = run('fit', C, 'titre ~ temp*feed + pH + vcd');
+    check('fit with a covariate: its coding and slope, the run left out', r.code === 0 && /15 runs, 6 estimable coefficients/.test(r.out) && /covariate vcd \(1e6\/mL\): mean [\d.]+, 0\.33 … 0\.62; coded \(vcd − [\d.]+\) \/ 0\.145; slope [\d.]+ ± [\d.]+ per 1e6\/mL/.test(r.out)
+      && /note: run 5 is left out: no value of vcd/.test(r.out) && /the other terms are at the mean of the covariate/.test(r.out), r.out + r.err);
+    writeFileSync(join(dir, 'cov-long.csv'), 'run,response,value\n5,vcd,0.51\n');
+    r = run('import', C, 'cov-long.csv', '--mode', 'append');
+    check('import, long format: a covariate named in the response column', r.code === 0 && /0 value\(s\) read \(long format\), 1 covariate value/.test(r.out) && parseStudy(readFileSync(join(dir, C), 'utf8')).covariates[0].values.length === 16, r.out + r.err);
+    r = run('fit', C, 'titre ~ temp*feed + pH + vcd', '--anova', '2');
+    check('… all 16 runs now; σ a third of the model without the covariate', r.code === 0 && /16 runs/.test(r.out) && /σ = 0\.05847/.test(r.out) && /vcd\s+1\s+0\.3705/.test(r.out), r.out);
+    r = run('predict', C, 'titre ~ temp*feed + pH + vcd', '--at', 'temp=37,pH=6.8,feed=4', '--at', 'temp=37,pH=6.8,feed=4,vcd=0.6');
+    check('predict: at the mean of the covariate, or at a value', r.code === 0 && /feed=4\s+4\.27\b/.test(r.out) && /vcd=0\.6\s+4\.456/.test(r.out) && /\(vcd at its mean, 0\.51375 1e6\/mL, where not given\)/.test(r.out), r.out + r.err);
+    writeFileSync(join(dir, 'cov-clash.csv'), 'run,vcd\n3,0.4\n3,0.5\n');
+    r = run('import', C, 'cov-clash.csv', '--dry-run');
+    check('import: two different values for a run are an error', /vcd is 0\.5 here but 0\.4 on line 2/.test(r.out), r.out + r.err);
+    r = run('info', C);
+    check('info lists the covariates', /covariates \(measured, not set\): vcd \(1e6\/mL\) \[16 runs\]/.test(r.out), r.out);
+    r = run('sensitivity', C, '--model', 'titre ~ temp*feed + pH + vcd');
+    check('surrogates with a covariate predict at its mean (sensitivity)', r.code === 0 && /temp\s+0\.[1-9]/.test(r.out), r.out + r.err);
+    copyFileSync(join(dir, C), join(dir, 'cov2.aikidoe.json'));
+    r = run('design', 'cov2.aikidoe.json', '--full', '--force');
+    check('a new design clears the covariate\'s values, not the covariate', r.code === 0 && JSON.stringify(parseStudy(readFileSync(join(dir, 'cov2.aikidoe.json'), 'utf8')).covariates.map(c => [c.id, c.values.length])) === '[["vcd",0]]', r.out + r.err);
+  }
+
   section('--json output, validated against schema/cli.schema.json (issue #37)');
   const cliSchema = JSON.parse(readFileSync(new URL('../schema/cli.schema.json', import.meta.url), 'utf8'));
   const studySchema = JSON.parse(readFileSync(new URL('../schema/study.schema.json', import.meta.url), 'utf8'));
@@ -476,6 +521,13 @@ try {
   check('an error as { ok: false, error: { message } } with a non-zero exit', o.ok === false && /unknown factor "Q"/.test(o.error.message));
   o = js('frobnicate');
   check('unknown command in JSON', o.ok === false && /unknown command/.test(o.error.message));
+  // covariates (issue #82)
+  o = js('covariate', 'cov.aikidoe.json');
+  check('covariate --json: each covariate with its runs, mean and range', o.covariates?.[0].id === 'vcd' && o.covariates[0].runs === 16 && o.covariates[0].min === 0.33);
+  o = js('fit', 'cov.aikidoe.json', 'titre ~ temp*feed + pH + vcd');
+  check('fit --json: the covariates of the model with their coding and slope', o.covariates?.[0].id === 'vcd' && Math.abs(o.covariates[0].slope - 2.1557) < 1e-3 && o.covariates[0].interacts === false && o.dropped === undefined, JSON.stringify(o.covariates));
+  o = js('info', 'cov.aikidoe.json');
+  check('info --json: the covariates', o.study?.covariates?.[0].runs === 16);
   const all = Object.keys(cliSchema.$defs).filter(c => c !== 'optimize');
   check(`every command's --json output exercised (${covered.size} of ${all.length})`, all.every(c => covered.has(c)), all.filter(c => !covered.has(c)).join(', '));
   r = run('schema');

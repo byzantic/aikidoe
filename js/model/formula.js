@@ -7,6 +7,7 @@
 //   I(T^2), I(T*t)           a power or product of continuous factors as one variable
 //   - A:B, -1 (or + 0)       remove a term; remove the intercept
 //   main, 2fi, quadratic     all main effects; + all 2fis; + squares of continuous factors
+//                            (of the factors that are set: a covariate, issue #82, is named itself)
 //   mixlinear, mixquadratic, mixspecial, mixcubic   Scheffé mixture models over the mixture's
 //                            components (issue #62): linear blending; + A:B for every pair; + A:B:C
 //                            for every triple (special cubic); + delta(A,B) = A·B·(A − B) (full cubic)
@@ -69,7 +70,9 @@ export function parseFormula(text, factors) {
     const union = (a, b) => { const m = new Map(a.terms); for (const [k, v] of b.terms) if (!m.has(k)) m.set(k, v); return { terms: m, intercept: b.intercept ?? a.intercept }; };
     const minus = (a, b) => { const m = new Map(a.terms); for (const k of b.terms.keys()) m.delete(k); return { terms: m, intercept: b.intercept === true ? false : b.intercept === false ? true : a.intercept }; };
     const colon = (a, b) => { const out = []; for (const s of a.terms.values()) for (const t of b.terms.values()) out.push(mergeTerms(s, t)); return set(out); };
-    const contTerms = () => factors.filter(f => f.type !== 'categorical');
+    // the shortcuts are over the factors that are set, not the covariates (measured, issue #82)
+    const set0 = factors.filter(f => !f.covariate), setIds = set0.map(f => f.id);
+    const contTerms = () => set0.filter(f => f.type !== 'categorical');
     const mixIds = factors.filter(f => f.mix).map(f => f.id);
     const needMix = (t) => { if (mixIds.length < 2) fail(`${t} needs a mixture (the study's mixture components)`); };
     const pairs = (xs) => xs.flatMap((a, i) => xs.slice(i + 1).map(b => [a, b]));
@@ -127,10 +130,10 @@ export function parseFormula(text, factors) {
         for (const x of [a, b]) if (!mixIds.includes(x)) fail(`delta(…) takes two mixture components, found "${x}"`);
         return set([[{ D: [a, b] }]]);
       }
-      if (t === 'main') return set(ids.map(id => [{ f: id }]));
-      if (t === '2fi') { const m = set(ids.map(id => [{ f: id }])); return union(m, colon(m, m)); }
+      if (t === 'main') return set(setIds.map(id => [{ f: id }]));
+      if (t === '2fi') { const m = set(setIds.map(id => [{ f: id }])); return union(m, colon(m, m)); }
       if (t === 'quadratic') {
-        const m = set(ids.map(id => [{ f: id }]));
+        const m = set(setIds.map(id => [{ f: id }]));
         return union(union(m, colon(m, m)), set(contTerms().map(f => [{ I: { [f.id]: 2 } }])));
       }
       if (/^[A-Za-z_]/.test(t)) {
@@ -228,12 +231,13 @@ export function modelMatrix(model, factors, rows) {
         return { vals: effectCode(f, s[c.f]), names: f.levels.slice(1).map(l => `${c.f}[${l}]`) };
       }
       // a continuous nuisance term (a plate gradient) at an unspecified position: the plate's centre
-      if (f.block && s[c.f] === undefined) return { vals: [0], names: [c.f] };
+      // or a covariate (issue #82) without a value: its mean
+      if ((f.block || f.covariate) && s[c.f] === undefined) return { vals: [0], names: [c.f] };
       return { vals: [val(f, s[c.f])], names: [c.f] };
     }
     if (c.D) { const a = val(byId[c.D[0]], s[c.D[0]]), b = val(byId[c.D[1]], s[c.D[1]]); return { vals: [a * b * (a - b)], names: [compKey(c)] }; }
     let v = 1;
-    for (const [id, pw] of Object.entries(c.I)) v *= val(byId[id], s[id]) ** pw;
+    for (const [id, pw] of Object.entries(c.I)) v *= (byId[id].covariate && s[id] === undefined ? 0 : val(byId[id], s[id])) ** pw;
     return { vals: [v], names: [compKey(c)] };
   };
   const columns = [], assign = [];

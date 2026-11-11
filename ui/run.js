@@ -1,7 +1,7 @@
 // Run step: run sheet with results entered in place, downloads, results import (spec §12 step 3).
 import { h, messages, download, toast, help } from './dom.js';
 import { num } from '../js/format.js';
-import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults } from '../js/io/runsheet.js';
+import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults, setCovariateCell } from '../js/io/runsheet.js';
 import { parseNumber } from '../js/io/csv.js';
 import { studyAdapter } from '../js/sim/adapters.js';
 import { runOnSimulator } from '../js/sim/adapter.js';
@@ -38,7 +38,8 @@ export function render(ctx) {
         } catch (err) { toast(`Simulator: ${err.message}`); b.disabled = false; b.textContent = label; }
       } }, done.size === runs.length ? 'Re-run on the simulator' : `Run on the simulator (${study.simulator.adapter})`) : null,
       done.size ? h('button', { class: 'btn primary', onclick: () => go('analyse') }, 'Analyse →') : null),
-    h('p', { class: 'muted small' }, 'Run in the order shown. Type results into the sheet, or fill in the CSV and import it. Leave a cell blank if it was not measured; type NA if the measurement failed.'));
+    h('p', { class: 'muted small' }, 'Run in the order shown. Type results into the sheet, or fill in the CSV and import it. Leave a cell blank if it was not measured; type NA if the measurement failed.',
+      study.covariates?.length ? ` Covariates (${study.covariates.map(c => c.name).join(', ')}) are filled in the same way: the value measured at each run.` : ''));
 
   // ---------------------------------------------------------------- pending import
   let pending = null;
@@ -46,13 +47,13 @@ export function render(ctx) {
     const { imp, name } = ui.pending;
     const errs = imp.problems.filter(p => p.severity === 'error'), warns = imp.problems.filter(p => p.severity === 'warning'), info = imp.problems.filter(p => p.severity === 'info');
     const fmt = (p) => `${p.line ? `line ${p.line}${p.column ? `, ${p.column}` : ''}: ` : ''}${p.message}`;
-    const apply = (mode, force = false) => { try { const next = applyResults(study, imp, { mode, force }); state.ui.run = { ...ui, pending: null }; setDoc(structuredClone(next)); toast(`${imp.observations.length} value(s) imported${imp.readings?.length ? `, ${imp.readings.length} control reading(s)` : ''}`); } catch (e) { toast(e.message); } };
+    const apply = (mode, force = false) => { try { const next = applyResults(study, imp, { mode, force }); state.ui.run = { ...ui, pending: null }; setDoc(structuredClone(next)); toast(`${imp.observations.length + (imp.covariates?.length ?? 0)} value(s) imported${imp.readings?.length ? `, ${imp.readings.length} control reading(s)` : ''}`); } catch (e) { toast(e.message); } };
     pending = h('section', { class: 'panel', id: 'import-review' }, h('h2', {}, `Import ${name}`),
-      h('p', { class: 'small' }, `${imp.observations.length} value(s) read (${imp.format ?? '?'} format)${imp.readings?.length ? ` and ${imp.readings.length} control-well reading(s)` : ''}.`),
+      h('p', { class: 'small' }, `${imp.observations.length} value(s) read (${imp.format ?? '?'} format)${imp.covariates?.length ? `, ${imp.covariates.length} covariate value(s)` : ''}${imp.readings?.length ? ` and ${imp.readings.length} control-well reading(s)` : ''}.`),
       messages(errs.map(fmt), 'error'), messages(warns.map(fmt), 'warning'), messages(info.map(fmt), 'ok'),
       h('div', { class: 'row' },
-        h('button', { class: 'btn primary', disabled: !!errs.length || !(imp.observations.length || imp.readings?.length), onclick: () => apply('replace') }, 'Import (replace)'),
-        h('button', { class: 'btn', disabled: !!errs.length || !(imp.observations.length || imp.readings?.length), onclick: () => apply('append') }, 'Import (add to existing)'),
+        h('button', { class: 'btn primary', disabled: !!errs.length || !(imp.observations.length || imp.readings?.length || imp.covariates?.length), onclick: () => apply('replace') }, 'Import (replace)'),
+        h('button', { class: 'btn', disabled: !!errs.length || !(imp.observations.length || imp.readings?.length || imp.covariates?.length), onclick: () => apply('append') }, 'Import (add to existing)'),
         errs.length && imp.observations.length ? h('button', { class: 'btn danger', onclick: () => apply('replace', true) }, `Import the ${imp.observations.length} valid values anyway`) : null,
         h('button', { class: 'btn', onclick: () => setUI({ run: { ...ui, pending: null } }) }, 'Cancel')));
   }
@@ -61,8 +62,17 @@ export function render(ctx) {
   const H = sheet.header, iRun = H.indexOf('run');
   const metaIdx = sheet.metaColumns.map(m => H.indexOf(m));
   const resIdx = sheet.resultColumns.map(c => H.indexOf(c.header));
+  const covIdx = sheet.covariateColumns.map(id => H.indexOf(id));
+  // a covariate's value for the row: for the run, or the row's lot and wafer
+  const setCov = (row, id, text) => update(d => {
+    const v = parseNumber(text);
+    if (Number.isNaN(v)) { toast(`"${text}" is not a number`); return; }
+    const keys = Object.fromEntries(['lot', 'wafer'].filter(k => sheet.metaColumns.includes(k) && row[H.indexOf(k)] !== '').map(k => [k, row[H.indexOf(k)]]));
+    setCovariateCell(d, id, row[iRun], keys, v);
+  });
   const label = (key) => {
     const f = study.factors.find(x => x.id === key); if (f) return [f.name, f.units ? h('span', { class: 'muted' }, ` (${f.units})`) : null];
+    const cv = study.covariates?.find(x => x.id === key); if (cv) return [cv.name, h('span', { class: 'muted' }, cv.units ? ` (${cv.units}, measured)` : ' (measured)')];
     const c = sheet.resultColumns.find(x => x.header === key);
     if (c?.aux) { const r = study.responses.find(x => x.id === c.response); return [r.name, h('span', { class: 'muted' }, ` (${c.aux}${c.aux === 'exposure' ? ', blank = 1' : ''})`)]; }
     if (c) { const r = study.responses.find(x => x.id === c.response); return [r.name, c.site !== undefined ? ` @ ${c.site}` : '', r.units ? h('span', { class: 'muted' }, ` (${r.units})`) : null]; }
@@ -102,12 +112,15 @@ export function render(ctx) {
       const ri = resIdx.indexOf(j);
       if (ri >= 0) return h('td', { class: 'res' }, h('input', { type: 'text', inputmode: 'decimal', value: row[j] ?? '', 'aria-label': `run ${row[iRun]} ${H[j]}`,
         onchange: (e) => setCell(row, sheet.resultColumns[ri], e.target.value) }));
+      const ci = covIdx.indexOf(j);
+      if (ci >= 0) return h('td', { class: 'res cov' }, h('input', { type: 'text', inputmode: 'decimal', value: row[j] ?? '', 'aria-label': `run ${row[iRun]} ${H[j]}`,
+        onchange: (e) => setCov(row, sheet.covariateColumns[ci], e.target.value) }));
       const v = row[j];
       return h('td', { class: typeof v === 'number' ? 'n' : '' }, typeof v === 'number' && !Number.isInteger(v) ? num(v, 6) : v);
     })));
   });
   const table = h('section', { class: 'panel' }, h('div', { class: 'table-wrap' }, h('table', { class: 'data', id: 'run-sheet' },
-    h('thead', {}, h('tr', {}, H.filter(k => k !== 'note').map(k => h('th', { class: resIdx.includes(H.indexOf(k)) ? 'n' : '' }, label(k))))),
+    h('thead', {}, h('tr', {}, H.filter(k => k !== 'note').map(k => h('th', { class: resIdx.includes(H.indexOf(k)) || covIdx.includes(H.indexOf(k)) ? 'n' : '' }, label(k))))),
     h('tbody', {}, rows))));
   return h('div', {}, head, pending, plateRunPanel(ctx), table);
 }

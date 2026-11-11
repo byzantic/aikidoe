@@ -45,6 +45,13 @@
       },
       "description": "what is measured"
     },
+    "covariates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/covariate"
+      },
+      "description": "covariates: variables that are measured but not set (a starting weight, the room temperature), with their values; models take them as terms by id (issue #82)"
+    },
     "constraints": {
       "type": "array",
       "items": {
@@ -973,6 +980,64 @@
           "exclusiveMinimum": 0,
           "default": 1,
           "description": "what the components add up to in every run (1, 100 %, or the batch size)"
+        }
+      }
+    },
+    "covariate": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "used in formulas; differs from every factor and response id"
+        },
+        "name": {
+          "type": "string",
+          "description": "display name (default: the id)"
+        },
+        "units": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string",
+          "description": "free text"
+        },
+        "values": {
+          "type": "array",
+          "description": "the values measured: one per run, or one per wafer (lot, site) of a run when it was measured there. A run with no value is left out of a model that has the covariate",
+          "items": {
+            "type": "object",
+            "required": [
+              "run",
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "run": {
+                "type": "integer",
+                "description": "the run"
+              },
+              "value": {
+                "type": "number",
+                "description": "the value measured"
+              },
+              "lot": {
+                "$ref": "#/$defs/label",
+                "description": "lot, when the value belongs to one lot of the run"
+              },
+              "wafer": {
+                "$ref": "#/$defs/label",
+                "description": "wafer, when the value belongs to one wafer of the run"
+              },
+              "site": {
+                "$ref": "#/$defs/label",
+                "description": "site, when the value belongs to one site"
+              }
+            }
+          }
         }
       }
     }

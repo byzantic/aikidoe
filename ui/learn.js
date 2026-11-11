@@ -4,7 +4,7 @@
 import { platesWithoutWells } from '../js/plate.js';
 import { h, select, dataTable } from './dom.js';
 import { render as md } from '../js/markdown.js';
-import { createStudy, decode } from '../js/study.js';
+import { createStudy, decode, covariatesWithoutValues } from '../js/study.js';
 import { num } from '../js/format.js';
 import { LESSONS, lessonById, hints } from '../js/learn/lessons.js';
 import { generateExercise, runExercise, gradeStudy, deriveAnswers, comparisonStrategy, truthOf, DIFFICULTIES } from '../js/learn/exercise.js';
@@ -22,7 +22,7 @@ const mdLinks = (text) => md(text);                     // lesson text is truste
 const html = (s) => { const d = h('div', { class: 'lesson-text' }); d.innerHTML = mdLinks(s); for (const a of d.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener'; } return d; };
 
 /** The exercise of the open study, with its study (as the generator made it). */
-export const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [], ...platesWithoutWells(study) }) });
+export const exerciseOf = (study) => ({ ...study.exercise, study: createStudy({ ...study, design: undefined, observations: [], history: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study) }) });
 
 /** Open a lesson's exercise as the current study. */
 export function startLesson({ setDoc, state }, lesson, { difficulty, seed } = {}) {
