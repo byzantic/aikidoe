@@ -75,8 +75,10 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    wafers and sites; plate position terms are automatic for runs in wells), Lenth's method for
    saturated designs, diagnostics, `--reduce p|aicc`. A covariate goes in the formula by its id
    (`"y ~ A*B + roomT"`; not part of `main`/`2fi`/`quadratic`): compare σ with and without it, use
-   `--anova 2`, and report the factors' effects as "at the average roomT". Check `A:roomT` if the
-   slope might depend on a factor. `doe predict --at "A=…,roomT=…"` for a known covariate value.
+   `--anova 2`, and report the factors' effects as "at the average roomT". `doe means STUDY "y ~ … + roomT" A --json`
+   gives the adjusted means of A's levels (report these, not the raw means), Tukey comparisons,
+   and `equalSlopes`: when its p < 0.05 the slope differs between settings — say so, and compare
+   levels at stated covariate values (`--at "roomT=…"`) rather than with one adjusted difference. `doe predict --at "A=…,roomT=…"` for a known covariate value.
 7. **Decide the next stage** with the user: fold-over, axial points, optimal augmentation, or
    confirmation runs at the chosen settings (`doe augment`); optimise (`doe optimise`, `doe
    robust`); then confirm. When `doe optimise --json` gives a non-null `beyondRuns`, the best

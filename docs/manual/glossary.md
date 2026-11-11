@@ -3,6 +3,10 @@
 **Alias** — two effects a fraction cannot tell apart; their estimates are the same combination of
 the runs. See [aliasing and resolution](concepts.md#aliasing-and-resolution).
 
+**Adjusted mean** — the mean response at one level of a factor with the covariates (and the other
+factors) held at the same values for every level; also called an estimated marginal mean or
+least-squares mean. See [Adjusted means](analysis.md#adjusted-means).
+
 **ANCOVA** (analysis of covariance) — the analysis of an experiment with a
 [covariate](analysis.md#covariates) in the model beside the factors.
 
@@ -161,6 +165,10 @@ there, before any run is made. See [prediction variance](concepts.md#prediction-
 **Surrogate** — a model fitted to a simulator's runs, used in its place for fast prediction.
 
 **Tolerance** — the spread of a factor's actual value about its setting.
+
+**Tukey's method** — comparing every pair of a factor's levels with intervals and p values that
+allow for all the comparisons at once (the studentized range), so that many comparisons do not
+give many chances of a false alarm. See [Adjusted means](analysis.md#adjusted-means).
 
 **Variance dispersion graph** — the smallest, average and largest scaled prediction variance at
 each distance from the centre of a design: one picture to compare response-surface designs.

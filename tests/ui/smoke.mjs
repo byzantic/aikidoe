@@ -386,6 +386,10 @@ try {
     check('with it in the model: its range and slope, and the noise falls', /\+ vcd/.test(await page.inputValue('#formula')) && /Seed density \(vcd\), measured at 16 runs: mean 0\.5138, from 0\.33 to 0\.62/.test(note) && /Titre changes by 2\.\d+ ± 0\.\d+ per 10⁶ cells\/mL/.test(note)
       && /at the mean of the covariate/.test(note) && (await sigma()) < before / 2 && await page.isDisabled('#covariate-terms button'), `${note} σ ${before} → ${await sigma()}`);
     check('… nothing went wrong with the plots', !/Something went wrong/.test(await page.textContent('main')));
+    await page.selectOption('select[aria-label="adjusted means of"]', 'pH'); await settle();
+    const adj = await page.textContent('#adjusted');
+    check('adjusted means of pH: at the mean seed density, beside the raw means; one slope is enough', /compared at the same vcd = 0\.5138/.test(adj) && /pH = 6\.83\.35/.test(adj) && /3\.336/.test(adj)
+      && /temp:vcd, pH:vcd, feed:vcd added: F = [\d.]+ on 3 and \d+ df, p 0\.\d+\. No evidence/.test(adj) && (await page.locator('#adjusted [id^="separate-slopes"]').count()) === 0, adj);
     await shot('16-covariate');
     await page.click('[data-step="optimise"]'); await settle();
     check('Optimise renders with a covariate in the model', !/Something went wrong/.test(await page.textContent('main')));

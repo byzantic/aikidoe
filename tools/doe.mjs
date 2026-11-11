@@ -11,6 +11,13 @@
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+//   means STUDY "y ~ … + cov" FACTOR [--at "cov=…,B=…"] [--ols]
+//        adjusted means of a factor's levels (a continuous factor: low and high) with a covariate in
+//        the model: every level at the same value of the covariate (its mean, or --at) and of the
+//        other factors (continuous at their mean, categorical averaged), beside the raw means; the
+//        pairwise comparisons, Tukey-adjusted (ratios for counts); and for each covariate, whether
+//        its slope is the same at every setting (the model with every factor × covariate
+//        interaction against the model without). Mixed models: Kenward–Roger
 //   covariate STUDY id[:units] [--name "…"] | covariate STUDY id --remove | covariate STUDY
 //        a covariate: measured at each run but not set (a starting weight, the room temperature).
 //        Its values go on the run sheet and come back with import, in a column of its own; in a
@@ -159,6 +166,7 @@ import { pipettingCSV, plateMapHTML, plateMapText } from '../js/io/platemap.js';
 import { controlSummary, plateNumbers, runCapacity, ROLES, platesWithoutWells } from '../js/plate.js';
 import { fitModel, anova, predict } from '../js/model/fit.js';
 import { covariateSlopes, covariateTable, droppedNote } from '../js/model/covariates.js';
+import { adjustedMeans, equalSlopes } from '../js/model/adjusted.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -877,6 +885,56 @@ function mixedFor(study, formula, opt) {
   if (study.responses.find(r => r.id === resp)?.distribution) return null;      // counts and proportions: no mixed models yet
   try { if (!randomEffects(observationTable(study, resp)).length) return null; } catch { return null; }
   return fitMixedModel(study, formula);
+}
+
+/** Adjusted means, Tukey comparisons and the test of equal slopes (issue #82, phase 2). */
+function cmdMeans({ pos, opt }) {
+  const [file, formula, factorId] = pos, study = load(file);
+  if (!formula || !factorId) fail('means: give the formula and the factor, e.g. doe means STUDY "y ~ G + x" G');
+  const resp = study.responses.find(r => r.id === (formula.includes('~') ? formula.slice(0, formula.indexOf('~')).trim() : ''));
+  if (resp?.distribution && !opt.ols && countRandomOf(study, opt, resp.distribution)) fail('means: not yet for counts or proportions with random effects (add --random none for a GLM)');
+  // --at: some factors or covariates, in natural units (a categorical factor by its level)
+  const at = Object.fromEntries(String(opt.at ?? '').split(',').filter(t => t.trim()).map(t => {
+    const [id, v] = t.split('=').map(x => x?.trim());
+    const f = study.factors.find(x => x.id === id), c = study.covariates?.find(x => x.id === id);
+    if (!f && !c) fail(`--at: no factor or covariate "${id}"`);
+    if (f?.type === 'categorical') { const i = f.levels.map(String).indexOf(v); if (i < 0) fail(`--at: ${id} has no level "${v}"`); return [id, i]; }
+    const x = Number(v); if (v === undefined || v === '' || !Number.isFinite(x)) fail(`--at: ${id}: "${v}" is not a number`);
+    return [id, x];
+  }));
+  const mixed = mixedFor(study, formula, opt);
+  const fit = mixed ?? fitModel(study, formula, opt.ols ? { noise: 'normal' } : {});
+  const fitWith = mixed ? (f) => fitMixedModel(study, f) : (f) => fitModel(study, f, opt.ols ? { noise: 'normal' } : {});
+  if (!fit.covariates?.length) out('note: no covariate in the model — the adjusted means are the model\'s means of the levels (emmeans)');
+  let am;
+  try { am = adjustedMeans(fit, factorId, { at }); } catch (e) { fail(e.message); }
+  const ratio = am.comparison !== 'difference', cs = fit.covariates ?? [];
+  const heldText = Object.entries(am.held).map(([id, v]) => { const c = cs.find(x => x.id === id); return `${id} = ${num(v, 5)}${c ? `${c.units ? ` ${c.units}` : ''} (${at[id] !== undefined ? 'given' : 'its mean'})` : ''}`; });
+  out(`adjusted means of ${factorId} (${mixed ? 'mixed model, Kenward–Roger' : fit.distribution ? `${noiseOf(fit).label}, on the ${resp.distribution === 'binomial' ? 'proportion' : 'count'} scale` : 'least squares'})`);
+  if (heldText.length || am.averagedOver.length) out(`every level at ${[...heldText, ...(am.averagedOver.length ? [`averaged over ${am.averagedOver.join(', ')}`] : [])].join(', ')}`);
+  out('');
+  out(table([{ key: 'label', label: factorId, align: 'left' }, { key: 'mean', label: 'adjusted mean' }, { key: 'se', label: 'std. error' }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'raw', label: 'raw mean' }, { key: 'n', label: mixed ? 'readings' : 'runs' }],
+    am.levels.map(l => ({ ...l, ci: `${num(l.lower)} … ${num(l.upper)}`, raw: Number.isFinite(l.raw) ? l.raw : '' }))));
+  if (am.pairs.length) {
+    out('');
+    out(table([{ key: 'pair', label: 'comparison', align: 'left' }, { key: 'estimate', label: ratio ? am.comparison : 'difference' }, { key: 'se', label: 'std. error' }, { key: 'ci', label: `95% CI${am.adjust === 'tukey' ? ' (Tukey)' : ''}`, align: 'left' }, { key: 'p', label: `p${am.adjust === 'tukey' ? ' (Tukey)' : ''}` }],
+      am.pairs.map(q => ({ ...q, pair: `${q.a} ${ratio ? '/' : '-'} ${q.b}`, ci: `${num(q.lower)} … ${num(q.upper)}`, p: pval(q.p) }))));
+  }
+  const slopes = [];
+  for (const c of cs) {
+    let e;
+    try { e = equalSlopes(fit, c.id, { formula, fitWith, anova }); } catch (x) { out(`${c.id}: ${x.message}`); continue; }
+    delete e.big;
+    slopes.push(e);
+    out('');
+    if (!e.added.length) { out(`equal slopes of ${c.id}: every factor already interacts with it`); continue; }
+    out(`equal slopes of ${c.id}: ${e.added.join(', ')} added, ${e.statName} = ${num(e.stat, 4)} on ${e.df1}${e.df2 !== undefined ? ` and ${num(e.df2, 4)}` : ''} df, p ${pval(e.p)}`
+      + (e.p < 0.05 ? ' — the slope differs between settings: the adjusted means depend on the covariate value (--at), or fit separate slopes' : ' — no evidence the slope differs'));
+  }
+  put({ kind: am.kind, response: fit.response, factor: factorId, comparison: am.comparison, adjust: am.adjust, held: am.held, averagedOver: am.averagedOver,
+    levels: am.levels.map(l => ({ label: l.label, mean: l.mean, se: l.se, df: Number.isFinite(l.df) ? l.df : null, lower: l.lower, upper: l.upper, raw: Number.isFinite(l.raw) ? l.raw : null, n: l.n })),
+    pairs: am.pairs.map(q => ({ a: q.a, b: q.b, estimate: q.estimate, se: q.se, df: Number.isFinite(q.df) ? q.df : null, statistic: q.stat, p: q.p, lower: q.lower, upper: q.upper })),
+    equalSlopes: slopes.map(e => ({ covariate: e.covariate, added: e.added, ...(e.added.length ? { statistic: e.statName === 'F' ? 'F' : 'chisq', value: e.stat, df1: e.df1, ...(e.df2 !== undefined ? { df2: e.df2 } : {}), p: e.p } : {}) })) });
 }
 
 function cmdPredict({ pos, opt }) {
@@ -1787,7 +1845,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
+const COMMANDS = { means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

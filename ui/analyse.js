@@ -22,6 +22,7 @@ import { glmAnalysis } from './glm.js';
 import { glmmAnalysis, cached } from './glmm.js';
 import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
 import { covariateSlopes, droppedNote } from '../js/model/covariates.js';
+import { adjustedPanel } from './adjusted.js';
 
 /** A sensible first model for the study's design. */
 
@@ -78,6 +79,7 @@ export function render(ctx) {
   const rhs = formula.includes('~') ? formula.slice(formula.indexOf('~') + 1).trim() : formula;
   // the fitted response over two factors (issue #88)
   const surface = (f) => { try { return surfacePanel(study, f, { ui, set, resp }); } catch { return null; } };
+  const adjusted = (f, fitWith) => { try { return adjustedPanel(study, f, { formula, fitWith, anova, ui, set, setFormula, resp }); } catch (e) { return h('div', { class: 'msg warning' }, `Adjusted means: ${e.message}`); } };
 
   const fIn = h('input', { type: 'text', class: 'formula', id: 'formula', value: formula, 'aria-label': 'model formula', spellcheck: 'false',
     onchange: (e) => setFormula(e.target.value.includes('~') ? e.target.value : `${resp.id} ~ ${e.target.value}`) });
@@ -155,7 +157,7 @@ export function render(ctx) {
       return h('div', {}, controls, picker, glmmAnalysis(ctx, gm, { ui, set, setFormula, rhs, resp }), surface(gm));
     }
     if (fitErr) return h('div', {}, controls, picker, h('div', { class: 'msg error' }, fitErr.message));
-    return h('div', {}, controls, picker, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), surface(fit), confirmPanel(ctx, fit));
+    return h('div', {}, controls, picker, glmAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), adjusted(fit, (f) => fitModel(study, f, { ...(ui.firth && resp.distribution ? { firth: true } : {}) })), surface(fit), confirmPanel(ctx, fit));
   }
 
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)
@@ -169,7 +171,7 @@ export function render(ctx) {
     const used = new Set(formula.match(/[A-Za-z_][A-Za-z0-9_]*/g));
     const chips = avail.length ? h('div', { class: 'row small', id: 'position-terms', style: 'margin-top:6px' }, 'position terms:',
       avail.map(t => h('button', { class: 'btn small', disabled: used.has(t.id), title: t.name, onclick: () => setFormula(`${formula} + ${t.id}`) }, `+ ${t.id}`))) : null;
-    return h('div', {}, controls, chips, mixedPanel(m, ui, set), surface(m), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
+    return h('div', {}, controls, chips, mixedPanel(m, ui, set), adjusted(m, (f) => fitMixedModel(study, f)), surface(m), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
   }
   const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
     h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;
@@ -260,7 +262,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, backToDose, controls, olsNote, summary, projPanel, mixPanel, anovaPanel, effectsPanel, surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  return h('div', {}, backToDose, controls, olsNote, summary, projPanel, mixPanel, anovaPanel, effectsPanel, adjusted(fit, (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) })), surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

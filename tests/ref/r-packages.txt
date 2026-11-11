@@ -21,3 +21,4 @@ brglm2
 glmmTMB
 geometry
 nnls
+emmeans

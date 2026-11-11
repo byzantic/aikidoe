@@ -103,6 +103,25 @@
             "const": true
           },
           "command": {
+            "const": "means"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/means"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
             "const": "design"
           }
         },
@@ -4279,6 +4298,193 @@
                 "type": "number"
               },
               "max": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "means": {
+      "type": "object",
+      "description": "doe means (issue #82): adjusted (estimated marginal) means of a factor's levels with the covariates and other factors held the same, Tukey-adjusted pairwise comparisons, and the test of equal slopes for each covariate",
+      "required": [
+        "kind",
+        "response",
+        "factor",
+        "comparison",
+        "levels",
+        "pairs",
+        "equalSlopes"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "ols",
+            "glm",
+            "mixed"
+          ]
+        },
+        "response": {
+          "type": "string"
+        },
+        "factor": {
+          "type": "string"
+        },
+        "comparison": {
+          "enum": [
+            "difference",
+            "ratio",
+            "odds ratio",
+            "difference (link scale)"
+          ],
+          "description": "how two levels are compared: ratios of rates (log link), odds ratios (logit)"
+        },
+        "adjust": {
+          "enum": [
+            "tukey",
+            "none"
+          ],
+          "description": "Tukey's adjustment for all pairwise comparisons (none for two levels)"
+        },
+        "held": {
+          "type": "object",
+          "description": "the values (natural units) every level is compared at: covariates and continuous factors at their mean, or as given with --at",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "averagedOver": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "factors averaged over with equal weight (categorical, and continuous ones run at two settings)"
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "mean",
+              "se",
+              "lower",
+              "upper"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "mean": {
+                "type": "number"
+              },
+              "se": {
+                "type": "number"
+              },
+              "df": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lower": {
+                "type": "number"
+              },
+              "upper": {
+                "type": "number"
+              },
+              "raw": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "n": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "a",
+              "b",
+              "estimate",
+              "se",
+              "p"
+            ],
+            "properties": {
+              "a": {
+                "type": "string"
+              },
+              "b": {
+                "type": "string"
+              },
+              "estimate": {
+                "type": "number"
+              },
+              "se": {
+                "type": "number"
+              },
+              "df": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "statistic": {
+                "type": "number"
+              },
+              "p": {
+                "type": "number"
+              },
+              "lower": {
+                "type": "number"
+              },
+              "upper": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "equalSlopes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "covariate",
+              "added"
+            ],
+            "properties": {
+              "covariate": {
+                "type": "string"
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "statistic": {
+                "enum": [
+                  "F",
+                  "chisq"
+                ]
+              },
+              "value": {
+                "type": "number"
+              },
+              "df1": {
+                "type": "number"
+              },
+              "df2": {
+                "type": "number"
+              },
+              "p": {
                 "type": "number"
               }
             }

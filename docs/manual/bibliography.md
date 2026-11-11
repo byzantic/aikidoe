@@ -20,6 +20,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Milliken, G. A. & Johnson, D. E. (2002). *Analysis of Messy Data, Volume III: Analysis of
   Covariance*. Chapman & Hall/CRC. ([Covariates](analysis.md#covariates): one slope or several,
   adjusted means.)
+- Hsu, J. C. (1996). *Multiple Comparisons: Theory and Methods*. Chapman & Hall. (Tukey's method
+  for all pairwise comparisons.)
 - Montgomery, D. C. & Runger, G. C. (2018). *Applied Statistics and Probability for Engineers*,
   7th ed. Wiley.
 - Myers, R. H., Montgomery, D. C. & Anderson-Cook, C. M. (2016). *Response Surface Methodology*,
@@ -60,6 +62,10 @@ Books for learning and reference, and the papers behind specific methods in aiki
   the treatments.)
 - Cox, D. R. (1971). A note on polynomial response functions for mixtures. *Biometrika* 58,
   155–159.
+- Copenhaver, M. D. & Holland, B. (1988). Computation of the distribution of the maximum
+  studentized range statistic with application to multiple significance testing of simple
+  effects. *Journal of Statistical Computation and Simulation* 30, 1–15. (Algorithm AS 190, as
+  R's `ptukey`: the studentized range behind Tukey's comparisons.)
 - Deng, L.-Y. & Tang, B. (1999). Generalized resolution and minimum aberration criteria for
   Plackett–Burman and other nonregular factorial designs. *Statistica Sinica* 9, 1071–1082.
   (Generalised resolution of Plackett–Burman designs.)
@@ -111,6 +117,10 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Ritz, C., Baty, F., Streibig, J. C. & Gerhard, D. (2015). Dose-response analysis using R.
   *PLoS ONE* 10, e0146021. (The drc package: the models and parameterisation of
   [dose–response](dose-response.md), and the reference for its tests.)
+- Searle, S. R., Speed, F. M. & Milliken, G. A. (1980). Population marginal means in the linear
+  model: an alternative to least squares means. *The American Statistician* 34, 216–221.
+  ([Adjusted means](analysis.md#adjusted-means); the reference grid of R's `emmeans`, which
+  aikidoe follows and is checked against.)
 - Saltelli, A., Annoni, P., Azzini, I., Campolongo, F., Ratto, M. & Tarantola, S. (2010). Variance
   based sensitivity analysis of model output: design and estimator for the total sensitivity
   index. *Computer Physics Communications* 181, 259–270.
