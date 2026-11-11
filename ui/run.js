@@ -77,6 +77,7 @@ export function render(ctx) {
     const c = sheet.resultColumns.find(x => x.header === key);
     if (c?.aux) { const r = study.responses.find(x => x.id === c.response); return [r.name, h('span', { class: 'muted' }, ` (${c.aux}${c.aux === 'exposure' ? ', blank = 1' : ''})`)]; }
     if (c) { const r = study.responses.find(x => x.id === c.response); return [r.name, c.site !== undefined ? ` @ ${c.site}` : '', r.units ? h('span', { class: 'muted' }, ` (${r.units})`) : null]; }
+    const bv = study.design.blocking?.find(x => x.id === key); if (bv) return bv.name ?? bv.id;
     return { order: 'order', run: 'run', wholePlot: 'whole plot', block: 'block', kind: 'type', note: 'notes' }[key] ?? key;
   };
   const setCell = (row, col, text) => update(d => {
@@ -102,11 +103,13 @@ export function render(ctx) {
     for (const m of sheet.metaColumns) if (meta[m] !== undefined) o[m] = meta[m];
     d.observations.push(o);
   });
-  const groupKey = H.includes('wholePlot') ? 'wholePlot' : H.includes('block') ? 'block' : null;
+  // grouped by whole plot, block, or a Latin square's rows or a crossover's periods (issue #80)
+  const byBlocking = study.design.blocking?.find(b => b.role === 'row' || b.role === 'period');
+  const groupKey = H.includes('wholePlot') ? 'wholePlot' : H.includes('block') ? 'block' : byBlocking ? byBlocking.id : null;
   const rows = [];
   let prev;
   sheet.rows.forEach((row) => {
-    if (groupKey && row[H.indexOf(groupKey)] !== prev) { prev = row[H.indexOf(groupKey)]; rows.push(h('tr', { class: 'group' }, h('td', { colspan: H.length - 1 }, `${groupKey === 'wholePlot' ? 'Whole plot' : 'Block'} ${prev}`,
+    if (groupKey && row[H.indexOf(groupKey)] !== prev) { prev = row[H.indexOf(groupKey)]; rows.push(h('tr', { class: 'group' }, h('td', { colspan: H.length - 1 }, `${groupKey === 'wholePlot' ? 'Whole plot' : groupKey === 'block' ? 'Block' : byBlocking.name ?? byBlocking.id} ${prev}`,
       groupKey === 'wholePlot' ? h('span', { class: 'muted' }, ` — set once: ${study.factors.filter(f => f.htc).map(f => `${f.name} ${row[H.indexOf(f.id)]}${f.units ? ` ${f.units}` : ''}`).join(', ')}`) : null))); }
     rows.push(h('tr', { 'data-run': row[iRun] }, H.map((key, j) => {
       if (key === 'note') return null;

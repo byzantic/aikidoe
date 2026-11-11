@@ -24,7 +24,7 @@ Commands
        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
   compare STUDY ["y ~ …"] FACTOR [--control LEVEL] [--method tukey|dunnett|holm|bonferroni|none]
-       [--contrast "a - ctrl" …] [--at "B=…"] [--random block] [--alpha 0.05]
+       [--contrast "a - ctrl" …] [--at "B=…"] [--random block|ID,…] [--alpha 0.05]
        which levels of a factor differ: the adjusted means of its levels (the model's means, the
        other factors and any covariate held the same) with a compact letter display (levels
        sharing a letter do not differ), and comparisons with intervals and p values adjusted for
@@ -32,7 +32,8 @@ Commands
        --contrast expressions of levels (single-step; quote a label with spaces: "'low dose' -
        ctrl"). Holm and Bonferroni for any family; none unadjusted. Without a formula: the
        response's main effects. Counts and proportions: ratios and odds ratios. --random block:
-       blocks as a random effect (incomplete blocks), Kenward–Roger df
+       blocks as a random effect (incomplete blocks), Kenward–Roger df; --random day,operator
+       (a Latin square's rows and columns) or subject (a crossover) likewise
   means STUDY "y ~ … + cov" FACTOR [--at "cov=…,B=…"] [--ols]
        adjusted means of a factor's levels (a continuous factor: low and high) with a covariate in
        the model: every level at the same value of the covariate (its mean, or --at) and of the
@@ -63,6 +64,17 @@ Commands
        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
        [--whole-plots W] [--eta η (optimal; σ²_wp/σ², default 1)] [--no-split-plot]
        [--sheet FILE.csv] [--html FILE.html]
+  design STUDY (--complete-blocks B | --latin [--rows NAME] [--columns NAME] [--squares n] | --bibd K [--blocks B]
+                | --crossover [--subjects N] [--subject-name NAME] [--period-name NAME]) [--seed S] [--force]
+       designs for comparing the levels of one factor (the treatment): randomised complete
+       blocks (every level once in each of B blocks — days, batches); a Latin square (two
+       blocking variables, e.g. --rows Day --columns Operator: each level once in every row and
+       column); balanced incomplete blocks of K (blocks that cannot hold every level: every pair
+       together equally often; the smallest balanced design unless --blocks B); a crossover
+       (each subject has every level, one per period, in Williams sequences balanced for
+       carry-over; AB/BA for two levels). Analyse with fit or compare, which adjust for the rows
+       and columns, or subjects, periods and carry-over; --random day,operator or --random
+       subject treats them as random
   design STUDY --dose [FACTOR] [--curve FACTOR] (--top T --dilution D --doses n | --at 0,0.1,1,…
                 | --optimal --guess "b=1,c=0,d=100,e=1" --range LO:HI --runs N [--criterion D|EC50] [--robust F])
        [--zeros n] [--replicates r] [--seed S] [--stage]     dose–response doses for each curve level;
@@ -93,7 +105,7 @@ Commands
        likelihood-ratio tests, σ of the random effect and its test; --reduce works on it too
        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
-       model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
+       model with Kenward–Roger tests [--random wholePlot,run,wafer|block|ID] [--compare] [--ols]
        runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
        [--rho ρ]   with a covariate correlated ρ with the response (balanced against the factors):

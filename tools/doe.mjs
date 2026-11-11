@@ -12,7 +12,7 @@
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
 //   compare STUDY ["y ~ …"] FACTOR [--control LEVEL] [--method tukey|dunnett|holm|bonferroni|none]
-//        [--contrast "a - ctrl" …] [--at "B=…"] [--random block] [--alpha 0.05]
+//        [--contrast "a - ctrl" …] [--at "B=…"] [--random block|ID,…] [--alpha 0.05]
 //        which levels of a factor differ: the adjusted means of its levels (the model's means, the
 //        other factors and any covariate held the same) with a compact letter display (levels
 //        sharing a letter do not differ), and comparisons with intervals and p values adjusted for
@@ -20,7 +20,8 @@
 //        --contrast expressions of levels (single-step; quote a label with spaces: "'low dose' -
 //        ctrl"). Holm and Bonferroni for any family; none unadjusted. Without a formula: the
 //        response's main effects. Counts and proportions: ratios and odds ratios. --random block:
-//        blocks as a random effect (incomplete blocks), Kenward–Roger df
+//        blocks as a random effect (incomplete blocks), Kenward–Roger df; --random day,operator
+//        (a Latin square's rows and columns) or subject (a crossover) likewise
 //   means STUDY "y ~ … + cov" FACTOR [--at "cov=…,B=…"] [--ols]
 //        adjusted means of a factor's levels (a continuous factor: low and high) with a covariate in
 //        the model: every level at the same value of the covariate (its mean, or --at) and of the
@@ -51,6 +52,17 @@
 //        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
 //        [--whole-plots W] [--eta η (optimal; σ²_wp/σ², default 1)] [--no-split-plot]
 //        [--sheet FILE.csv] [--html FILE.html]
+//   design STUDY (--complete-blocks B | --latin [--rows NAME] [--columns NAME] [--squares n] | --bibd K [--blocks B]
+//                 | --crossover [--subjects N] [--subject-name NAME] [--period-name NAME]) [--seed S] [--force]
+//        designs for comparing the levels of one factor (the treatment): randomised complete
+//        blocks (every level once in each of B blocks — days, batches); a Latin square (two
+//        blocking variables, e.g. --rows Day --columns Operator: each level once in every row and
+//        column); balanced incomplete blocks of K (blocks that cannot hold every level: every pair
+//        together equally often; the smallest balanced design unless --blocks B); a crossover
+//        (each subject has every level, one per period, in Williams sequences balanced for
+//        carry-over; AB/BA for two levels). Analyse with fit or compare, which adjust for the rows
+//        and columns, or subjects, periods and carry-over; --random day,operator or --random
+//        subject treats them as random
 //   design STUDY --dose [FACTOR] [--curve FACTOR] (--top T --dilution D --doses n | --at 0,0.1,1,…
 //                 | --optimal --guess "b=1,c=0,d=100,e=1" --range LO:HI --runs N [--criterion D|EC50] [--robust F])
 //        [--zeros n] [--replicates r] [--seed S] [--stage]     dose–response doses for each curve level;
@@ -81,7 +93,7 @@
 //        likelihood-ratio tests, σ of the random effect and its test; --reduce works on it too
 //        [--reduce p|aicc [--alpha-out 0.1] [--keep A,B:C]]     backward elimination, hierarchy kept
 //        split-plot or nested readings (whole plots, several wafers / sites per run): REML mixed
-//        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
+//        model with Kenward–Roger tests [--random wholePlot,run,wafer|block|ID] [--compare] [--ols]
 //        runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
 //   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
 //        [--rho ρ]   with a covariate correlated ρ with the response (balanced against the factors):
@@ -172,6 +184,7 @@ import { pairsSVG, contourSVG, vdgSVG, standalone, viridis } from '../js/io/svg-
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../js/model/surface.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
+import { completeBlocks, latinSquare, bibd, crossover } from '../js/design/comparative.js';
 import { optimalDesign } from '../js/design/optimal.js';
 import { splitPlotFraction, splitPlotFull, optimalSplitPlot } from '../js/design/splitplot.js';
 import * as T from '../js/design/twolevel.js';
@@ -336,11 +349,74 @@ function covariateLines(fit) {
     ...(fit.dropped?.length ? { dropped: fit.dropped } : {}) });
 }
 
+// the nuisance terms a fit adjusts for, as a note after its formula: blocks, a Latin square's rows
+// and columns, a crossover's subjects, periods and carry-over (issue #80)
+function nuisanceNote(fit) {
+  const t = fit.model.terms.filter(x => x.block && !x.position);
+  if (!t.length) return '';
+  if (t.length === 1 && t[0].label === 'Block') return ' (with the block term)';
+  return ` (adjusted for ${t.map(x => (x.carryover ? 'carry-over' : (fit.factors.find(f => f.id === x.label)?.name ?? x.label).toLowerCase())).join(', ')})`;
+}
+
+const CARRY_NOTE = 'note: carry-over cannot be told apart from the treatment here (an AB/BA crossover with subjects fixed), so it is left out: the comparison assumes the wash-out removed it';
+
+// a blocking variable from a name given on the command line: { id, name }
+const blockingName = (study, name, fallback) => {
+  const nm = name === undefined || name === true ? fallback : String(name);
+  let id = nm.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || fallback.toLowerCase();
+  if (/^[0-9]/.test(id)) id = `b_${id}`;
+  if (study.factors.some(f => f.id === id) || study.responses.some(r => r.id === id) || id === 'block') fail(`"${nm}" is already a factor or response: choose another name`);
+  return { id, name: nm[0].toUpperCase() + nm.slice(1) };
+};
+
+/** Designs for comparing treatments (issue #80): --complete-blocks B, --latin, --bibd K, --crossover. */
+function cmdComparativeDesign(file, study, opt) {
+  if (study.design && !opt.force) fail(`${file} already has a design (use --force to replace it${study.observations.length ? ' — its observations will be removed' : ''})`);
+  if (study.factors.length !== 1) fail(`Latin squares, incomplete blocks and crossovers compare the levels of one factor (the treatment); ${file} has ${study.factors.length}`);
+  const f = study.factors[0], t = f.type === 'categorical' ? f.levels.length : f.levels?.length;
+  if (!t) fail(`${f.id}: list its levels (a continuous factor needs levels: [...] for these designs)`);
+  const seed = opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed;
+  let d;
+  try {
+    if (opt['complete-blocks'] !== undefined) d = completeBlocks(t, opt['complete-blocks'] === true ? 4 : int(opt['complete-blocks'], 'complete-blocks'));
+    else if (opt.latin !== undefined) {
+      const rows = blockingName(study, opt.rows, 'Row'), columns = blockingName(study, opt.columns, 'Column');
+      d = latinSquare(t, { squares: opt.squares ? int(opt.squares, 'squares') : 1, rows, columns, seed });
+    } else if (opt.bibd !== undefined) {
+      if (opt.bibd === true) fail('--bibd K: the number of treatments a block can hold');
+      d = bibd(t, int(opt.bibd, 'bibd'), { ...(opt.blocks ? { blocks: int(opt.blocks, 'blocks') } : {}), seed });
+    } else {
+      d = crossover(t, { ...(opt.subjects ? { subjects: int(opt.subjects, 'subjects') } : {}), subject: blockingName(study, opt['subject-name'], 'Subject'), period: blockingName(study, opt['period-name'], 'Period'), seed });
+    }
+  } catch (e) { fail(e.message); }
+  const next = createStudy({ ...study, seed, design: toStudyDesign(study, d, { seed }), observations: [], ...platesWithoutWells(study), ...covariatesWithoutValues(study) });
+  save(file, next);
+  const p = d.params, lv = (i) => String(f.levels[i - 1]);
+  put({ file, design: { kind: d.kind, params: p, randomisation: next.design.randomisation, ...(next.design.blocking ? { blocking: next.design.blocking } : {}), ...(next.design.carryover ? { carryover: true } : {}), seed, runs: next.design.runs } });
+  out(`${file}: ${d.kind}, ${next.design.runs.length} runs, seed ${seed}`);
+  if (d.kind === 'complete-blocks') out(`${p.blocks} blocks, each with every level of ${f.name ?? f.id} once (in random order within the block); run each block in one go — a day, a batch — and the analysis takes out the differences between blocks`);
+  else if (d.kind === 'latin-square') {
+    const [r, c] = d.blocking, rn = r.name.toLowerCase(), cn = c.name.toLowerCase();
+    out(`${p.squares > 1 ? `${p.squares} Latin squares` : 'a Latin square'}: ${t} treatments, ${t * p.squares} ${rn}s × ${t} ${cn}s; each level of ${f.name ?? f.id} once in every ${rn} and every ${cn}`);
+    out(`the ${rn}s are run in turn, in random order within each; the analysis adjusts for both`);
+  } else if (d.kind === 'bibd') {
+    out(`${p.blocks} blocks of ${p.blockSize}, each treatment ${p.replicates} times${p.balanced ? `; every pair together in ${p.lambda} block${p.lambda > 1 ? 's' : ''} (balanced)` : '; not balanced (no balanced design was found with that many blocks)'}`);
+    out(`efficiency ${num(p.efficiency, 4)}: comparisons are as precise as with complete blocks and ${num(p.efficiency * p.replicates, 3)} runs of each treatment`);
+    out(`blocks: ${p.layout.map(b => b.map(lv).join(' ')).join(' | ')}`);
+  } else {
+    out(`${p.design} crossover: ${p.subjects} subjects, ${p.periods} periods; sequences ${p.sequences.map(sq => sq.map(lv).join('→')).join(', ')}`);
+    out(p.balanced ? 'each treatment follows every other equally often, so carry-over can be estimated and allowed for; the analysis adjusts for subject, period and carry-over'
+      : `warning: ${p.subjects} subjects is not a multiple of ${p.sequences.length} sequences, so the design is not balanced for carry-over`);
+    out('the periods are run in turn; leave a wash-out between them');
+  }
+}
+
 function cmdDesign({ pos, opt }) {
   const file = pos[0];
   const study = load(file);
   if (opt.dose !== undefined) return cmdDoseDesign(file, study, opt);
   if (opt.mixture !== undefined || study.mixture) return cmdMixtureDesign(file, study, opt);
+  if (opt.latin !== undefined || opt.bibd !== undefined || opt.crossover !== undefined || opt['complete-blocks'] !== undefined) return cmdComparativeDesign(file, study, opt);
   if (study.design && !opt.force) fail(`${file} already has a design (use --force to replace it${study.observations.length ? ' — its observations will be removed' : ''})`);
   const k = study.factors.length;
   const rsmDesign = !!(opt.ccd || opt.bbd || opt.dsd || opt.optimal);
@@ -744,7 +820,7 @@ function cmdFit({ pos, opt }) {
     const resp = respId;
     const requested = opt.random ? String(opt.random).split(',').map(x => x.trim()).filter(Boolean) : 'auto';
     let rand = [];
-    try { rand = randomEffects(observationTable(study, resp), requested); } catch (e) { if (requested !== 'auto') throw e; }
+    try { rand = randomEffects(observationTable(study, resp), requested, study.design?.blocking ?? []); } catch (e) { if (requested !== 'auto') throw e; }
     if (rand.length) {
       if (opt.lenth || opt.boxcox) fail('--lenth and --boxcox work on least-squares fits: add --ols (the mixed model is the right analysis for these data, though)');
       let f = formula;
@@ -780,6 +856,7 @@ function cmdFit({ pos, opt }) {
   if (study.design.runs.some(r => r.wholePlot !== undefined)) out('warning: split-plot design — this least-squares fit treats all runs as independent, so the standard errors and tests of whole-plot effects are too optimistic (drop --ols for the mixed model)');
   for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
   if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  if (fit.carryoverDropped) out(CARRY_NOTE);
   covariateLines(fit);
   out('');
   // round-off (|b| < 1e-10 of the largest) shown as 0, so outputs do not depend on the platform's last bits
@@ -941,7 +1018,8 @@ function cmdCompare({ pos, opt }) {
   try { cmp = compareLevels(fit, factorId, { method: opt.method ? String(opt.method) : undefined, control: opt.control !== undefined ? String(opt.control) : undefined, contrasts, at, alpha, level: 1 - alpha }); } catch (e) { fail(e.message); }
   const ratio = cmp.comparison === 'ratio' || cmp.comparison === 'odds ratio';
   const meth = { tukey: "Tukey's method (all pairs)", dunnett: `Dunnett's method (each level against ${cmp.control})`, 'single-step': 'single-step (multivariate t)', holm: "Holm's method", bonferroni: 'Bonferroni', none: 'no adjustment' }[cmp.method];
-  out(`${factorId}: ${fit.kind === 'mixed' ? `mixed model (${fit.random.map(r => r.name.toLowerCase()).join(', ')} random), Kenward–Roger` : fit.distribution ? `${noiseOf(fit).label}` : 'least squares'}, ${formula}${fit.model.terms.some(t => t.block) ? ' (with the block term)' : ''}`);
+  out(`${factorId}: ${fit.kind === 'mixed' ? `mixed model (${fit.random.map(r => r.name.toLowerCase()).join(', ')} random), Kenward–Roger` : fit.distribution ? `${noiseOf(fit).label}` : 'least squares'}, ${formula}${nuisanceNote(fit)}`);
+  if (fit.carryoverDropped) out(CARRY_NOTE);
   const held = [...Object.entries(cmp.held).map(([id, v]) => `${id} = ${num(v, 5)}`), ...(cmp.averagedOver.length ? [`averaged over ${cmp.averagedOver.join(', ')}`] : [])];
   if (held.length) out(`every level at ${held.join(', ')}`);
   out('');

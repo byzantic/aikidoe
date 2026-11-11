@@ -15,6 +15,7 @@ import { projectivity, generalisedResolution, estimableProjections } from './pro
 import { optimalDesign, diagnoseCoded, compileModel } from './optimal.js';
 import { splitPlotFraction, splitPlotFull, optimalSplitPlot } from './splitplot.js';
 import { lhsDesign } from '../sim/surrogate.js';
+import { completeBlocks, latinSquare, bibd, bibdSizes, crossover, williams } from './comparative.js';
 import { studyPower } from '../model/power.js';
 import { parseFormula } from '../model/formula.js';
 
@@ -69,6 +70,17 @@ export function candidates(study, { budget } = {}) {
     out.push({ id: 'dsd', kind: 'dsd', label: 'Definitive screening', runs: definitiveScreening(k, { categorical: cats }).X.length, note: 'three levels; main effects clear of 2fis and curvature' });
   }
   const sorted = out.sort((a, b) => a.runs - b.runs);
+  // one factor (issue #80): designs for comparing its levels, after the others
+  const tLev = k === 1 ? (f[0].type === 'categorical' ? f[0].levels.length : f[0].levels?.length ?? 0) : 0;
+  const comparative = [];
+  if (tLev >= 2 && !f[0].htc) {
+    comparative.push({ id: 'rcbd', kind: 'rcbd', label: 'Randomised complete blocks', runs: 4 * tLev, comparative: true, note: 'every level once in each block (a day, a batch): the usual design for comparing a few treatments' });
+    if (tLev >= 3) comparative.push({ id: 'latin', kind: 'latin', label: 'Latin square', runs: tLev * tLev * (tLev === 3 ? 2 : 1), comparative: true, note: 'two blocking variables (day × operator): each level once in every row and every column' });
+    if (tLev >= 3) { const kk = defaultBlockSize(tLev); comparative.push({ id: 'bibd', kind: 'bibd', label: 'Balanced incomplete blocks', runs: bibdSizes(tLev, kk)[0]?.b * kk || null, comparative: true, note: 'blocks too small for every level: every pair together equally often' }); }
+    const S = williams(tLev).length;
+    comparative.push({ id: 'crossover', kind: 'crossover', label: tLev === 2 ? 'Crossover (AB/BA)' : 'Crossover (Williams)', runs: S * tLev * (S < 4 ? 2 : 1), comparative: true, note: 'each subject or unit gets every level in turn; balanced for carry-over' });
+  }
+  sorted.push(...comparative);
   // computer experiments (§10): a space-filling design for a simulator, listed first when the study has one
   if (allCont) { const lhs = { id: 'lhs', kind: 'lhs', label: 'Latin hypercube (space-filling)', runs: Math.max(10 * k, (k + 1) * (k + 2) / 2 + 5), note: 'for a simulator: maximin; surrogate model fitted afterwards' }; if (study.simulator) sorted.unshift(lhs); else sorted.push(lhs); }
   sorted.push({ id: 'optimal', kind: 'optimal', label: 'Optimal (custom)', runs: null, note: 'D-, I- or A-optimal for a model you choose; respects constraints' });
@@ -111,6 +123,13 @@ export function buildCandidate(study, cand, o = {}) {
       const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length;
       return splitPlotFraction(htc, { runs: cand.opts.runs, wholePlots: o.wholePlots ?? defaultWholePlots(k1, htc.length - k1, cand.opts.runs), replicates: o.replicates || 1, names: study.factors.map(x => x.id) });
     }
+    case 'rcbd': return completeBlocks(levelsOf(study.factors)[0], o.cbBlocks ?? 4);
+    case 'latin': { const t = levelsOf(study.factors)[0];
+      return latinSquare(t, { squares: o.squares ?? (t === 3 ? 2 : 1), rows: blockingOf(o.rowName, 'Row'), columns: blockingOf(o.colName, 'Column'), seed: (o.seed ?? study.seed) >>> 0 }); }
+    case 'bibd': { const t = levelsOf(study.factors)[0];
+      return bibd(t, o.blockSize ?? defaultBlockSize(t), { ...(o.bibdBlocks ? { blocks: o.bibdBlocks } : {}), seed: (o.seed ?? study.seed) >>> 0 }); }
+    case 'crossover': { const t = levelsOf(study.factors)[0], S = williams(t).length;
+      return crossover(t, { subjects: o.subjects ?? S * (S < 4 ? 2 : 1), subject: blockingOf(o.subjectName, 'Subject'), period: blockingOf(o.periodName, 'Period'), seed: (o.seed ?? study.seed) >>> 0 }); }
     case 'lhs': return lhsDesign(study, { runs: o.lhsRuns ?? cand.runs, seed: (o.seed ?? study.seed) >>> 0 });
     case 'optimal':
       if (!o.search) return null;
@@ -121,6 +140,17 @@ export function buildCandidate(study, cand, o = {}) {
   }
   throw new Error(`unknown design ${cand.kind}`);
 }
+
+// a named blocking variable from a name typed in the UI: { id, name }
+export function blockingOf(name, fallback) {
+  const nm = String(name ?? '').trim() || fallback;
+  let id = nm.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || fallback.toLowerCase();
+  if (/^[0-9]/.test(id)) id = `b_${id}`;
+  return { id, name: nm[0].toUpperCase() + nm.slice(1) };
+}
+
+// a block size for t levels when none is chosen: about half of them, at least 2
+export const defaultBlockSize = (t) => Math.max(2, Math.min(t - 1, Math.ceil(t / 2)));
 
 /** The model a design is meant for (a starting point for its power table). */
 export function intendedModel(study, d) {
@@ -164,6 +194,7 @@ export function recommend(study, { goal, budget, delta = 2, alpha = 0.05, eta = 
   const options = [];
   for (const c of candidates(study, { budget })) {
     if (c.kind === 'lhs' && !study.simulator) continue;                       // physical experiments: not space-filling
+    if (c.comparative) continue;                                              // chosen for the experiment's layout, not ranked here
     let d;
     try {
       if (c.kind === 'optimal' || c.kind === 'sp-optimal') {

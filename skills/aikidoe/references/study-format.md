@@ -110,6 +110,8 @@ Without `type`, a factor whose levels include a string is categorical.
 | `kind` | string | the kind of design (fractional-factorial, ccd, split-plot-fraction, sequential, …) |
 | `params` | object | the design's parameters (generators, resolution, α, …) |
 | `randomisation` | `"complete"` \| `"restricted"` \| `"blocked"` \| `"none"` | complete; restricted (split-plot); blocked; or none |
+| `blocking` | list of [blocking](#blocking) | named blocking variables, when the runs are grouped two or more ways (a Latin square's rows and columns, a crossover's subjects and periods); each run gives its label for each in blocks |
+| `carryover` | boolean | a crossover design: the analysis adds a carry-over term (the treatment each subject had in the period before) |
 | `runs` (required) | list of [run](#run) |  |
 
 ## run
@@ -120,6 +122,7 @@ Without `type`, a factor whose levels include a string is categorical.
 | `order` | integer (≥ 1) | the randomised order in which to run it |
 | `wholePlot` | [label](#label) | whole plot (split-plot designs) |
 | `block` | [label](#label) | block (stage, day, batch) |
+| `blocks` | object | the run's label for each of design.blocking |
 | `kind` | `"factorial"` \| `"fraction"` \| `"axial"` \| `"centre"` \| `"confirm"` \| `"augment"` \| `"optimal"` \| `"space-filling"` \| `"other"` | the part of the design it comes from |
 | `settings` (required) | object | factor id → setting (natural units, or a level) |
 
@@ -188,6 +191,15 @@ Without `type`, a factor whose levels include a string is categorical.
 | `units` | string |  |
 | `note` | string | free text |
 | `values` | list of object | the values measured: one per run, or one per wafer (lot, site) of a run when it was measured there. A run with no value is left out of a model that has the covariate |
+
+## blocking
+
+| field | type | |
+|---|---|---|
+| `id` (required) | [id](#id) | used in run sheets and for --random |
+| `name` | string | a readable name (Day, Operator) |
+| `role` | `"row"` \| `"column"` \| `"subject"` \| `"period"` | rows and columns of a Latin square; subjects and periods of a crossover |
+| `levels` | list of [label](#label) | the labels in order (a crossover's periods in time order) |
 
 ## constraint
 

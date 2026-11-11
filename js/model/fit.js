@@ -12,6 +12,7 @@ import { parseFormula, modelMatrix } from './formula.js';
 import { runPositions } from '../plate.js';
 import { noiseModel, noiseModelOf, noiseOf } from './noise.js';
 import { withCovariates } from './covariates.js';
+import { qr } from '../linalg.js';
 
 const sum = (a) => a.reduce((s, v) => s + v, 0);
 
@@ -27,7 +28,7 @@ export function responseTable(study, responseId, { aggregate = 'mean', perObserv
   if (!resp) throw new Error(`no response "${responseId}" in the study`);
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
   const obs = observationsOf(study, responseId).filter(o => o.value !== null);
-  const meta = (r) => ({ order: r.order, kind: r.kind, ...(r.block !== undefined ? { block: r.block } : {}) });
+  const meta = (r) => ({ order: r.order, kind: r.kind, ...(r.block !== undefined ? { block: r.block } : {}), ...(r.blocks ? { blocks: r.blocks } : {}) });
   // counts and proportions (issue #64): one row per observation, never averaged, with its trials
   // (binomial) and exposure (counts)
   if (resp.distribution || perObservation) return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1,
@@ -75,7 +76,7 @@ export function fitModel(study, formula, opts = {}) {
   const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   const data = noise.prepare(b.rows);
   const fit = noise.fit(mm, data.y, { ...data, firth: opts.firth });
-  return { ...fit, noise: noise.id, response, rows: b.rows, factors: b.factors, ...(cov.used.length ? { covariates: cov.used, dropped: cov.dropped } : {}) };
+  return { ...fit, noise: noise.id, response, rows: b.rows, factors: b.factors, ...(b.carryoverDropped ? { carryoverDropped: true } : {}), ...(cov.used.length ? { covariates: cov.used, dropped: cov.dropped } : {}) };
 }
 
 /**
@@ -92,11 +93,34 @@ export function withBlockTerm(study, parsed, rows, opts = {}) {
   const free = (id) => { while (taken.has(id)) id += '_'; taken.add(id); return id; };
   const factors = [...study.factors], terms = [], extra = rows.map(() => ({}));
   const labels = [...new Set(rows.map(r => (r.block === undefined ? '' : String(r.block))))].sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
-  if (opts.blocks !== false && labels.length > 1) {
+  const randomIds = Array.isArray(opts.random) ? opts.random : [];
+  if (opts.blocks !== false && !randomIds.includes('block') && labels.length > 1) {
     const id = free('Block');
     factors.push({ id, name: 'Block', type: 'categorical', levels: labels, block: true });
     terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true });
     rows.forEach((r, i) => { extra[i][id] = r.block === undefined ? '' : String(r.block); });
+  }
+  // named blocking variables (issue #80: a Latin square's rows and columns, a crossover's subjects
+  // and periods), each a fixed term unless it is a random effect (opts.random lists it)
+  for (const bv of study.design?.blocking ?? []) {
+    if (opts.blocks === false || randomIds.includes(bv.id)) continue;
+    const vals = rows.map(r => (r.blocks?.[bv.id] === undefined ? '' : String(r.blocks[bv.id])));
+    const levels = blockingLevels(bv, vals);
+    if (levels.length < 2) continue;
+    const id = free(bv.id);
+    factors.push({ id, name: bv.name ?? bv.id, type: 'categorical', levels, block: true, blocking: bv.id });
+    terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true });
+    vals.forEach((v, i) => { extra[i][id] = v; });
+  }
+  // carry-over (crossover designs): the treatment the same subject had in the period before; none
+  // in the first period (all its columns 0), so the treatments' effects are adjusted for it
+  if (study.design?.carryover && opts.carryover !== false) {
+    const prev = carryoverOf(study);
+    const f0 = study.factors[0], levels = (f0.type === 'categorical' ? f0.levels : [...new Set(study.design.runs.map(r => r.settings[f0.id]))].sort((a, b) => a - b)).map(String);
+    const id = free('Carry');
+    factors.push({ id, name: `Carry-over of ${f0.name ?? f0.id}`, type: 'categorical', levels, block: true, carryover: true });
+    terms.push({ label: id, comps: [{ f: id }], degree: 1, block: true, carryover: true });
+    rows.forEach((r, i) => { const v = prev.get(r.run); if (v !== undefined) extra[i][id] = String(v); });
   }
   if (study.plates && opts.position !== false) {
     const pos = runPositions(study);
@@ -116,13 +140,50 @@ export function withBlockTerm(study, parsed, rows, opts = {}) {
     }
   }
   if (!terms.length) return { model: parsed, factors: study.factors, rows };
-  return {
+  const out = {
     factors,
     model: { ...parsed, terms: [...terms, ...parsed.terms] },
     rows: rows.map((r, i) => ({ ...r, settings: { ...r.settings, ...extra[i] } })),
   };
+  // carry-over that cannot be told apart from the other terms (AB/BA with subjects fixed: it is
+  // the sequence, and within subjects the treatment) is left out, so the treatment keeps its estimate
+  const ci = out.model.terms.findIndex(t => t.carryover);
+  if (ci >= 0) {
+    const rank = (model) => qr(modelMatrix(model, out.factors, out.rows.map(r => r.settings)).X).rank;
+    const without = { ...out.model, terms: out.model.terms.filter((_, j) => j !== ci) };
+    const df = out.factors.find(f => f.carryover).levels.length - 1;
+    if (rank(out.model) < rank(without) + df) return { ...out, model: without, factors: out.factors.filter(f => !f.carryover), carryoverDropped: true };
+  }
+  return out;
 }
 
+
+/** The labels of a blocking variable, in its listed order, else numeric then alphabetical. */
+export function blockingLevels(bv, vals) {
+  const seen = [...new Set(vals.map(String))];
+  if (bv.levels) return bv.levels.map(String).filter(l => seen.includes(l));
+  return seen.sort((a, b) => (Number(a) - Number(b)) || a.localeCompare(b));
+}
+
+/**
+ * For a crossover design: run → the treatment (the factor's setting) of the same subject's run in
+ * the period before, for every run that has one.
+ */
+export function carryoverOf(study) {
+  const d = study.design, subj = d.blocking.find(b => b.role === 'subject').id, per = d.blocking.find(b => b.role === 'period');
+  const f0 = study.factors[0].id;
+  const runs = d.runs.filter(r => r.kind !== 'confirm');
+  const periods = blockingLevels(per, runs.map(r => r.blocks[per.id]));
+  const rank = new Map(periods.map((p, i) => [p, i]));
+  const bySubject = new Map();
+  for (const r of runs) { const k = String(r.blocks[subj]); if (!bySubject.has(k)) bySubject.set(k, []); bySubject.get(k).push(r); }
+  const out = new Map();
+  for (const list of bySubject.values()) {
+    list.sort((a, b) => rank.get(String(a.blocks[per.id])) - rank.get(String(b.blocks[per.id])));
+    for (let i = 1; i < list.length; i++) if (rank.get(String(list[i].blocks[per.id])) === rank.get(String(list[i - 1].blocks[per.id])) + 1) out.set(list[i].run, list[i - 1].settings[f0]);
+  }
+  return out;
+}
 
 /**
  * Predictions with intervals at new settings (natural units): [{ fit, se, lower, upper,

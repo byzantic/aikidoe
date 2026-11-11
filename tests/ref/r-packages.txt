@@ -24,3 +24,5 @@ nnls
 emmeans
 multcompView
 mvtnorm
+gtools
+crossdes@1.1-2

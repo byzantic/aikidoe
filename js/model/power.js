@@ -28,6 +28,7 @@ import { noiseModel } from './noise.js';
 import { family, LINKS, canonicalLink, fitGLM, glmCompare, DISTRIBUTIONS as GLM_DISTRIBUTIONS, _draw } from './glm.js';
 import { chi2 as CHI2, ncChi2 } from '../dist.js';
 import { rng } from '../design/rng.js';
+import { withBlockTerm } from './fit.js';
 
 /**
  * Power from a model matrix mm = { X, columns, assign, model } (formula.js).
@@ -137,13 +138,24 @@ function withBlocks(model, factors, settings, block) {
   };
 }
 
+// named blocking variables (a Latin square's rows and columns, a crossover's subjects and periods,
+// with carry-over; issue #80): the nuisance terms as the analysis fits them (fit.js withBlockTerm)
+function withNuisance(study, parsed, runs) {
+  const b = withBlockTerm({ ...study, plates: undefined }, parsed, runs);
+  return { model: b.model, factors: b.factors, settings: b.rows.map(r => r.settings) };
+}
+
 /**
  * Power of a design given in coded units (X as factorial.js returns it, optional block per row)
- * for a model formula over the study's factors. opts as powerFromMatrix, plus model ('main').
+ * for a model formula over the study's factors. opts as powerFromMatrix, plus model ('main'),
+ * and blocking ([{ id, name, role, labels: per run }]) and carryover as comparative.js gives them.
  */
-export function designPower(study, X, { model = 'main', block, ...opts } = {}) {
+export function designPower(study, X, { model = 'main', block, blocking, carryover, ...opts } = {}) {
   const parsed = parseFormula(model, study.factors);
-  const m = withBlocks(parsed, study.factors, codedToSettings(study.factors, X), block);
+  const settings = codedToSettings(study.factors, X);
+  const runs = settings.map((st, i) => ({ run: i + 1, kind: 'factorial', settings: st, ...(block ? { block: block[i] } : {}), ...(blocking ? { blocks: Object.fromEntries(blocking.map(b => [b.id, b.labels[i]])) } : {}) }));
+  const m = blocking ? withNuisance({ ...study, design: { blocking: blocking.map(({ labels, ...b }) => b), carryover: !!carryover, runs } }, parsed, runs)
+    : withBlocks(parsed, study.factors, settings, block);
   const mm = modelMatrix(m.model, m.factors, m.settings);
   return { model: parsed, ...(isGlm(opts) ? glmPowerFromMatrix(mm, opts) : powerFromMatrix(mm, opts)) };
 }
@@ -162,7 +174,7 @@ export function studyPower(study, { model = 'main', ...opts } = {}) {
   if (!study.design) throw new Error('the study has no design yet');
   const runs = study.design.runs.filter(r => r.kind !== 'confirm');
   const parsed = parseFormula(model, study.factors);
-  const m = withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
+  const m = study.design.blocking ? withNuisance(study, parsed, runs) : withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
   const wp = runs.some(r => r.wholePlot !== undefined) ? { wholePlot: runs.map(r => String(r.wholePlot ?? `run ${r.run}`)) } : {};
   return { model: parsed, ...powerFromMatrix(modelMatrix(m.model, m.factors, m.settings), { ...wp, ...opts }) };
 }
@@ -342,6 +354,6 @@ export function studyGlmPower(study, { model = 'main', ...opts } = {}) {
   if (!study.design) throw new Error('the study has no design yet');
   const runs = study.design.runs.filter(r => r.kind !== 'confirm');
   const parsed = parseFormula(model, study.factors);
-  const m = withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
+  const m = study.design.blocking ? withNuisance(study, parsed, runs) : withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
   return { model: parsed, ...glmPowerFromMatrix(modelMatrix(m.model, m.factors, m.settings), opts) };
 }

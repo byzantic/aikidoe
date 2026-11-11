@@ -163,15 +163,24 @@ export function render(ctx) {
   // split-plot or nested readings: the mixed model is the analysis (least squares on request)
   let rand = [];
   try { rand = randomEffects(observationTable(study, resp.id)); } catch { /* none */ }
-  if (rand.length && !ui.ols) {
+  // blocks, a Latin square's rows and columns, a crossover's subjects: fixed by default, random on
+  // request (issue #80: incomplete blocks recover the information between blocks)
+  const blockIds = [...(new Set(study.design.runs.filter(r => r.block !== undefined).map(r => String(r.block))).size > 1 ? ['block'] : []),
+    ...(study.design.blocking ?? []).filter(b => b.role !== 'period').map(b => b.id)];
+  const blockNames = blockIds.map(id => (id === 'block' ? 'blocks' : `${(study.design.blocking.find(b => b.id === id).name ?? id).toLowerCase()}s`));
+  const randomBlocks = !!ui.randomBlocks && blockIds.length > 0;
+  const blockToggle = blockIds.length ? h('div', { class: 'row small', id: 'random-blocks' }, h('label', { class: 'inline' }, h('input', { type: 'checkbox', checked: randomBlocks, 'aria-label': 'random blocks', onchange: (e) => set({ randomBlocks: e.target.checked, ols: false }) }),
+    `${blockNames.join(' and ')} as random`), h('span', { class: 'muted' }, randomBlocks ? '— a mixed model (REML, Kenward–Roger): the comparisons also use the differences between them' : '— fixed: each one’s level taken out'), help('designs-comparative', 'fixed-or-random-blocks')) : null;
+  if ((rand.length || randomBlocks) && !ui.ols) {
     let m;
-    try { m = fitMixedModel(study, formula); } catch (e) { return h('div', {}, controls, h('div', { class: 'msg error' }, e.message)); }
+    const mixOpts = randomBlocks ? { random: [...rand.map(r => r.id), ...blockIds] } : {};
+    try { m = fitMixedModel(study, formula, mixOpts); } catch (e) { return h('div', {}, controls, blockToggle, h('div', { class: 'msg error' }, e.message)); }
     showCov(m);
     const avail = availablePositionTerms(study, observationsOf(study, resp.id).filter(o => o.value !== null));
     const used = new Set(formula.match(/[A-Za-z_][A-Za-z0-9_]*/g));
     const chips = avail.length ? h('div', { class: 'row small', id: 'position-terms', style: 'margin-top:6px' }, 'position terms:',
       avail.map(t => h('button', { class: 'btn small', disabled: used.has(t.id), title: t.name, onclick: () => setFormula(`${formula} + ${t.id}`) }, `+ ${t.id}`))) : null;
-    return h('div', {}, controls, chips, mixedPanel(m, ui, set), adjusted(m, (f) => fitMixedModel(study, f)), surface(m), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
+    return h('div', {}, controls, blockToggle, chips, mixedPanel(m, ui, set), adjusted(m, (f) => fitMixedModel(study, f, mixOpts)), surface(m), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
   }
   const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
     h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;
@@ -182,8 +191,12 @@ export function render(ctx) {
   for (const v of hierarchyViolations(fit.model)) notes.push(`${v.term} is in the model without ${v.missing.join(', ')}.`);
   if (fit.aliased.length) notes.push(`Not estimable (aliased with earlier terms): ${fit.aliased.join(', ')}.`);
   const missingRuns = study.design.runs.filter(r => r.kind !== 'confirm').length - fit.n;
-  const blockF = fit.factors.find(f => f.block && !f.position);
-  if (blockF) notes.push(`The design has ${blockF.levels.length} blocks (${study.plates?.wells.length ? 'plates' : 'stages'}); a block term is fitted first so shifts between them do not bias the effects.`);
+  const blockF = fit.factors.find(f => f.block && !f.position && !f.blocking && !f.carryover);
+  if (blockF) notes.push(`The design has ${blockF.levels.length} blocks (${study.plates?.wells.length ? 'plates' : study.design.kind === 'bibd' || study.design.kind === 'complete-blocks' ? 'days, batches' : 'stages'}); a block term is fitted first so shifts between them do not bias the effects.`);
+  const named = fit.factors.filter(f => f.blocking);
+  if (named.length) notes.push(`${named.map(f => f.name).join(' and ')} are fitted first, so differences between them do not blur the comparison.`);
+  if (fit.carryoverDropped) notes.push('Carry-over cannot be told apart from the treatment here (an AB/BA crossover with fixed subjects), so it is left out: the comparison assumes the wash-out removed it. With the subjects random, it can be estimated from the differences between subjects.');
+  if (fit.factors.some(f => f.carryover)) notes.push(`Carry-over is fitted too: the effect of the level each ${(study.design.blocking.find(b => b.role === 'subject').name ?? 'subject').toLowerCase()} had in the period before (none in the first period), so the comparisons are adjusted for it.`);
   if (missingRuns) notes.push(`${missingRuns} run(s) have no result yet and are left out.`);
 
   // ---------------------------------------------------------------- summary and coefficients
@@ -262,7 +275,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, backToDose, controls, olsNote, summary, projPanel, mixPanel, anovaPanel, effectsPanel, adjusted(fit, (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) })), surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  return h('div', {}, backToDose, controls, olsNote, blockToggle, summary, projPanel, mixPanel, anovaPanel, effectsPanel, adjusted(fit, (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) })), surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

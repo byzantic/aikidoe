@@ -74,6 +74,9 @@ function metaColumns(study) {
   return META.filter(k => used.has(k));
 }
 
+// the design's named blocking variables (issue #80): a column each, after the block
+const blockingIds = (study) => (study.design?.blocking ?? []).map(b => b.id);
+
 /** The run sheet as header and rows of cell values (numbers, strings, null, or ''). */
 export function runSheet(study) {
   if (!study.design) throw new Error('the study has no design yet');
@@ -82,7 +85,7 @@ export function runSheet(study) {
   const unitCols = (study.covariates ?? []).filter(c => c.values.some(v => v.unit !== undefined)).map(c => c.id);
   const unitOf = (id, run) => (study.covariates.find(c => c.id === id).values.find(v => v.run === run && v.unit !== undefined)?.unit ?? '');
   const W = wellOf(study), plated = W.size > 0;
-  const header = ['order', 'run', ...(plated ? ['plate', 'well'] : []), ...(has(study, 'wholePlot') ? ['wholePlot'] : []), ...(has(study, 'block') ? ['block'] : []), 'kind',
+  const header = ['order', 'run', ...(plated ? ['plate', 'well'] : []), ...(has(study, 'wholePlot') ? ['wholePlot'] : []), ...(has(study, 'block') ? ['block'] : []), ...blockingIds(study), 'kind',
     ...study.factors.map(f => f.id), ...meta, ...unitCols.map(id => `${id}.unit`), ...covs, ...res.map(c => c.header), 'note'];
   const rows = [];
   for (const run of sortedRuns(study)) {
@@ -104,7 +107,7 @@ export function runSheet(study) {
         return hit.length ? (hit[0].value === null ? 'NA' : hit[0].value) : '';
       });
       const notes = [...new Set(list.map(o => o.note).filter(Boolean))].join('; ');
-      rows.push([run.order, run.run, ...(plated ? [W.get(run.run)?.plate ?? '', W.get(run.run)?.well ?? ''] : []), ...(has(study, 'wholePlot') ? [run.wholePlot ?? ''] : []), ...(has(study, 'block') ? [run.block ?? ''] : []), run.kind,
+      rows.push([run.order, run.run, ...(plated ? [W.get(run.run)?.plate ?? '', W.get(run.run)?.well ?? ''] : []), ...(has(study, 'wholePlot') ? [run.wholePlot ?? ''] : []), ...(has(study, 'block') ? [run.block ?? ''] : []), ...blockingIds(study).map(id => run.blocks?.[id] ?? ''), run.kind,
         ...study.factors.map(f => run.settings[f.id]), ...mv.map(v => v ?? ''), ...unitCols.map(id => unitOf(id, run.run)), ...covs.map(id => covariateCell(study, id, run.run, covKeys(meta, mv)) ?? ''), ...cells, notes]);
     }
   }
@@ -129,7 +132,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 /** Printable HTML run sheet. opts: title, date (string; omitted by default so output is reproducible). */
 export function runSheetHTML(study, { title, date } = {}) {
   const s = runSheet(study);
-  const group = has(study, 'wholePlot') ? 'wholePlot' : has(study, 'block') ? 'block' : null;
+  // the sheet is grouped by whole plot, block, or a Latin square's rows or a crossover's periods
+  const byBlocking = (study.design.blocking ?? []).find(b => b.role === 'row' || b.role === 'period');
+  const group = has(study, 'wholePlot') ? 'wholePlot' : has(study, 'block') ? 'block' : byBlocking ? byBlocking.id : null;
   const gi = group ? s.header.indexOf(group) : -1;
   const label = (h) => {
     const f = study.factors.find(x => x.id === h);
@@ -140,6 +145,8 @@ export function runSheetHTML(study, { title, date } = {}) {
     if (cu) return `${esc(cu.name)}: unit`;
     const cv = (study.covariates ?? []).find(x => x.id === h);
     if (cv) return `${esc(cv.name)}${cv.units ? ` <span class="u">(${esc(cv.units)})</span>` : ''}`;
+    const bv = (study.design.blocking ?? []).find(x => x.id === h);
+    if (bv) return esc(bv.name ?? bv.id);
     const r = study.responses.find(x => x.id === h.split('@')[0]);
     if (r) { const site = h.includes('@') ? ` @ ${esc(h.split('@')[1])}` : ''; return `${esc(r.name)}${site}${r.units ? ` <span class="u">(${esc(r.units)})</span>` : ''}`; }
     return esc({ order: 'Order', run: 'Run', plate: 'Plate', well: 'Well', wholePlot: 'Whole plot', block: 'Block', kind: 'Type', note: 'Notes',
@@ -150,7 +157,7 @@ export function runSheetHTML(study, { title, date } = {}) {
   for (const r of s.rows) {
     if (group && r[gi] !== prev) {
       const set = group === 'wholePlot' ? study.factors.filter(f => f.htc).map(f => `${esc(f.name)} ${esc(show(r[s.header.indexOf(f.id)]))}${f.units ? ` ${esc(f.units)}` : ''}`).join(', ') : '';
-      body += `<tr class="g"><th colspan="${s.header.length}">${group === 'wholePlot' ? 'Whole plot' : 'Block'} ${esc(r[gi])}${set ? ` <span class="u">— set once: ${set}</span>` : ''}</th></tr>\n`;
+      body += `<tr class="g"><th colspan="${s.header.length}">${group === 'wholePlot' ? 'Whole plot' : group === 'block' ? 'Block' : esc(byBlocking.name ?? byBlocking.id)} ${esc(r[gi])}${set ? ` <span class="u">— set once: ${set}</span>` : ''}</th></tr>\n`;
       prev = r[gi];
     }
     body += '<tr>' + r.map((v, j) => `<td${j >= resStart ? ' class="res"' : typeof v === 'number' ? ' class="n"' : ''}>${esc(show(v))}</td>`).join('') + '</tr>\n';
@@ -212,6 +219,8 @@ function mapColumns(study, header, given = {}) {
   for (const h of header) {
     if (given[h] !== undefined) { mapping[h] = given[h]; continue; }
     const k = norm(h);
+    // a named blocking variable (day, operator, subject): shown on the sheet, not read back
+    if (blockingIds(study).some(id => id === h.trim() || norm(id) === k)) { mapping[h] = 'ignore'; continue; }
     if (['run', 'runid', 'runno', 'runnumber'].includes(k)) mapping[h] = 'run';
     else if (['order', 'runorder', 'wholeplot', 'block', 'kind', 'type'].includes(k)) mapping[h] = 'ignore';
     else if (['plate', 'plateno', 'platenumber', 'plateid'].includes(k)) mapping[h] = 'plate';

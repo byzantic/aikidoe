@@ -350,6 +350,34 @@ try {
     check('compare: weights that do not add up to 0 are pointed out', r.code === 0 && /do not add up to 0/.test(r.out), r.out + r.err);
   }
 
+  section('designs for comparing treatments (issue #80, phase 2)');
+  {
+    r = run('init', 'lsq.aikidoe.json', '--factor', 'feed=A,B,C,D', '--response', 'y', '--seed', '5');
+    r = run('design', 'lsq.aikidoe.json', '--latin', '--rows', 'Day', '--columns', 'Operator');
+    const s = JSON.parse(readFileSync(join(dir, 'lsq.aikidoe.json'), 'utf8'));
+    check('design --latin: 16 runs, day and operator for each', r.code === 0 && /latin-square, 16 runs/.test(r.out) && s.design.blocking.map(b => b.id).join() === 'day,operator' && s.design.runs.every(u => u.blocks.day && u.blocks.operator), r.out + r.err);
+    r = run('sheet', 'lsq.aikidoe.json');
+    check('sheet: a column for each blocking variable', r.code === 0 && /^order,run,day,operator,kind,feed,y,note/.test(r.out), r.out);
+    // results with a day effect: the analysis adjusts for day and operator
+    s.observations = s.design.runs.map(u => ({ run: u.run, response: 'y', value: 10 + 'ABCD'.indexOf(u.settings.feed) * 0.5 + u.blocks.day * 2 + ((u.run * 37) % 11) / 20 }));
+    writeFileSync(join(dir, 'lsq.aikidoe.json'), JSON.stringify(s));
+    r = run('fit', 'lsq.aikidoe.json', 'y ~ feed');
+    check('fit: rows and columns first in the model', r.code === 0 && /y ~ day \+ operator \+ feed/.test(r.out), r.out + r.err);
+    r = run('compare', 'lsq.aikidoe.json', 'feed');
+    check('compare: adjusted for day and operator', r.code === 0 && /\(adjusted for day, operator\)/.test(r.out), r.out + r.err);
+    r = run('compare', 'lsq.aikidoe.json', 'feed', '--random', 'day,operator');
+    check('compare --random day,operator: a mixed model', r.code === 0 && /mixed model \(day, operator random\)/.test(r.out), r.out + r.err);
+    r = run('design', 'lsq.aikidoe.json', '--bibd', '3', '--force');
+    check('design --bibd 3: 4 blocks of 3, balanced', r.code === 0 && /4 blocks of 3, each treatment 3 times; every pair together in 2 blocks \(balanced\)/.test(r.out) && /efficiency 0\.8889/.test(r.out), r.out + r.err);
+    r = run('design', 'lsq.aikidoe.json', '--crossover', '--subjects', '8', '--force');
+    check('design --crossover: Williams, 8 subjects, 4 periods', r.code === 0 && /Williams crossover: 8 subjects, 4 periods/.test(r.out) && JSON.parse(readFileSync(join(dir, 'lsq.aikidoe.json'), 'utf8')).design.carryover === true, r.out + r.err);
+    r = run('design', 'lsq.aikidoe.json', '--crossover', '--subjects', '6', '--force');
+    check('design --crossover: subjects not a multiple of the sequences is warned about', r.code === 0 && /not balanced for carry-over/.test(r.out), r.out);
+    run('init', 'two.aikidoe.json', '--factor', 'A=x,y', '--factor', 'B=u,v', '--response', 'y');
+    r = run('design', 'two.aikidoe.json', '--latin');
+    check('design --latin: one factor only', r.code !== 0 && /one factor \(the treatment\)/.test(r.err), r.err);
+  }
+
   section('--json output, validated against schema/cli.schema.json (issue #37)');
   const cliSchema = JSON.parse(readFileSync(new URL('../schema/cli.schema.json', import.meta.url), 'utf8'));
   const studySchema = JSON.parse(readFileSync(new URL('../schema/study.schema.json', import.meta.url), 'utf8'));
@@ -581,6 +609,10 @@ try {
   check('compare --json: levels, comparisons, the critical value', o.method === 'dunnett' && o.family === 'control' && o.levels.length === 5 && o.comparisons.length === 4 && Math.abs(o.critical - 2.7273) < 1e-4);
   o = js('compare', 'media.aikidoe.json', 'medium');
   check('compare --json: letters with all pairs', o.levels.find(l => l.label === 'M-4').letters === 'a' && o.comparisons.length === 10);
+  o = js('design', 'lsq.aikidoe.json', '--latin', '--force');
+  check('design --latin --json: the blocking variables and each run\'s labels', o.design.blocking?.length === 2 && o.design.runs.every(u => u.blocks?.row && u.blocks?.column));
+  o = js('design', 'lsq.aikidoe.json', '--crossover', '--force');
+  check('design --crossover --json: subjects, periods, carry-over', o.design.carryover === true && o.design.blocking.map(b => b.role).join() === 'subject,period');
   o = js('allocate', 'cov.aikidoe.json', 'vcd', '--units', 'flasks.csv', '--dry-run');
   check('allocate --json (dry run): R², the assignment and the units left over', o.saved === false && o.assignment.length === 16 && o.unused.length === 2 && o.r2 < o.random);
   o = js('optimise', 'cov.aikidoe.json', '--model', 'titre ~ temp*feed + pH + vcd', '--fix', 'vcd=0.35');

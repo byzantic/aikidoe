@@ -447,6 +447,46 @@ try {
     check('contrasts typed in: single-step', /single-step: the intervals hold for all 2 contrasts/.test(t) && /\(M-3 \+ M-4\)\/2 - Standard1\.271/.test(t), t);
     await shot('17-compare');
   }
+  section('designs for comparing treatments (issue #80, phase 2)');
+  {
+    await page.click('[data-step="design"]'); await settle();
+    check('one factor: complete blocks, Latin square, incomplete blocks and crossover offered', await page.locator('tr[data-design="rcbd"]').count() === 1 && await page.locator('tr[data-design="latin"]').count() === 1
+      && await page.locator('tr[data-design="bibd"]').count() === 1 && await page.locator('tr[data-design="crossover"]').count() === 1);
+    await page.click('tr[data-design="latin"]'); await settle();
+    await page.fill('input[aria-label="latin rows"]', 'Day'); await page.keyboard.press('Tab'); await settle();
+    await page.fill('input[aria-label="latin columns"]', 'Operator'); await page.keyboard.press('Tab'); await settle();
+    let t = await page.textContent('main');
+    const cells = await page.locator('[data-layout] tbody td').allTextContents();
+    check('a 5 × 5 Latin square: the layout, each medium once per day', cells.length === 25 && /once in every day and once in every operator/.test(t), cells.join());
+    check('… power with day and operator fitted', /Day and Operator fitted/.test(await page.textContent('#power')), await page.textContent('#power'));
+    await shot('18-latin');
+    await page.click('tr[data-design="bibd"]'); await settle();
+    await page.selectOption('select[aria-label="block size"]', '2'); await settle();
+    t = await page.textContent('main');
+    check('incomplete blocks of 2: 10 blocks, balanced, efficiency 0.625', /10 blocks of 2; each level 4 times, every pair of levels together in 1 block/.test(t) && /Efficiency 0\.625/.test(t), t.slice(0, 400));
+    await page.click('tr[data-design="crossover"]'); await settle();
+    t = await page.textContent('main');
+    check('a crossover: Williams sequences, 10 subjects × 5 periods', /Williams sequences/.test(t) && (await page.locator('[data-layout] tbody tr').count()) === 10);
+    await page.click('tr[data-design="latin"]'); await settle();
+    await page.click('#create-design'); await settle();
+    const st = await state();
+    check('created: day and operator on every run, run day by day', st.study.design.blocking?.map(b => b.id).join() === 'day,operator' && st.study.design.runs.every(r => r.blocks?.day && r.blocks?.operator));
+    t = await page.textContent('main');
+    check('the run sheet shows day and operator', /Day/.test(t) && /Operator/.test(t));
+    await page.click('#btn-examples'); await page.click('[data-example="coating-latin"]'); await page.waitForTimeout(300);
+    await page.click('[data-step="analyse"]'); await settle();
+    t = await page.textContent('main');
+    check('a Latin square analysed: day and operator fitted first; C4 beats C1', /Day and Operator are fitted first/.test(t) && /C4 − C51\.08|C4 − C1/.test(t), t.slice(0, 600));
+    await page.check('input[aria-label="random blocks"]'); await settle();
+    t = await page.textContent('#compare');
+    check('… days and operators as random: a mixed model, Kenward–Roger', /days and operators as random/.test(await page.textContent('#random-blocks')) && /readings/.test(t) && (await state()).ui.analyse?.randomBlocks === true, t.slice(0, 300));
+    await page.click('#btn-examples'); await page.click('[data-example="diet-crossover"]'); await page.waitForTimeout(300);
+    await page.click('[data-step="analyse"]'); await settle();
+    t = await page.textContent('main');
+    check('a crossover analysed: carry-over fitted', /Carry-over is fitted too/.test(t) && /Animal and Period are fitted first/.test(t), t.slice(0, 600));
+    await shot('19-crossover');
+  }
+
   section('projectivity: the active factors fitted from the same runs (issue #79)');
   {
     const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];

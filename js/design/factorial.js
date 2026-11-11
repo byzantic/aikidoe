@@ -226,18 +226,24 @@ export function toStudyDesign(study, design, opts = {}) {
     const r = { run: i + 1, kind: design.runKind[i], settings: Object.fromEntries(factors.map((f, j) => [f.id, setting(f, j, row[j])])) };
     if (design.block) r.block = design.block[i];
     if (design.wholePlot) r.wholePlot = design.wholePlot[i];
+    if (design.blocking) r.blocks = Object.fromEntries(design.blocking.map(b => [b.id, b.labels[i]]));
     return r;
   });
-  const mode = opts.randomise ?? (design.wholePlot ? 'restricted' : design.block ? 'blocked' : 'complete');
+  // the groups that set the run order: blocks (in random order), or for Latin squares and
+  // crossovers the rows or periods in turn (design.orderGroup, fixedGroupOrder); runs in random
+  // order within each
+  const groups = design.block ?? design.orderGroup;
+  const mode = opts.randomise ?? (design.wholePlot ? 'restricted' : groups ? 'blocked' : 'complete');
   if (design.wholePlot && mode === 'complete') throw new Error('a split-plot design cannot be completely randomised: its whole plots would be broken up');
   const g = rng(opts.seed ?? study.seed);
   let order;
   if (mode === 'none') order = runs.map(r => r.run);
   else if (mode === 'complete') order = g.shuffle(runs.map(r => r.run));
   else if (mode === 'blocked') {
-    if (!design.block) throw new Error('blocked randomisation needs blocks');
-    const labels = g.shuffle([...new Set(design.block)].sort((a, b) => a - b));
-    order = labels.flatMap(b => g.shuffle(runs.filter(r => r.block === b).map(r => r.run)));
+    if (!groups) throw new Error('blocked randomisation needs blocks');
+    const sorted = [...new Set(groups)].sort((a, b) => a - b);
+    const labels = design.fixedGroupOrder && !design.block ? sorted : g.shuffle(sorted);
+    order = labels.flatMap(b => g.shuffle(runs.filter((r, i) => groups[i] === b).map(r => r.run)));
   } else if (mode === 'restricted') {
     if (!design.wholePlot) throw new Error('restricted randomisation needs whole plots');
     const blocks = design.block ? g.shuffle([...new Set(design.block)].sort((a, b) => a - b)) : [undefined];
@@ -248,5 +254,6 @@ export function toStudyDesign(study, design, opts = {}) {
     });
   } else throw new Error(`unknown randomisation "${mode}"`);
   order.forEach((run, i) => { runs[run - 1].order = i + 1; });
-  return { kind: design.kind, params: { ...design.params, seed: opts.seed ?? study.seed }, randomisation: mode, runs };
+  return { kind: design.kind, params: { ...design.params, seed: opts.seed ?? study.seed }, randomisation: mode,
+    ...(design.blocking ? { blocking: design.blocking.map(({ labels, ...b }) => b) } : {}), ...(design.carryover ? { carryover: true } : {}), runs };
 }
