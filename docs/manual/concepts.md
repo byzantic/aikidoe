@@ -85,7 +85,8 @@ low to the high setting) against run-to-run noise σ, at significance level α (
 gauge study — matters; for a split-plot the whole-plot variance matters too (η = σ²_wp / σ²).
 
 The Design step shows the power of each term; `doe power` prints it, with the effect detectable
-with 80 % power.
+with 80 % power. A [covariate](analysis.md#power-with-a-covariate) correlated ρ with the response
+takes σ to σ√(1 − ρ²) (`--rho`).
 
 **Counts and proportions** ([analysis](analysis.md#counts-and-proportions)) have no single σ: a
 count's variance is its mean, a proportion's p(1 − p)/n, so the power depends on how large the

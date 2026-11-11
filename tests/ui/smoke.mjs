@@ -376,6 +376,7 @@ try {
   }
   section('covariates: measured, not set (issue #82)');
   {
+    let s;
     await page.click('#btn-examples'); await page.click('[data-example="titre-covariate"]'); await page.waitForTimeout(300);
     await page.click('[data-step="analyse"]'); await settle();
     const sigma = async () => Number((/σ\s*=?\s*([\d.]+)/.exec(await page.textContent('main')) ?? [])[1]);
@@ -393,10 +394,17 @@ try {
     await shot('16-covariate');
     await page.click('[data-step="optimise"]'); await settle();
     check('Optimise renders with a covariate in the model', !/Something went wrong/.test(await page.textContent('main')));
+    await page.click('#optimise'); await settle();
+    const titre = async () => Number((/titre\s*([\d.]+)/.exec(await page.textContent('#opt-result')) ?? [])[1]);
+    const atMean = await titre();
+    await page.fill('input[aria-label="covariate vcd"]', '0.35'); await page.keyboard.press('Tab'); await settle();
+    check('Optimise: the covariate held at a value — the best settings again, a lower predicted titre (phase 3)', /the best settings for these values/.test(await page.textContent('#covariate-at')) && (await titre()) < atMean - 0.2
+      && /at the optimum/.test(await page.textContent('#opt-result')), `${atMean} → ${await titre()}`);
+    await page.fill('input[aria-label="covariate vcd"]', ''); await page.keyboard.press('Tab'); await settle();
     await page.click('[data-step="run"]'); await settle();
     check('Run: a column for the covariate, filled in', (await page.locator('#run-sheet td.cov input').count()) === 16 && (await page.inputValue('input[aria-label="run 10 vcd"]')) === '0.33');
     await page.fill('input[aria-label="run 10 vcd"]', '0.41'); await page.keyboard.press('Tab'); await settle();
-    let s = await state();
+    s = await state();
     check('… a value typed in is the run\'s value', s.study.covariates[0].values.find(v => v.run === 10).value === 0.41 && s.study.covariates[0].values.length === 16);
     await page.fill('input[aria-label="run 10 vcd"]', ''); await page.keyboard.press('Tab'); await settle();
     s = await state();
@@ -410,6 +418,16 @@ try {
     check('… + covariate adds one', s.study.covariates.length === 2 && s.study.covariates[1].id === 'z' && s.study.covariates[1].values.length === 0);
     await page.click('[data-step="analyse"]'); await settle();
     check('… without values it cannot go in the model yet', await page.isDisabled('#covariate-terms button:nth-of-type(2)'));
+    await page.click('[data-step="design"]'); await settle();
+    check('Design: the covariate note (no balance line while run 10 has no value)', /Measure each one before/.test(await page.textContent('#covariate-design')) && (await page.locator('#covariate-balance').count()) === 0);
+    await page.fill('textarea[aria-label="units to allocate"]', Array.from({ length: 18 }, (_, i) => `F${i + 1}, ${(0.4 + ((i * 7) % 11) / 40).toFixed(3)}`).join('\n')); await page.keyboard.press('Tab'); await settle();
+    await page.click('#allocate'); await settle();
+    s = await state();
+    check('… units allocated: balanced, each run given its unit and value', /Allocated: R² of Seed density on the effects (below 0\.001|0\.0\d+), against 0\.\d+ for a random allocation/.test(await page.textContent('#allocation'))
+      && s.study.covariates[0].values.length === 16 && s.study.covariates[0].values.every(v => /^F\d+$/.test(v.unit)));
+    check('… power: a covariate ρ', (await page.locator('input[aria-label="power covariate rho"]').count()) <= 1);
+    await page.click('[data-step="run"]'); await settle();
+    check('… the run sheet shows each run\'s unit', /Seed density: unit/.test(await page.textContent('#run-sheet thead')));
   }
   section('projectivity: the active factors fitted from the same runs (issue #79)');
   {

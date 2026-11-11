@@ -291,6 +291,113 @@ the log of the rate, or the log odds), and so does the mixed model of split-plot
 and sites, where each reading takes its own wafer's value when the covariate was measured per
 wafer.
 
+### Covariates known in advance
+
+Sometimes the covariate is known before any run: the animals are weighed before treatment, the
+seed flasks counted before inoculation, the incoming film measured before processing. Then it can
+be **balanced** against the factors instead of left to chance: the Design step's *Covariates* panel
+(or `doe allocate`) takes the units with their values and gives each run a unit, so that the
+covariate is as nearly as possible uncorrelated with every effect of the model. The effects are
+then estimated as precisely with the covariate in the model as without it, and adjusting for it
+moves them least.
+
+The balance is given as **R²**, the share of the covariate's variation that the effects explain:
+0 is perfect balance. A random allocation gives (p − 1)/(n − 1) on average, for p coefficients and
+n runs, and often much more in a small experiment. More units than runs are fine: the ones that
+balance best are used, and the rest listed. Each run's unit is stored with its value and printed on
+the run sheet, so that the right animal gets the right treatment.
+
+```file flasks.csv
+flask,vcd
+F1,0.52
+F2,0.61
+F3,0.47
+F4,0.55
+F5,0.44
+F6,0.58
+F7,0.50
+F8,0.63
+F9,0.49
+F10,0.41
+F11,0.57
+F12,0.53
+F13,0.46
+F14,0.60
+F15,0.51
+F16,0.48
+F17,0.66
+F18,0.39
+```
+
+```console
+$ doe allocate examples/titre-covariate.aikidoe.json vcd --units flasks.csv --model 2fi --dry-run
+18 units for 16 runs, balanced against 2fi:
+R² of vcd on the model's effects: below 0.001 (a random allocation: 0.058 here, 0.4 on average); an effect's variance grows by less than 0.1 % with vcd in the model
+largest correlation with an effect: pH:feed, -0.00831
+
+run  unit   vcd  settings
+---  ----  ----  -----------------------
+  1  F11   0.57  temp=34, pH=6.8, feed=2
+  2  F6    0.58  temp=37, pH=6.8, feed=2
+  3  F2    0.61  temp=34, pH=7.2, feed=2
+  4  F4    0.55  temp=37, pH=7.2, feed=2
+  5  F18   0.39  temp=34, pH=6.8, feed=4
+  6  F15   0.51  temp=37, pH=6.8, feed=4
+  7  F12   0.53  temp=34, pH=7.2, feed=4
+  8  F8    0.63  temp=37, pH=7.2, feed=4
+  9  F13   0.46  temp=34, pH=6.8, feed=2
+ 10  F3    0.47  temp=37, pH=6.8, feed=2
+ 11  F5    0.44  temp=34, pH=7.2, feed=2
+ 12  F16   0.48  temp=37, pH=7.2, feed=2
+ 13  F17   0.66  temp=34, pH=6.8, feed=4
+ 14  F1    0.52  temp=37, pH=6.8, feed=4
+ 15  F7     0.5  temp=34, pH=7.2, feed=4
+ 16  F10   0.41  temp=37, pH=7.2, feed=4
+
+not used: F9 (0.49), F14 (0.6)
+
+(dry run: nothing saved)
+```
+
+`--model` says which effects to balance against (the main effects by default). With blocks,
+`--within-blocks` keeps each block's units in it. `--order` is for a value that belongs to a
+position in the run order rather than to a unit — a forecast of the room temperature for each slot,
+say: the runs are rearranged among the positions (not for split-plot designs, whose whole plots must
+stay together).
+
+Balancing is a restriction on randomisation: the allocation is chosen, not random, for this one
+covariate. Anything else about the units is still unbalanced, which is why the unit order, and
+everything else, should still be randomised as usual.
+
+### Power with a covariate
+
+A covariate that explains part of the scatter makes the experiment more sensitive: if it is
+correlated ρ with the response (within the settings), the residual σ falls to **σ√(1 − ρ²)** —
+with ρ = 0.7, to 0.71 σ; with ρ = 0.9, to 0.44 σ — at the cost of one residual degree of freedom.
+The power panel of the Design step takes ρ when the study has a covariate, and so does
+`doe power --rho`. This is the power when the covariate is balanced against the factors; a covariate
+correlated with them gives a little less.
+
+```console
+$ doe power examples/titre-covariate.aikidoe.json --model "temp + pH + feed" --sigma 0.2 --delta 0.2 --rho 0.9
+with a covariate correlated ρ = 0.9 with the response: residual σ = 0.2·√(1 − ρ²) = 0.08718, one residual df spent on it
+power for temp + pH + feed: 16 runs, 4 coefficients, 11 residual df; α = 0.05, σ = 0.2, Δ = 0.2 (low → high)
+term  df    Δ  power   Δ for 80%     Δ/σ
+----  --  ---  ------  ---------  ------
+temp   1  0.2  0.9861     0.1342  0.6709
+pH     1  0.2  0.9861     0.1342  0.6709
+feed   1  0.2  0.9861     0.1342  0.6709
+Δ: change in the response from the low to the high setting of a factor (for a quadratic term, 2 × its coefficient)
+```
+
+### Best settings for a covariate value
+
+The Optimise step's best settings, profiler and overlay are at the covariate's mean. For a batch
+whose covariate you have just measured, give its value (*covariates:* under *Best settings*, or
+`doe optimise --fix "vcd=0.35"`): the best settings are found again for that value, and every
+prediction is made there. If the covariate does not interact with the factors, the best settings
+stay the same and only the predicted response moves.
+
 ## Fitted response
 
 The Analyse step draws the fitted model over any two continuous factors as a contour, the other

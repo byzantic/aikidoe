@@ -60,7 +60,9 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    Things the user can measure at each run but not set (room temperature, a starting weight, the
    passage number, the age of a reagent) are **covariates**: `doe covariate STUDY id:units`. They
    get a column on the run sheet; ask for it to be filled in before or at each run, never after
-   the treatment could have changed it.
+   the treatment could have changed it. If its values are known before the runs (animals weighed,
+   flasks counted), `doe allocate STUDY id --units FILE.csv` gives each run a unit so that it is
+   balanced against the factors; `doe power … --rho ρ` shows what it gains.
 3. **Recommend** designs: `doe recommend STUDY --goal screen|model|optimise --budget N --json`.
    Present two or three options to the user with run counts, what each can estimate, what is
    aliased, and power — [references/decisions.md](references/decisions.md). Agree one.

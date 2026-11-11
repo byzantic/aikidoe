@@ -1035,6 +1035,10 @@
               "site": {
                 "$ref": "#/$defs/label",
                 "description": "site, when the value belongs to one site"
+              },
+              "unit": {
+                "$ref": "#/$defs/label",
+                "description": "the unit (animal, flask, wafer) the run was given, when units were allocated to runs by this covariate (doe allocate)"
               }
             }
           }

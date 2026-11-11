@@ -67,7 +67,8 @@ before acting.
 - On plates, follow the plate map: never "tidy" the layout into rows of conditions.
 - Keep everything not in the design as constant as you can, and write down what you could not.
   What you can measure but not hold — room temperature, a starting weight, the lot's age —
-  record at each run as a [covariate](analysis.md#covariates).
+  record at each run as a [covariate](analysis.md#covariates). Known before the runs (a starting
+  weight)? Allocate the units so that it is balanced against the factors.
 - Record the result for each run straight away, with anything unusual in the note.
 - A failed run is `NA`, not a guess and not a quiet repeat.
 - Do not adjust settings between runs to "help" the process.

@@ -114,6 +114,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   *Technometrics* 24, 29–39.
 - Plackett, R. L. & Burman, J. P. (1946). The design of optimum multifactorial experiments.
   *Biometrika* 33, 305–325.
+- Pocock, S. J. & Simon, R. (1975). Sequential treatment assignment with balancing for prognostic
+  factors in the controlled clinical trial. *Biometrics* 31, 103–115. (Balancing a covariate known
+  in advance across treatments: [covariates known in advance](analysis.md#covariates-known-in-advance).)
 - Ritz, C., Baty, F., Streibig, J. C. & Gerhard, D. (2015). Dose-response analysis using R.
   *PLoS ONE* 10, e0146021. (The drc package: the models and parameterisation of
   [dose–response](dose-response.md), and the reference for its tests.)

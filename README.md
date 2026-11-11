@@ -32,7 +32,7 @@ writes SVG, also of the desirability overlay), prediction-variance and power dia
 one; **Run** — type results into the run sheet or import a filled CSV, download CSV or a
 printable sheet; **Optimise** — desirability goals for the responses, the best settings, a prediction profiler and a two-factor overlay with the runs on it, and a warning when the best settings lie beyond the runs.
 
-**Analyse** — fit a formula (with covariates: things measured at each run but not set, such as a starting weight or the room temperature; adjusted means with Tukey comparisons, and a check that the covariate's slope is the same at every setting), reduce it (backward elimination by p-value or AICc, hierarchy kept), ANOVA with lack of fit, Lenth's method with a
+**Analyse** — fit a formula (with covariates: things measured at each run but not set, such as a starting weight or the room temperature; adjusted means with Tukey comparisons, and a check that the covariate's slope is the same at every setting; a covariate known in advance balanced against the factors by allocating units to runs, and power with it), reduce it (backward elimination by p-value or AICc, hierarchy kept), ANOVA with lack of fit, Lenth's method with a
 half-normal plot, residual plots and Box–Cox, predictions with confidence and prediction
 intervals, and confirmation runs checked against them. Once a design exists, **Design** also
 offers a **Next stage**: fold-over, axial points (turning a fraction into a central composite)

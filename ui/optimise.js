@@ -128,8 +128,20 @@ export function render(ctx) {
   // current settings: chosen by the user, else the optimum, else the centre
   // (a mixture: the centroid of the region; a component moved alone moves the others along its Cox direction)
   const centre = study.mixture ? referenceBlend(study) : Object.fromEntries(study.factors.map(f => [f.id, f.type === 'categorical' ? f.levels[0] : decode(f, 0)]));
-  const at = { ...centre, ...(ui.result?.settings ?? {}), ...(ui.at ?? {}) };
+  // covariates in the models (issue #82): every prediction at the value held here, else at its mean
+  const covs = [...new Map(ms.flatMap(m => m.fit?.covariates ?? []).map(c => [c.id, c])).values()];
+  const covAt = Object.fromEntries(covs.filter(c => Number.isFinite(ui.covAt?.[c.id])).map(c => [c.id, ui.covAt[c.id]]));
+  const at = { ...centre, ...(ui.result?.settings ?? {}), ...(ui.at ?? {}), ...covAt };
   const isComp = (id) => !!study.mixture?.components.includes(id);
+  // the optimiser, with any covariates held (cAt); patch: more of the UI state to set with it
+  const findBest = (cAt, patch = {}) => {
+    try {
+      const fixed = { ...Object.fromEntries(study.factors.filter(f => ui.hold?.[f.id]).map(f => [f.id, at[f.id]])), ...cAt };
+      const radius = ui.radius ?? (ui.region === 'sphere' ? (study.design?.params?.alpha ?? Math.sqrt(study.factors.filter(f => f.type !== 'categorical').length)) : 1);
+      const r = optimiseDesirability(study, ms, { region: ui.region ?? 'cube', radius, fixed, seed: study.seed });
+      set({ ...patch, result: { settings: r.settings, D: r.D, d: r.d }, at: null, error: null });
+    } catch (e) { set({ ...patch, error: e.message }); }
+  };
   const moveTo = (id, v) => { if (!isComp(id)) return { ...at, [id]: v }; const [lo, hi] = coxRange(study, at, id); return coxBlend(study, at, id, Math.min(hi, Math.max(lo, v))); };   // within the region
   const isCCD = ['ccd'].includes(study.design?.kind) || study.design?.params?.stages?.some(s => s.kind === 'axial');
   const region = ui.region ?? 'cube';
@@ -138,14 +150,15 @@ export function render(ctx) {
     h('label', { class: 'inline', title: 'half-width of the cube or radius of the sphere, in coded units' }, region === 'sphere' ? 'radius' : 'half-width',
       h('input', { class: 'num', type: 'number', min: 0.1, step: 0.05, value: ui.radius ?? (region === 'sphere' ? (study.design?.params?.alpha ?? +Math.sqrt(study.factors.filter(f => f.type !== 'categorical').length).toFixed(3)) : 1), 'aria-label': 'radius', onchange: (e) => set({ radius: Number(e.target.value) }) }))],
     h('label', { class: 'inline' }, 'hold', ...study.factors.map(f => h('label', { class: 'inline small' }, h('input', { type: 'checkbox', checked: !!ui.hold?.[f.id], 'aria-label': `hold ${f.id}`, onchange: (e) => set({ hold: { ...(ui.hold ?? {}), [f.id]: e.target.checked } }) }), f.id))),
-    h('button', { class: 'btn primary', id: 'optimise', onclick: () => {
-      try {
-        const fixed = Object.fromEntries(study.factors.filter(f => ui.hold?.[f.id]).map(f => [f.id, at[f.id]]));
-        const radius = ui.radius ?? (region === 'sphere' ? (study.design?.params?.alpha ?? Math.sqrt(study.factors.filter(f => f.type !== 'categorical').length)) : 1);
-        const r = optimiseDesirability(study, ms, { region, radius, fixed, seed: study.seed });
-        set({ result: { settings: r.settings, D: r.D, d: r.d }, at: null, error: null });
-      } catch (e) { set({ error: e.message }); }
-    } }, 'Find best settings'));
+    h('button', { class: 'btn primary', id: 'optimise', onclick: () => findBest(covAt) }, 'Find best settings'));
+  const covRow = covs.length ? h('div', { class: 'row small', id: 'covariate-at' }, 'covariates:', covs.map(c => h('label', { class: 'inline', title: `predictions at this ${c.name}; empty: its mean over the runs (${num(c.mean, 4)})` }, `${c.name}${c.units ? ` (${c.units})` : ''}`,
+    h('input', { class: 'num', type: 'number', step: 'any', placeholder: num(c.mean, 4), value: covAt[c.id] ?? '', 'aria-label': `covariate ${c.id}`,
+      onchange: (e) => {
+        const next = { ...(ui.covAt ?? {}), [c.id]: e.target.value === '' ? undefined : Number(e.target.value) };
+        const cAt = Object.fromEntries(Object.entries(next).filter(([, v]) => Number.isFinite(v)));
+        if (ui.result) findBest(cAt, { covAt: next }); else set({ covAt: next });     // the best settings again, for this value
+      } }))),
+    h('span', { class: 'muted' }, Object.keys(covAt).length ? 'the best settings for these values' : 'at their means: give a value for the batch in hand')) : null;
   const ds = ms.map(m => { const y = m.predict(at); return { id: m.id, y, d: dValue(m.spec, y) }; });
   const D = dOverall(ds.map(x => x.d), ms.map(m => m.spec.importance ?? 1));
   const beyond = beyondRuns(study, ms, at);
@@ -219,5 +232,5 @@ export function render(ctx) {
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
       svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region. ○ the runs (faded when their other factors differ from the settings above), ● the settings above: a sweet spot far from any run rests on extrapolation.`));
   }
-  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, res), profPanel, overlay, ...(study.mixture ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));
+  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, covRow, res), profPanel, overlay, ...(study.mixture ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));
 }

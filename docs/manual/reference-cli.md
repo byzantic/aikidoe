@@ -30,6 +30,13 @@ Commands
        pairwise comparisons, Tukey-adjusted (ratios for counts); and for each covariate, whether
        its slope is the same at every setting (the model with every factor × covariate
        interaction against the model without). Mixed models: Kenward–Roger
+  allocate STUDY COVARIATE --units FILE.csv [--model "…"] [--within-blocks] [--order] [--dry-run]
+       a covariate known before the runs (animals' starting weights, flasks' seed densities,
+       wafers' incoming thickness): which unit goes to which run, so that the covariate is
+       balanced against the model's effects (R² of the covariate on them near 0). FILE: a column
+       of unit labels and one of values (more units than runs: the best are used). Records each
+       run's unit and value. --order: the values are for the positions in the run order (a
+       forecast for each slot) and the runs are rearranged among them
   covariate STUDY id[:units] [--name "…"] | covariate STUDY id --remove | covariate STUDY
        a covariate: measured at each run but not set (a starting weight, the room temperature).
        Its values go on the run sheet and come back with import, in a column of its own; in a
@@ -79,6 +86,8 @@ Commands
        model with Kenward–Roger tests [--random wholePlot,run,wafer] [--compare] [--ols]
        runs on microplates: Edge, Row and Col position terms are added (--no-position to leave them out)
   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
+       [--rho ρ]   with a covariate correlated ρ with the response (balanced against the factors):
+                   residual σ√(1 − ρ²), one residual df fewer
   power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
@@ -103,7 +112,8 @@ Commands
        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
        best settings by overall desirability over the fitted models; warns when they lie beyond
-       the runs (outside their convex hull, or a prediction variance over the largest at a run)
+       the runs (outside their convex hull, or a prediction variance over the largest at a run).
+       A covariate in --fix ("vcd=0.4"): the best settings for that value of it (else its mean)
   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
        propagation of error and dual-response optimisation (mean on target, minimum s)
@@ -169,7 +179,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `augment`, `comb-over`, `covariate`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `means`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `allocate`, `augment`, `comb-over`, `covariate`, `design`, `dose`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `means`, `optimise`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

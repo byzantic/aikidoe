@@ -122,6 +122,25 @@
             "const": true
           },
           "command": {
+            "const": "allocate"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/allocate"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
             "const": "design"
           }
         },
@@ -2961,6 +2980,14 @@
               }
             }
           }
+        },
+        "rho": {
+          "type": "number",
+          "description": "--rho: the covariate's correlation with the response"
+        },
+        "sigmaResidual": {
+          "type": "number",
+          "description": "σ√(1 − ρ²): the residual σ with the covariate in the analysis"
         }
       }
     },
@@ -3288,6 +3315,13 @@
                 "null"
               ]
             }
+          }
+        },
+        "held": {
+          "type": "object",
+          "description": "covariates held at a value (--fix): every prediction made there",
+          "additionalProperties": {
+            "type": "number"
           }
         }
       }
@@ -4489,6 +4523,97 @@
               }
             }
           }
+        }
+      }
+    },
+    "allocate": {
+      "type": "object",
+      "description": "doe allocate (issue #82): which unit goes to which run so that a covariate known in advance is balanced against the model's effects",
+      "required": [
+        "file",
+        "covariate",
+        "model",
+        "r2",
+        "random",
+        "expected",
+        "assignment",
+        "unused",
+        "saved"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "covariate": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "order": {
+          "type": "boolean",
+          "description": "the values were for positions in the run order, and the runs were rearranged"
+        },
+        "r2": {
+          "type": "number",
+          "description": "R² of the covariate on the model's effects after allocation (0: balanced)"
+        },
+        "random": {
+          "type": "number",
+          "description": "R² for the first random allocation tried"
+        },
+        "expected": {
+          "type": "number",
+          "description": "R² of a random allocation on average, (p − 1)/(n − 1)"
+        },
+        "maxVif": {
+          "type": "number",
+          "description": "the largest growth factor of an effect's variance with the covariate in the model"
+        },
+        "assignment": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "run",
+              "unit",
+              "value"
+            ],
+            "properties": {
+              "run": {
+                "type": "integer"
+              },
+              "unit": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "unused": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "unit": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "saved": {
+          "type": "boolean"
         }
       }
     }

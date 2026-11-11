@@ -13,6 +13,10 @@ least-squares mean. See [Adjusted means](analysis.md#adjusted-means).
 **Axial points** — runs at ±α on one factor's axis, the others at the centre; with a factorial and
 centre points they make a central composite design.
 
+**Balanced allocation** — giving the units (animals, flasks, wafers) to the runs so that a
+covariate known in advance is uncorrelated with the factors' effects, instead of leaving it to
+chance. See [Covariates known in advance](analysis.md#covariates-known-in-advance).
+
 **Block** — a group of runs that may differ systematically from other groups (a day, a batch, a
 stage); the design and analysis account for it.
 
