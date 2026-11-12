@@ -23,6 +23,10 @@ Commands
                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+  path STUDY --results [--next NEW.aikidoe.json [--design factorial|ccd|none] [--centre 4] [--at "A=…,B=…"]]
+       the runs along the path (doe augment --path): predicted against observed, the best step and
+       whether the response has stopped improving; --next: a new study centred there (the same
+       widths, within the operating limits) with a factorial and centre points or a CCD
   path STUDY ["y ~ …"] [--steps 5] [--step 1 | --step-size "A=5"] [--distances "0,0.5,…"] [--ascent | --descent]
        [--canonical [--axis k]]
        where to run next when the optimum lies outside the ranges studied: the path of steepest
@@ -141,7 +145,8 @@ Commands
   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
                 | --optimal --runs n [--model …] [--criterion D|I|A]
-                | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
+                | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n]
+                | --path [--formula "y ~ main"] [--steps 5] [--step 1 | --step-size "A=5"] [--descent])  [--seed S] [--sheet FILE.csv]
        adds a stage of runs to the design as a new block
   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
        (counts and proportions: [--exposure e] [--trials n] for the new run; with a random effect

@@ -671,9 +671,10 @@
             "augment",
             "optimal",
             "space-filling",
+            "path",
             "other"
           ],
-          "description": "the part of the design it comes from"
+          "description": "the part of the design it comes from (path: a run along a path of steepest ascent, not fitted with the others)"
         },
         "settings": {
           "type": "object",

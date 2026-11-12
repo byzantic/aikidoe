@@ -1,0 +1,580 @@
+{
+  "aikidoe": 1,
+  "name": "Reaction yield, along the path",
+  "description": "A first experiment around the current conditions (35 min, 155 °C): a 2² factorial with five centre points. The solvent boils at 190 °C, and the reactor can be booked for at most 2 hours. Simulated data.",
+  "seed": 81,
+  "factors": [
+    {
+      "id": "time",
+      "name": "Reaction time",
+      "type": "continuous",
+      "units": "min",
+      "htc": false,
+      "low": 30,
+      "high": 40,
+      "transform": "none",
+      "limits": {
+        "lower": 5,
+        "upper": 120
+      }
+    },
+    {
+      "id": "temp",
+      "name": "Temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": false,
+      "low": 150,
+      "high": 160,
+      "transform": "none",
+      "limits": {
+        "lower": 100,
+        "upper": 190
+      }
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "yield",
+      "name": "Yield",
+      "units": "%",
+      "goal": "maximize",
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "sequential",
+    "params": {
+      "stages": [
+        {
+          "kind": "full-factorial",
+          "params": {
+            "levels": [
+              2,
+              2
+            ],
+            "centrePoints": 5,
+            "seed": 81
+          }
+        },
+        {
+          "kind": "path",
+          "params": {
+            "response": "yield",
+            "formula": "yield ~ time + temp",
+            "method": "linear",
+            "goal": "ascent",
+            "increments": {
+              "time": 2.5336322869955197,
+              "temp": 5
+            },
+            "held": {},
+            "stopped": null,
+            "predictions": [
+              {
+                "step": 1,
+                "distance": 1.1210582958206257,
+                "settings": {
+                  "time": 37.53363228699552,
+                  "temp": 160
+                },
+                "fit": 61.606502242152466,
+                "lower": 60.46411061432085,
+                "upper": 62.74889386998408,
+                "outside": false
+              },
+              {
+                "step": 2,
+                "distance": 2.2421165916412513,
+                "settings": {
+                  "time": 40.06726457399103,
+                  "temp": 165
+                },
+                "fit": 68.61300448430494,
+                "lower": 66.56425099723454,
+                "upper": 70.66175797137534,
+                "outside": true
+              },
+              {
+                "step": 3,
+                "distance": 3.3631748874618768,
+                "settings": {
+                  "time": 42.60089686098655,
+                  "temp": 170
+                },
+                "fit": 75.6195067264574,
+                "lower": 72.61651745743637,
+                "upper": 78.62249599547843,
+                "outside": true
+              },
+              {
+                "step": 4,
+                "distance": 4.484233183282503,
+                "settings": {
+                  "time": 45.134529147982065,
+                  "temp": 175
+                },
+                "fit": 82.62600896860987,
+                "lower": 78.65527607296495,
+                "upper": 86.59674186425478,
+                "outside": true
+              },
+              {
+                "step": 5,
+                "distance": 5.605291479103128,
+                "settings": {
+                  "time": 47.668161434977584,
+                  "temp": 180
+                },
+                "fit": 89.63251121076235,
+                "lower": 84.68845251502594,
+                "upper": 94.57656990649875,
+                "outside": true
+              },
+              {
+                "step": 6,
+                "distance": 6.7263497749237535,
+                "settings": {
+                  "time": 50.201793721973104,
+                  "temp": 185
+                },
+                "fit": 96.63901345291481,
+                "lower": 90.71879939218644,
+                "upper": 102.55922751364318,
+                "outside": true
+              },
+              {
+                "step": 7,
+                "distance": 7.847408070744379,
+                "settings": {
+                  "time": 52.735426008968616,
+                  "temp": 190
+                },
+                "fit": 103.64551569506727,
+                "lower": 96.74751785928667,
+                "upper": 110.54351353084787,
+                "outside": true
+              },
+              {
+                "step": 8,
+                "distance": 8.089090738037726,
+                "settings": {
+                  "time": 55.269058295964136,
+                  "temp": 190
+                },
+                "fit": 105.07701793721975,
+                "lower": 97.96807681348888,
+                "upper": 112.18595906095062,
+                "outside": true
+              }
+            ]
+          }
+        }
+      ],
+      "seed": 81
+    },
+    "randomisation": "blocked",
+    "runs": [
+      {
+        "run": 1,
+        "order": 4,
+        "block": 1,
+        "kind": "factorial",
+        "settings": {
+          "time": 30,
+          "temp": 150
+        }
+      },
+      {
+        "run": 2,
+        "order": 7,
+        "block": 1,
+        "kind": "factorial",
+        "settings": {
+          "time": 40,
+          "temp": 150
+        }
+      },
+      {
+        "run": 3,
+        "order": 1,
+        "block": 1,
+        "kind": "factorial",
+        "settings": {
+          "time": 30,
+          "temp": 160
+        }
+      },
+      {
+        "run": 4,
+        "order": 9,
+        "block": 1,
+        "kind": "factorial",
+        "settings": {
+          "time": 40,
+          "temp": 160
+        }
+      },
+      {
+        "run": 5,
+        "order": 5,
+        "block": 1,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 6,
+        "order": 8,
+        "block": 1,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 7,
+        "order": 3,
+        "block": 1,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 8,
+        "order": 6,
+        "block": 1,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 9,
+        "order": 2,
+        "block": 1,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 10,
+        "order": 10,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 37.53363228699552,
+          "temp": 160
+        }
+      },
+      {
+        "run": 11,
+        "order": 11,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 40.06726457399103,
+          "temp": 165
+        }
+      },
+      {
+        "run": 12,
+        "order": 12,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 42.60089686098655,
+          "temp": 170
+        }
+      },
+      {
+        "run": 13,
+        "order": 13,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 45.134529147982065,
+          "temp": 175
+        }
+      },
+      {
+        "run": 14,
+        "order": 14,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 47.668161434977584,
+          "temp": 180
+        }
+      },
+      {
+        "run": 15,
+        "order": 15,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 50.201793721973104,
+          "temp": 185
+        }
+      },
+      {
+        "run": 16,
+        "order": 16,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 52.735426008968616,
+          "temp": 190
+        }
+      },
+      {
+        "run": 17,
+        "order": 17,
+        "block": 2,
+        "kind": "path",
+        "settings": {
+          "time": 55.269058295964136,
+          "temp": 190
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "yield",
+      "value": 45.5
+    },
+    {
+      "run": 2,
+      "response": "yield",
+      "value": 51.3
+    },
+    {
+      "run": 3,
+      "response": "yield",
+      "value": 56.8
+    },
+    {
+      "run": 4,
+      "response": "yield",
+      "value": 62.3
+    },
+    {
+      "run": 5,
+      "response": "yield",
+      "value": 55.2
+    },
+    {
+      "run": 6,
+      "response": "yield",
+      "value": 54.9
+    },
+    {
+      "run": 7,
+      "response": "yield",
+      "value": 54.8
+    },
+    {
+      "run": 8,
+      "response": "yield",
+      "value": 55.2
+    },
+    {
+      "run": 9,
+      "response": "yield",
+      "value": 55.4
+    },
+    {
+      "run": 10,
+      "response": "yield",
+      "value": 61
+    },
+    {
+      "run": 11,
+      "response": "yield",
+      "value": 65.6
+    },
+    {
+      "run": 12,
+      "response": "yield",
+      "value": 68.8
+    },
+    {
+      "run": 13,
+      "response": "yield",
+      "value": 70.2
+    },
+    {
+      "run": 14,
+      "response": "yield",
+      "value": 70.5
+    },
+    {
+      "run": 15,
+      "response": "yield",
+      "value": 69.3
+    },
+    {
+      "run": 16,
+      "response": "yield",
+      "value": 65.6
+    },
+    {
+      "run": 17,
+      "response": "yield",
+      "value": 66.9
+    }
+  ],
+  "history": [
+    {
+      "stage": "full-factorial",
+      "runs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "stage": "path",
+      "runs": [
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "note": "8 runs along the path of steepest ascent for yield",
+      "params": {
+        "response": "yield",
+        "formula": "yield ~ time + temp",
+        "method": "linear",
+        "goal": "ascent",
+        "increments": {
+          "time": 2.5336322869955197,
+          "temp": 5
+        },
+        "held": {},
+        "stopped": null,
+        "predictions": [
+          {
+            "step": 1,
+            "distance": 1.1210582958206257,
+            "settings": {
+              "time": 37.53363228699552,
+              "temp": 160
+            },
+            "fit": 61.606502242152466,
+            "lower": 60.46411061432085,
+            "upper": 62.74889386998408,
+            "outside": false
+          },
+          {
+            "step": 2,
+            "distance": 2.2421165916412513,
+            "settings": {
+              "time": 40.06726457399103,
+              "temp": 165
+            },
+            "fit": 68.61300448430494,
+            "lower": 66.56425099723454,
+            "upper": 70.66175797137534,
+            "outside": true
+          },
+          {
+            "step": 3,
+            "distance": 3.3631748874618768,
+            "settings": {
+              "time": 42.60089686098655,
+              "temp": 170
+            },
+            "fit": 75.6195067264574,
+            "lower": 72.61651745743637,
+            "upper": 78.62249599547843,
+            "outside": true
+          },
+          {
+            "step": 4,
+            "distance": 4.484233183282503,
+            "settings": {
+              "time": 45.134529147982065,
+              "temp": 175
+            },
+            "fit": 82.62600896860987,
+            "lower": 78.65527607296495,
+            "upper": 86.59674186425478,
+            "outside": true
+          },
+          {
+            "step": 5,
+            "distance": 5.605291479103128,
+            "settings": {
+              "time": 47.668161434977584,
+              "temp": 180
+            },
+            "fit": 89.63251121076235,
+            "lower": 84.68845251502594,
+            "upper": 94.57656990649875,
+            "outside": true
+          },
+          {
+            "step": 6,
+            "distance": 6.7263497749237535,
+            "settings": {
+              "time": 50.201793721973104,
+              "temp": 185
+            },
+            "fit": 96.63901345291481,
+            "lower": 90.71879939218644,
+            "upper": 102.55922751364318,
+            "outside": true
+          },
+          {
+            "step": 7,
+            "distance": 7.847408070744379,
+            "settings": {
+              "time": 52.735426008968616,
+              "temp": 190
+            },
+            "fit": 103.64551569506727,
+            "lower": 96.74751785928667,
+            "upper": 110.54351353084787,
+            "outside": true
+          },
+          {
+            "step": 8,
+            "distance": 8.089090738037726,
+            "settings": {
+              "time": 55.269058295964136,
+              "temp": 190
+            },
+            "fit": 105.07701793721975,
+            "lower": 97.96807681348888,
+            "upper": 112.18595906095062,
+            "outside": true
+          }
+        ]
+      }
+    }
+  ]
+}

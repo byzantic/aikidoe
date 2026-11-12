@@ -625,7 +625,7 @@ const GROUPINGS = { block: { name: 'block', label: (run) => run.block }, wholePl
  * groupings are crossed rather than nested.
  */
 export function randomGroupsOf(study, requested = 'auto') {
-  const runs = (study.design?.runs ?? []).filter(r => r.kind !== 'confirm');
+  const runs = (study.design?.runs ?? []).filter(r => r.kind !== 'confirm' && r.kind !== 'path');
   const auto = requested === 'auto';
   const ids = auto ? ['wholePlot'] : (Array.isArray(requested) ? requested : String(requested).split(',')).map(x => x.trim()).filter(Boolean);
   if (new Set(ids).size !== ids.length) throw new Error(`a random effect is asked for twice (${ids.join(', ')})`);
@@ -691,7 +691,7 @@ export function fitCountMixedModel(study, formula, opts = {}) {
   if (!random) throw new Error('no grouping for a random effect: the design has no whole plots (ask for random blocks if it has blocks)');
   const runs = new Map(study.design.runs.map(r => [r.run, r]));
   let rows = responseTable(study, response, { perObservation: true });
-  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
+  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm' && r.kind !== 'path');
   if (!rows.length) throw new Error(`no results for ${response} yet`);
   const cov = withCovariates(study, formula, rows);      // covariates in the formula (issue #82)
   const parsed = parseFormula(formula, cov.factors);

@@ -48,6 +48,11 @@ Either way the predicted D is an extrapolation: treat the settings as a directio
 run at or near them before relying on them. Augmenting the design towards them
 ([sequential designs](designs-sequential.md)) both checks the prediction and fills the gap.
 
+When the best settings sit on the edge of the ranges because the response is still rising
+there (a strong first-order fit, no curvature), the optimum is elsewhere. The *Moving to a better
+region* panel on the Optimise step gives the path of steepest ascent from the centre and adds its
+points as runs ([steepest ascent](designs-sequential.md#moving-to-a-better-region-steepest-ascent)).
+
 ## Profiler
 
 The prediction profiler shows each response against each factor, with the others held at the

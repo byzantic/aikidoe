@@ -6,7 +6,10 @@ import { section, check, near, throws, done } from './lib/check.mjs';
 import { loadFixture } from './lib/fixtures.mjs';
 import { createStudy, validateStudy } from '../js/study.js';
 import { fitModel, predict } from '../js/model/fit.js';
-import { steepestPath, canonicalPath, directionRegion, surfaceCoefficients } from '../js/model/path.js';
+import { steepestPath, canonicalPath, directionRegion, surfaceCoefficients, pathStage, pathResults, nextStudy } from '../js/model/path.js';
+import { appendStage } from '../js/design/augment.js';
+import { parseStudy } from '../js/study.js';
+import { readFileSync } from 'node:fs';
 
 const F = loadFixture('path-r');
 const byName = (n) => F.cases.find(c => c.name === n);
@@ -91,6 +94,27 @@ section('natural units, categorical factors, limits and constraints');
   throws('a categorical factor interacting with a continuous one', () => surfaceCoefficients(s, fitModel(s, 'y ~ T * cat + t')));
   const min = steepestPath(createStudy({ ...s, responses: [{ id: 'y', goal: 'minimize' }] }), fit, { steps: 2 });
   check('a response to minimise: descent', min.goal === 'descent' && min.points[1].settings.T < 160 && min.held.cat === 'A');
+}
+
+section('running the path: a stage, its results, and the next study (phase 2)');
+{
+  const rd = (f) => parseStudy(readFileSync(new URL(`../examples/${f}.aikidoe.json`, import.meta.url), 'utf8'));
+  const s = rd('reaction-ascent'), fit = fitModel(s, 'yield ~ main');
+  const st = appendStage(s, pathStage(s, fit, { steps: 8 }));
+  const path = st.design.runs.filter(r => r.kind === 'path');
+  check('8 path runs in a new block, in step order', path.length === 8 && new Set(path.map(r => r.block)).size === 1 && path.every((r, i) => i === 0 || r.order === path[i - 1].order + 1));
+  check('… temperature at its limit from step 7', path[6].settings.temp === 190 && path[7].settings.temp === 190 && path[7].settings.time > path[6].settings.time);
+  check('the path runs are not fitted with the first experiment', fitModel(st, 'yield ~ main').n === 9);
+  check('no results yet: nothing best', pathResults(st).best === null && pathResults(st).done === 0);
+  const r = pathResults(rd('reaction-path'));
+  check('with results: best at step 5, stopped improving after two worse steps', r.best.step === 5 && r.best.observed === 70.5 && r.stoppedImproving && r.after === 7, JSON.stringify(r.best));
+  check('… the predictions kept with the stage, and the centre of the first experiment as the base', Math.abs(r.points[0].predicted - 61.607) < 1e-3 && Math.abs(r.base - 55.1) < 1e-9);
+  const n = nextStudy(rd('reaction-path'), r.best.settings);
+  const T = n.factors.find(f => f.id === 'temp'), tm = n.factors.find(f => f.id === 'time');
+  check('the next study: centred at step 5, the same widths, a factorial with 4 centre points', T.low === 175 && T.high === 185 && Math.abs(tm.low + tm.high - 2 * r.best.settings.time) < 1e-4 && n.design.runs.length === 8 && n.observations.length === 0);
+  const nearLimit = nextStudy(rd('reaction-path'), { time: 50, temp: 188 });
+  check('… shifted to stay within the operating limits (temp at most 190)', nearLimit.factors.find(f => f.id === 'temp').high === 190 && nearLimit.factors.find(f => f.id === 'temp').low === 180);
+  check('… or a central composite design', nextStudy(rd('reaction-path'), r.best.settings, { design: 'ccd' }).design.runs.length === 4 + 4 + 4);
 }
 
 done();

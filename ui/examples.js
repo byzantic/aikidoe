@@ -10,6 +10,9 @@ import { lhsDesign } from '../js/sim/surrogate.js';
 import { observeRuns } from '../js/learn/process.js';
 import { compileExpression } from '../js/sim/expression.js';
 import { latinSquare, bibd, crossover, completeBlocks } from '../js/design/comparative.js';
+import { fitModel } from '../js/model/fit.js';
+import { pathStage } from '../js/model/path.js';
+import { appendStage } from '../js/design/augment.js';
 
 const reactor = () => ({
   aikidoe: FORMAT_VERSION, name: 'Reactor screening', seed: 7,
@@ -74,6 +77,15 @@ export const EXAMPLES = [
       const design = toStudyDesign(s, fullFactorial([2, 2], { centre: 5 }), { seed: 81 });
       const y = [45.5, 51.3, 56.8, 62.3, 55.2, 54.9, 54.8, 55.2, 55.4];
       return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'yield', value: y[r.run - 1] })) });
+    } },
+  { id: 'reaction-path', title: 'Reaction yield, along the path of steepest ascent', step: 'optimise',
+    blurb: 'The reaction-yield experiment, then eight runs along the path of steepest ascent, one after another. The yield climbs, levels off and falls: the next experiment belongs where it peaked. Simulated data.',
+    build: () => {
+      const s = EXAMPLES.find(e => e.id === 'reaction-ascent').build();
+      const st = appendStage(s, pathStage(s, fitModel(s, 'yield ~ main'), { steps: 8 }));
+      const y = [61, 65.6, 68.8, 70.2, 70.5, 69.3, 65.6, 66.9];
+      const path = st.design.runs.filter(r => r.kind === 'path');
+      return createStudy({ ...st, name: 'Reaction yield, along the path', observations: [...st.observations, ...path.map((r, i) => ({ run: r.run, response: 'yield', value: y[i] }))] });
     } },
   { id: 'method-transfer', title: 'Method transfer: is the new assay method equivalent to the old?', step: 'analyse',
     blurb: 'Ten samples, each measured by the old and the new method. Is the new one equivalent within ±1 % of label claim? The samples differ far more than the methods, so each sample is a block (paired data). Simulated data.',

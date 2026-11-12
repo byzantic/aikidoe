@@ -124,7 +124,7 @@ Without `type`, a factor whose levels include a string is categorical.
 | `wholePlot` | [label](#label) | whole plot (split-plot designs) |
 | `block` | [label](#label) | block (stage, day, batch) |
 | `blocks` | object | the run's label for each of design.blocking |
-| `kind` | `"factorial"` \| `"fraction"` \| `"axial"` \| `"centre"` \| `"confirm"` \| `"augment"` \| `"optimal"` \| `"space-filling"` \| `"other"` | the part of the design it comes from |
+| `kind` | `"factorial"` \| `"fraction"` \| `"axial"` \| `"centre"` \| `"confirm"` \| `"augment"` \| `"optimal"` \| `"space-filling"` \| `"path"` \| `"other"` | the part of the design it comes from (path: a run along a path of steepest ascent, not fitted with the others) |
 | `settings` (required) | object | factor id → setting (natural units, or a level) |
 
 ## observation

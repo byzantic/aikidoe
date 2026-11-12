@@ -11,7 +11,7 @@
 //   sequentialAliases(study, { order })    alias chains of the two-level part of the combined
 //                                          design, and effects confounded with blocks
 //
-// A stage is { kind, X (coded, as factorial.js), runKind, params, note }.
+// A stage is { kind, X (coded, as factorial.js), runKind, params, note, ordered? (run in the given order) }.
 import { code, decode, createStudy } from '../study.js';
 import { cubeBlockAlpha, rotatableAlpha } from './rsm.js';
 import { optimalDesign } from './optimal.js';
@@ -141,7 +141,7 @@ export function appendStage(study, stage, { seed } = {}) {
       return { ...r, wholePlot: w0 + w };
     });
     order = g.shuffle([...new Set(added.map(r => r.wholePlot))]).flatMap(w => g.shuffle(added.map((r, i) => (r.wholePlot === w ? i : -1)).filter(i => i >= 0)));
-  } else order = g.shuffle(stage.X.map((_, i) => i));
+  } else order = stage.ordered ? stage.X.map((_, i) => i) : g.shuffle(stage.X.map((_, i) => i));   // a path is run in step order
   added = added.map((r, i) => ({ ...r, order: o0 + 1 + order.indexOf(i) }));
   const first = study.design.kind === 'sequential' ? null : { kind: study.design.kind, params: study.design.params };
   const stages = study.design.kind === 'sequential' ? study.design.params.stages : [first];

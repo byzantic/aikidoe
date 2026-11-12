@@ -455,7 +455,7 @@ function kenwardRoger(L, beta, Phi, PhiA, Pm, W) {
 export function observationTable(study, response) {
   if (!study.responses.some(r => r.id === response)) throw new Error(`no response "${response}" in the study`);
   const runs = new Map((study.design?.runs ?? []).map(r => [r.run, r]));
-  return observationsOf(study, response).filter(o => o.value !== null && runs.get(o.run)?.kind !== 'confirm').map(o => {
+  return observationsOf(study, response).filter(o => o.value !== null && runs.get(o.run)?.kind !== 'confirm' && runs.get(o.run)?.kind !== 'path').map(o => {
     const r = runs.get(o.run);
     return { run: o.run, order: r.order, kind: r.kind, settings: r.settings, y: o.value, obs: o,
       ...(o.wafer !== undefined && o.site !== undefined ? { site: `${o.run}|${o.wafer}|${o.site}` } : {}),

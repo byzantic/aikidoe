@@ -172,7 +172,7 @@ const isGlm = (opts) => opts.distribution && opts.distribution !== 'normal';
 export function studyPower(study, { model = 'main', ...opts } = {}) {
   if (isGlm(opts)) return studyGlmPower(study, { model, ...opts });
   if (!study.design) throw new Error('the study has no design yet');
-  const runs = study.design.runs.filter(r => r.kind !== 'confirm');
+  const runs = study.design.runs.filter(r => r.kind !== 'confirm' && r.kind !== 'path');
   const parsed = parseFormula(model, study.factors);
   const m = study.design.blocking ? withNuisance(study, parsed, runs) : withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
   const wp = runs.some(r => r.wholePlot !== undefined) ? { wholePlot: runs.map(r => String(r.wholePlot ?? `run ${r.run}`)) } : {};
@@ -352,7 +352,7 @@ export function simulatePower(mm, opts = {}) {
 /** Power of the study's design for a count or proportion response (glmPowerFromMatrix options). */
 export function studyGlmPower(study, { model = 'main', ...opts } = {}) {
   if (!study.design) throw new Error('the study has no design yet');
-  const runs = study.design.runs.filter(r => r.kind !== 'confirm');
+  const runs = study.design.runs.filter(r => r.kind !== 'confirm' && r.kind !== 'path');
   const parsed = parseFormula(model, study.factors);
   const m = study.design.blocking ? withNuisance(study, parsed, runs) : withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
   return { model: parsed, ...glmPowerFromMatrix(modelMatrix(m.model, m.factors, m.settings), opts) };

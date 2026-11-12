@@ -63,7 +63,8 @@ export function fitModel(study, formula, opts = {}) {
   if (!response) { parseFormula(formula, study.factors); throw new Error('name the response: "y ~ …" or { response }'); }
   const noise = opts.noise ? noiseModel(opts.noise, { link: opts.link }) : noiseModelOf(study, response);
   let rows = opts.rows ?? responseTable(study, response, { ...opts, perObservation: noise.id !== 'normal' });
-  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm');
+  // confirmation runs and runs along a path of steepest ascent (#81: another region) are not fitted
+  if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm' && r.kind !== 'path');
   const cov = rows.length ? withCovariates(study, formula, rows) : { factors: study.factors, rows, used: [], dropped: [] };
   let parsed;
   try { parsed = parseFormula(formula, cov.factors); } catch (e) {

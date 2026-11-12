@@ -39,11 +39,14 @@ export function render(ctx) {
         else { o.type = 'continuous'; delete o.levels; o.low = -1; o.high = 1; }
       }), { disabled: locked, 'aria-label': 'type' })),
       cat
-        ? h('td', { colspan: 3 }, h('input', { type: 'text', value: (f.levels ?? []).join(', '), disabled: locked, 'aria-label': 'levels', title: 'levels, separated by commas',
+        ? h('td', { colspan: 4 }, h('input', { type: 'text', value: (f.levels ?? []).join(', '), disabled: locked, 'aria-label': 'levels', title: 'levels, separated by commas',
             onchange: (e) => set(o => { o.levels = e.target.value.split(',').map(s => s.trim()).filter(Boolean); }) }))
         : [h('td', {}, h('input', { class: 'num', value: f.low ?? '', 'aria-label': 'low', onchange: (e) => set(o => numOrDelete(o, 'low', e.target.value)) })),
            h('td', {}, h('input', { class: 'num', value: f.high ?? '', 'aria-label': 'high', onchange: (e) => set(o => numOrDelete(o, 'high', e.target.value)) })),
-           h('td', {}, select(['linear', 'log'], f.transform === 'log' ? 'log' : 'linear', (v) => set(o => { if (v === 'log') o.transform = 'log'; else delete o.transform; }), { 'aria-label': 'scale' }))],
+           h('td', {}, select(['linear', 'log'], f.transform === 'log' ? 'log' : 'linear', (v) => set(o => { if (v === 'log') o.transform = 'log'; else delete o.transform; }), { 'aria-label': 'scale' })),
+           // operating limits (#81): where a path of steepest ascent must stop
+           h('td', { class: 'limits' }, ['lower', 'upper'].map(k => h('input', { class: 'num', style: 'width:5em', value: f.limits?.[k] ?? '', placeholder: k === 'lower' ? 'min' : 'max', 'aria-label': `limit ${k}`, title: `operating limit: the ${k === 'lower' ? 'lowest' : 'highest'} setting the process can be run at at all (for a path of steepest ascent)`,
+             onchange: (e) => set(o => { const v = e.target.value.trim(), L = { ...(o.limits ?? {}) }; if (v === '' || !Number.isFinite(Number(v))) delete L[k]; else L[k] = Number(v); if (Object.keys(L).length) o.limits = L; else delete o.limits; }) })))],
       h('td', { class: 'n' }, cat ? null : h('input', { type: 'checkbox', checked: !!d.mixture?.components.includes(f.id), disabled: locked, 'aria-label': 'mixture component', title: 'a component of a mixture: the components add up to a fixed total (low and high are its bounds)',
         onchange: (e) => update(x => { const c = new Set(x.mixture?.components ?? []); if (e.target.checked) c.add(f.id); else c.delete(f.id); if (c.size) x.mixture = { ...(x.mixture ?? {}), components: x.factors.map(g => g.id).filter(id => c.has(id)) }; else delete x.mixture; }) })),
       h('td', { class: 'n' }, h('input', { type: 'checkbox', checked: !!f.htc, 'aria-label': 'hard to change', title: 'hard to change: set once per batch / furnace run (whole plot)', onchange: (e) => set(o => { o.htc = e.target.checked; }) })),
@@ -52,7 +55,7 @@ export function render(ctx) {
   const factors = h('section', { class: 'panel' }, h('h2', {}, 'Factors', help('concepts','factors-and-coded-units')),
     lockNote,
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'type', 'low', 'high', 'scale', 'mixture', 'hard to change', ''].map(t => h('th', {}, t)))),
+      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'type', 'low', 'high', 'scale', 'limits', 'mixture', 'hard to change', ''].map(t => h('th', {}, t)))),
       h('tbody', {}, fRows))),
     d.mixture ? h('div', { class: 'row small', id: 'mixture-total', style: 'margin-top:6px' },
       h('b', {}, `Mixture: ${d.mixture.components.join(' + ')}`), ' add up to',
