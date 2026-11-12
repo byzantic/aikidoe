@@ -47,6 +47,7 @@ const DESIGN = {
   },
   counts: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '2'); await page.keyboard.press('Tab'); },
   plate: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
+  ascent: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '2'); await page.keyboard.press('Tab'); await settle(); await page.fill('input[aria-label="centre points"]', '2'); await page.keyboard.press('Tab'); },
   compare: async () => { await page.click('tr[data-design="rcbd"]'); await settle(); await page.fill('input[aria-label="complete blocks"]', '5'); await page.keyboard.press('Tab'); },
   'split-plot': async () => { await page.click('tr[data-design="sp-full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
 };
@@ -93,6 +94,21 @@ try {
     if (lesson.topic === 'plate') {
       const ex = generateExercise({ topic: 'plate', difficulty: lesson.difficulty, seed }), ref = referenceStrategy(ex), s = await st();
       check('the plate layout is the reference layout', JSON.stringify(s.plates.wells) === JSON.stringify(ref.study.plates.wells));
+    }
+    if (lesson.topic === 'ascent') {
+      // the path as a new stage, its results, then the next study with a central composite design
+      check('hint: the optimum is elsewhere — add the path', /add the path of steepest ascent/.test(await page.textContent('#exercise-hints')));
+      await page.click('[data-step="optimise"]'); await settle();
+      await page.fill('input[aria-label="path steps"]', '8'); await page.keyboard.press('Tab'); await settle();
+      await page.click('#path-add'); await settle();
+      await page.click('#get-results'); await settle();
+      check('hint: open the next study where the path peaked', /Open the next study centred there/.test(await page.textContent('#exercise-hints')));
+      await page.click('[data-step="optimise"]'); await settle();
+      await page.selectOption('select[aria-label="next design"]', 'ccd'); await settle();
+      await page.click('#path-next-open'); await settle();
+      const nx = await st();
+      check('the next study keeps the exercise and counts the runs already spent', nx.exercise?.id === `ascent-${lesson.difficulty}-${seed}` && nx.exercise.previousRuns > 0 && new RegExp(`${nx.exercise.previousRuns + nx.design.runs.length} of 32 runs`).test(await page.textContent('#exercise')));
+      await page.click('#get-results'); await settle();
     }
     if (lesson.topic === 'fraction') {
       check('hint: the fraction aliases main effects with interactions', /fold-over/.test(await page.textContent('#exercise-hints')));

@@ -85,6 +85,13 @@ The design is the easy part: a replicated full factorial fits the budget. Run it
 
 Here six runs fit in a day, and days differ. Put each day in a **block** that holds every treatment once (randomised complete blocks), so the day-to-day shifts drop out of every comparison. Then compare each treatment with the control (Analyse → Compare levels, each with a control). Answer with the ones that are better and by how much.`,
     manual: [M('analysis', 'comparing-treatments', 'comparing treatments'), M('designs-comparative', 'randomised-complete-blocks', 'randomised complete blocks'), M('designs-comparative', '', 'designs for comparing treatments')] },
+  { id: 'ascent', n: 19, title: 'The optimum is outside the box: steepest ascent', topic: 'ascent', difficulty: 'medium', compare: true,
+    text: `A first experiment is usually run around today's settings, in ranges narrow enough to be safe. If the response rises steadily towards one corner and the centre points show no curvature, the best settings are somewhere else. A response-surface design inside today's ranges would only model the slope you are standing on.
+
+The **path of steepest ascent** leaves the centre in the direction in which the fitted plane rises fastest, each factor moving in proportion to its effect. Run points along it one or two at a time, and stop when the response stops improving. The predictions along the path are the plane extended, so they get worse the further out you go. Then put a new design (a central composite) around the best point, fit the quadratic there, and find the optimum.
+
+Here: run a 2² factorial with centre points around today's settings, fit the main effects, add the path as a new stage (Optimise → Moving to a better region), get its results, and open the next study centred at the best step with a central composite design. Get its results, fit the quadratic, and answer with the best settings within the operating limits. The runs of every stage count against the budget.`,
+    manual: [M('designs-sequential', 'moving-to-a-better-region-steepest-ascent', 'steepest ascent'), M('designs-rsm', 'central-composite', 'central composite designs')] },
   { id: 'gauge', n: 11, title: 'Measurement systems: gauge R&R', topic: null,
     text: 'Coming later: is the measurement good enough for the experiment? A gauge study on a virtual gauge.', manual: [M('process', 'gauge-rr', 'gauge R&R')] },
   { id: 'robust', n: 12, title: 'Robust design', topic: null,
@@ -98,7 +105,8 @@ export function hints(lesson, ex, study) {
   const out = [], d = study.design, budget = ex.budget, T = TOPICS[ex.topic];
   const results = d && study.observations.some(o => o.value !== null);
   if (!d) {
-    out.push(T.compare ? `Choose a design of at most ${budget} runs on the Design step. Six runs fit in a day and days differ: randomised complete blocks, one block a day, take the days out of the comparison.`
+    out.push(T.ascent ? `Start around today's settings: a 2² factorial with centre points (Design step), replicated to fit the budget of ${budget} runs across every stage — leave room for a path and a second design.`
+      : T.compare ? `Choose a design of at most ${budget} runs on the Design step. Six runs fit in a day and days differ: randomised complete blocks, one block a day, take the days out of the comparison.`
       : T.counts ? `Choose a design of at most ${budget} runs on the Design step: a full factorial, replicated, fits the budget. The power section has a choice for count and proportion responses.`
       : T.mixture ? `Choose a mixture design of at most ${budget} runs on the Design step: the components add up to ${study.mixture?.total}, so factorial designs do not apply.`
       : T.dose ? `Plan the doses on the Design step (Dose–response design), at most ${budget} runs: a wide range-finding series first, a decade or so apart, leaves room for a second stage.`
@@ -111,6 +119,16 @@ export function hints(lesson, ex, study) {
     if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
     if (results && stages === 1 && n < budget) out.push(`Look at the curves on the Analyse step: are there several doses on the slope? If not, add doses around the EC50 as a second stage (${budget - n} runs left).`);
     if (results && !out.length) out.push('Analyse the curves, then grade: by your own answers, or by the standard analysis (parallel curves) of your data.');
+    return out;
+  }
+  if (T.ascent) {
+    const used = (study.exercise?.previousRuns ?? 0) + d.runs.length, pend = d.runs.some(x => !study.observations.some(o => o.run === x.run && o.value !== null));
+    if (used > budget) out.push(`${used} runs in all; the budget is ${budget}.`);
+    if (pend) { out.push('Some runs have no results yet: get them.'); return out; }
+    const pathRuns = d.runs.filter(x => x.kind === 'path');
+    if (study.exercise?.previousRuns) out.push('The new region: fit the quadratic on the Analyse step (y ~ quadratic), find the best settings on the Optimise step, then answer.');
+    else if (!pathRuns.length) out.push('Fit the main effects (Analyse). Is the response still rising at the edge, with no curvature at the centre? Then the optimum is elsewhere: add the path of steepest ascent as a new stage (Optimise → Moving to a better region).');
+    else out.push('Where did the response stop improving along the path? Open the next study centred there with a central composite design (Optimise → Moving to a better region).');
     return out;
   }
   if (T.compare) {

@@ -2182,9 +2182,9 @@ async function cmdExercise({ pos, opt }) {
     let next;
     try { next = runExercise(ex, study); } catch (e) { fail(e.message); }
     save(file, next);
-    const n = study.design.runs.length, over = n > ex.budget;
+    const n = (study.exercise.previousRuns ?? 0) + study.design.runs.length, over = n > ex.budget;
     put({ file, runs: n, budget: ex.budget, overBudget: over });
-    out(`${file}: results for ${new Set(next.observations.map(o => o.run)).size} runs (budget ${ex.budget})${over ? ` — ${n - ex.budget} over budget` : ''}`);
+    out(`${file}: results for ${new Set(next.observations.map(o => o.run)).size} runs (${study.exercise.previousRuns ? `${n} of the budget of ${ex.budget}, with the earlier studies` : `budget ${ex.budget}`})${over ? ` — ${n - ex.budget} over budget` : ''}`);
     return;
   }
   if (sub === 'answer') {
@@ -2217,11 +2217,12 @@ async function cmdExercise({ pos, opt }) {
     out(table([{ key: 'id', label: 'question', align: 'left' }, { key: 'pts', label: 'points' }, { key: 'note', label: '', align: 'left' }],
       g.parts.map(p => ({ ...p, pts: p.max ? `${num(p.score, 3)} / ${num(p.max, 3)}` : num(p.score, 3) }))));
     out(`score: ${g.score} / 100`);
-    out(g.truth.better ? `\ntruth: better than the ${g.truth.control}: ${g.truth.better.join(', ') || 'none'}; differences ${Object.entries(g.truth.differences).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`
+    out(ex.topic === 'ascent' ? `\ntruth: best settings within the operating limits ${showSettings(g.truth.best)}: ${num(g.truth.bestValue, 5)}`
+      : g.truth.better ? `\ntruth: better than the ${g.truth.control}: ${g.truth.better.join(', ') || 'none'}; differences ${Object.entries(g.truth.differences).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`
       : g.truth.ec50 !== undefined ? `\ntruth: EC50 ${num(g.truth.ec50, 4)}, relative potency ${num(g.truth.potency, 4)}`
       : g.truth.ratios ? `\ntruth: active ${g.truth.active.join(', ')}; ${g.truth.ratio} ratios ${Object.entries(g.truth.ratios).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}${g.truth.percent !== undefined ? `; mean germination at the question's settings ${num(g.truth.percent, 4)} %` : ''}`
       : `\ntruth: active ${g.truth.active.join(', ')}; effects ${Object.entries(g.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`);
-    if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(g.modelAnswer.answers.better ? `  → better ${g.modelAnswer.answers.better.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}` : g.modelAnswer.answers.ec50 ? `  → EC50 ${num(g.modelAnswer.answers.ec50.estimate, 4)}, potency ${num(g.modelAnswer.answers.potency.estimate, 4)}; power of the reference design for the potency ${num(g.modelAnswer.power, 3)}` : `  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
+    if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(g.modelAnswer.answers.better ? `  → better ${g.modelAnswer.answers.better.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}` : !g.modelAnswer.answers.active ? `  → best settings ${showSettings(g.modelAnswer.answers.best)}; smallest power of the first design ${num(g.modelAnswer.power, 3)}` : g.modelAnswer.answers.ec50 ? `  → EC50 ${num(g.modelAnswer.answers.ec50.estimate, 4)}, potency ${num(g.modelAnswer.answers.potency.estimate, 4)}; power of the reference design for the potency ${num(g.modelAnswer.power, 3)}` : `  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
     return;
   }
   fail('exercise: new, run, answer, grade or topics');
