@@ -26,4 +26,5 @@ multcompView
 mvtnorm
 gtools
 TOSTER
+PowerTOST
 crossdes@1.1-2

@@ -106,6 +106,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Firth estimates are checked against.)
 - Kramer, C. Y. (1956). Extension of multiple range tests to group means with unequal numbers of
   replications. *Biometrics* 12, 307–310. (Tukey–Kramer, for unequal numbers of runs.)
+- Labes, D., Schütz, H. & Lang, B. (2024). PowerTOST: Power and sample size for (bio)equivalence
+  studies. R package. (Exact TOST power by Owen's Q, which aikidoe's is checked against.)
 - Lakens, D. (2017). Equivalence tests: a practical primer for t tests, correlations, and
   meta-analyses. *Social Psychological and Personality Science* 8, 355–362. (TOST, as in TOSTER.)
 - Lenth, R. V. (1989). Quick and easy analysis of unreplicated factorials. *Technometrics* 31,
@@ -180,4 +182,4 @@ Books for learning and reference, and the papers behind specific methods in aiki
 R (`lm`, `anova`, `car::Anova`, `MASS::boxcox`, `nls`), lme4 and pbkrtest (mixed models), drc and
 numDeriv (dose–response), FrF2
 (fractions and split-plot fractions), rsm, AlgDesign, skpr (power), SixSigma (gauge R&R),
-desirability, BsMD (Lenth), emmeans, mvtnorm and multcompView (multiple comparisons), crossdes (crossover designs), TOSTER (equivalence); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.
+desirability, BsMD (Lenth), emmeans, mvtnorm and multcompView (multiple comparisons), crossdes (crossover designs), TOSTER and PowerTOST (equivalence); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.

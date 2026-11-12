@@ -2892,189 +2892,329 @@
       }
     },
     "power": {
-      "type": "object",
-      "required": [
-        "model",
-        "n",
-        "rank",
-        "dfRes",
-        "alpha",
-        "terms"
-      ],
-      "properties": {
-        "model": {
-          "type": "string"
-        },
-        "n": {
-          "type": "integer"
-        },
-        "rank": {
-          "type": "integer"
-        },
-        "dfRes": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "alpha": {
-          "type": "number"
-        },
-        "sigma": {
-          "type": "number",
-          "description": "Δ/σ power (a measurement); absent for counts and proportions"
-        },
-        "terms": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "term",
-              "df",
-              "power"
-            ],
-            "properties": {
-              "term": {
-                "type": "string"
-              },
-              "df": {
-                "type": "integer"
-              },
-              "power": {
-                "type": [
-                  "number",
-                  "null"
-                ]
-              },
-              "detectable": {
-                "type": [
-                  "number",
-                  "null"
-                ]
-              },
-              "ratio": {
-                "type": [
-                  "number",
-                  "null"
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "model",
+            "n",
+            "rank",
+            "dfRes",
+            "alpha",
+            "terms"
+          ],
+          "properties": {
+            "model": {
+              "type": "string"
+            },
+            "n": {
+              "type": "integer"
+            },
+            "rank": {
+              "type": "integer"
+            },
+            "dfRes": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "alpha": {
+              "type": "number"
+            },
+            "sigma": {
+              "type": "number",
+              "description": "Δ/σ power (a measurement); absent for counts and proportions"
+            },
+            "terms": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "df",
+                  "power"
                 ],
-                "description": "Δ/σ detectable (measurements), or the ratio assessed (counts and proportions)"
-              },
-              "detectableRatio": {
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "description": "counts and proportions: the smallest ratio detected with the target power"
-              },
-              "simulated": {
-                "type": [
-                  "number",
-                  "null"
-                ]
-              },
-              "simulatedSE": {
-                "type": [
-                  "number",
-                  "null"
-                ]
-              },
-              "ddf": {
-                "type": "integer"
-              },
-              "test": {
-                "enum": [
-                  "F",
-                  "chi2"
-                ],
-                "description": "split-plot counts: F on dfGroups df for a term that changes only between whole plots, χ² otherwise"
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "df": {
+                    "type": "integer"
+                  },
+                  "power": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "detectable": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "ratio": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Δ/σ detectable (measurements), or the ratio assessed (counts and proportions)"
+                  },
+                  "detectableRatio": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "counts and proportions: the smallest ratio detected with the target power"
+                  },
+                  "simulated": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "simulatedSE": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "ddf": {
+                    "type": "integer"
+                  },
+                  "test": {
+                    "enum": [
+                      "F",
+                      "chi2"
+                    ],
+                    "description": "split-plot counts: F on dfGroups df for a term that changes only between whole plots, χ² otherwise"
+                  }
+                }
               }
+            },
+            "distribution": {
+              "type": "string",
+              "description": "counts and proportions (issue #64): the response's distribution; power for a ratio"
+            },
+            "link": {
+              "type": "string"
+            },
+            "baseline": {
+              "type": "number",
+              "description": "the mean count (per unit exposure) or proportion at the centre of the design"
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "object"
+              ],
+              "description": "the rate or odds ratio (low → high) the power is for, or one per term"
+            },
+            "target": {
+              "type": "number"
+            },
+            "wholePlots": {
+              "type": "integer",
+              "description": "split-plot counts and proportions (--sigma-wp): the number of whole plots"
+            },
+            "dfGroups": {
+              "type": "integer",
+              "description": "the df of the whole-plot F tests: whole plots − coefficients constant within them"
+            },
+            "sigmaWholePlot": {
+              "type": "number",
+              "description": "σ of the whole-plot shift on the link scale (--sigma-wp)"
+            },
+            "blocks": {
+              "type": "integer"
+            },
+            "sigmaBlock": {
+              "type": "number",
+              "minimum": 0
+            },
+            "levels": {
+              "type": "array",
+              "description": "counts and proportions with random effects: each grouping (outermost first), its σ and the df of its stratum",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "groups",
+                  "sigma"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "groups": {
+                    "type": "integer"
+                  },
+                  "sigma": {
+                    "type": "number"
+                  },
+                  "df": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "coefficients": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "rho": {
+              "type": "number",
+              "description": "--rho: the covariate's correlation with the response"
+            },
+            "sigmaResidual": {
+              "type": "number",
+              "description": "σ√(1 − ρ²): the residual σ with the covariate in the analysis"
             }
           }
         },
-        "distribution": {
-          "type": "string",
-          "description": "counts and proportions (issue #64): the response's distribution; power for a ratio"
-        },
-        "link": {
-          "type": "string"
-        },
-        "baseline": {
-          "type": "number",
-          "description": "the mean count (per unit exposure) or proportion at the centre of the design"
-        },
-        "ratio": {
-          "type": [
-            "number",
-            "object"
+        {
+          "type": "object",
+          "description": "doe power --equivalence | --noninferiority (issue #84): the power of each level's test against the reference in the design, and the copies of the design a target needs",
+          "required": [
+            "factor",
+            "reference",
+            "type",
+            "scale",
+            "margins",
+            "sigma",
+            "delta",
+            "alpha",
+            "runs",
+            "comparisons",
+            "power",
+            "target"
           ],
-          "description": "the rate or odds ratio (low → high) the power is for, or one per term"
-        },
-        "target": {
-          "type": "number"
-        },
-        "wholePlots": {
-          "type": "integer",
-          "description": "split-plot counts and proportions (--sigma-wp): the number of whole plots"
-        },
-        "dfGroups": {
-          "type": "integer",
-          "description": "the df of the whole-plot F tests: whole plots − coefficients constant within them"
-        },
-        "sigmaWholePlot": {
-          "type": "number",
-          "description": "σ of the whole-plot shift on the link scale (--sigma-wp)"
-        },
-        "blocks": {
-          "type": "integer"
-        },
-        "sigmaBlock": {
-          "type": "number",
-          "minimum": 0
-        },
-        "levels": {
-          "type": "array",
-          "description": "counts and proportions with random effects: each grouping (outermost first), its σ and the df of its stratum",
-          "items": {
-            "type": "object",
-            "required": [
-              "name",
-              "groups",
-              "sigma"
-            ],
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "groups": {
-                "type": "integer"
-              },
-              "sigma": {
-                "type": "number"
-              },
-              "df": {
-                "type": [
-                  "integer",
-                  "null"
-                ]
-              },
-              "coefficients": {
-                "type": "array",
-                "items": {
-                  "type": "string"
+          "properties": {
+            "factor": {
+              "type": "string"
+            },
+            "reference": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "equivalence",
+                "noninferiority"
+              ]
+            },
+            "better": {
+              "enum": [
+                "higher",
+                "lower"
+              ]
+            },
+            "scale": {
+              "enum": [
+                "difference",
+                "ratio"
+              ]
+            },
+            "margins": {
+              "type": "object",
+              "required": [
+                "lower",
+                "upper"
+              ],
+              "properties": {
+                "lower": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "upper": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "sigma": {
+              "type": "number"
+            },
+            "delta": {
+              "type": "number"
+            },
+            "alpha": {
+              "type": "number"
+            },
+            "runs": {
+              "type": "integer"
+            },
+            "comparisons": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "test",
+                  "reference",
+                  "se",
+                  "df",
+                  "power"
+                ],
+                "properties": {
+                  "test": {
+                    "type": "string"
+                  },
+                  "reference": {
+                    "type": "string"
+                  },
+                  "se": {
+                    "type": "number"
+                  },
+                  "df": {
+                    "type": "number"
+                  },
+                  "power": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "power": {
+              "type": "number"
+            },
+            "target": {
+              "type": "number"
+            },
+            "needed": {
+              "type": "object",
+              "required": [
+                "copies",
+                "runs",
+                "power",
+                "reached"
+              ],
+              "properties": {
+                "copies": {
+                  "type": "integer"
+                },
+                "runs": {
+                  "type": "integer"
+                },
+                "power": {
+                  "type": "number"
+                },
+                "reached": {
+                  "type": "boolean"
                 }
               }
             }
           }
-        },
-        "rho": {
-          "type": "number",
-          "description": "--rho: the covariate's correlation with the response"
-        },
-        "sigmaResidual": {
-          "type": "number",
-          "description": "σ√(1 − ρ²): the residual σ with the covariate in the analysis"
         }
-      }
+      ]
     },
     "alias": {
       "type": "object",

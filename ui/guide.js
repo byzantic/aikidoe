@@ -85,7 +85,9 @@ function result(ctx, answers, ui, set) {
     const s = guideStudy(answers);
     // comparing treatments: the Design step opens on the suggested design, with its sizes
     const cmpDesign = a.family === 'compare' ? { id: a.design, ...(a.design === 'full' ? { replicates: a.runs / (answers.treatments ?? 1) } : {}), ...(a.design === 'rcbd' ? { cbBlocks: a.blocks } : {}),
-      ...(a.design === 'bibd' ? { blockSize: a.blockSize, bibdBlocks: a.blocks } : {}), ...(a.design === 'latin' ? { squares: a.squares } : {}), ...(a.design === 'crossover' ? { subjects: a.subjects } : {}) } : {};
+      ...(a.design === 'bibd' ? { blockSize: a.blockSize, bibdBlocks: a.blocks } : {}), ...(a.design === 'latin' ? { squares: a.squares } : {}), ...(a.design === 'crossover' ? { subjects: a.subjects } : {}),
+      // equivalence (#84): the power row on the Design step with the margin, in σ
+      ...(a.show && a.show !== 'differ' ? { power: { eqMargin: a.margin, eqType: a.show === 'same' ? 'equivalence' : 'noninferiority' } } : {}) } : {};
     state.ui = { design: { goal: a.goal ?? undefined, budget: a.budget ?? undefined, ...cmpDesign }, ...(a.family === 'gauge' ? { gauge: { open: 'y' } } : {}), ...(a.family === 'dose' ? { dose: { open: true } } : {}), ...(a.family?.startsWith('mixture') ? { mixture: { kind: a.family.slice(8) } } : {}) };
     state.step = 'define';
     setDoc(structuredClone(s));

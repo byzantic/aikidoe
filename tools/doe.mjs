@@ -107,6 +107,11 @@
 //   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
 //        [--rho ρ]   with a covariate correlated ρ with the response (balanced against the factors):
 //                    residual σ√(1 − ρ²), one residual df fewer
+//   power STUDY --equivalence [FACTOR] | --noninferiority [FACTOR]  (--margin M | --lower L --upper U) --sigma σ
+//        [--true d] [--reference LEVEL] [--test LEVEL] [--better higher|lower] [--ratio --cv CV] [--model "…"] [--target 0.8]
+//        power to show equivalence (TOST) or non-inferiority of each level against the reference in this
+//        design, when the true difference is d (default 0; --ratio: the true ratio, default 1, with the
+//        coefficient of variation); below the target, how many copies of the design reach it
 //   power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
 //        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
 //        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
@@ -212,7 +217,7 @@ import { covariateSlopes, covariateTable, droppedNote } from '../js/model/covari
 import { adjustedMeans, equalSlopes } from '../js/model/adjusted.js';
 import { allocate, applyAllocation } from '../js/design/allocate.js';
 import { compareLevels } from '../js/model/compare.js';
-import { equivalence, logResponse } from '../js/model/equivalence.js';
+import { equivalence, logResponse, equivalencePower, equivalenceRuns } from '../js/model/equivalence.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -1048,6 +1053,36 @@ function cmdCompare({ pos, opt }) {
     comparisons: cmp.comparisons.map(x => ({ label: x.label, ...(x.a !== undefined ? { a: x.a, b: x.b } : { weights: x.weights }), estimate: x.estimate, se: x.se, df: Number.isFinite(x.df) ? x.df : null, statistic: x.stat, p: x.p, pUnadjusted: x.pRaw, lower: x.lower, upper: x.upper })) });
 }
 
+/** Power of equivalence or non-inferiority tests in the study's design, and the runs a target needs (issue #84). */
+function printEquivalencePower(study, opt) {
+  if (!study.design) fail('power: the study has no design yet (doe design …)');
+  const fid = typeof opt.equivalence === 'string' ? opt.equivalence : typeof opt.noninferiority === 'string' ? opt.noninferiority : study.factors.find(f => f.type === 'categorical')?.id;
+  const f = study.factors.find(x => x.id === fid) ?? fail(fid ? `no factor "${fid}"` : 'power --equivalence: the study has no categorical factor to compare');
+  const num0 = (k) => { if (opt[k] === undefined) return undefined; const x = Number(opt[k]); if (opt[k] === true || !Number.isFinite(x)) fail(`--${k}: give a number`); return x; };
+  const ratio = !!opt.ratio, type = opt.noninferiority !== undefined ? 'noninferiority' : 'equivalence';
+  const r = study.responses.find(x => !x.derived) ?? study.responses[0];
+  const better = opt.better ? String(opt.better) : r?.goal === 'minimize' ? 'lower' : 'higher';
+  const sigma = num0('sigma'), cv = num0('cv');
+  if (ratio ? sigma === undefined && cv === undefined : sigma === undefined) fail(ratio ? 'power --ratio: give --cv (the coefficient of variation, e.g. 0.2) or --sigma (on the log scale)' : 'power --equivalence: give --sigma, the run-to-run standard deviation (from earlier runs or a gauge study)');
+  const target = num0('target') ?? 0.8, alpha = num0('alpha') ?? 0.05;
+  const opts = { factor: f.id, reference: opt.reference !== undefined ? String(opt.reference) : undefined, test: opt.test !== undefined ? String(opt.test) : undefined,
+    formula: opt.model ? (String(opt.model).includes('~') ? String(opt.model) : `${r.id} ~ ${opt.model}`) : undefined,
+    margin: num0('margin'), lower: num0('lower'), upper: num0('upper'), type, better, sigma, cv, ratio, delta: num0('true'), alpha };
+  let p, need;
+  try { p = equivalencePower(study, opts); need = p.power < target ? equivalenceRuns(study, { ...opts, target }) : null; } catch (e) { fail(e.message); }
+  const [lo, hi] = p.margins, scale = ratio ? 'ratio' : 'difference';
+  out(`power of ${type === 'equivalence' ? 'equivalence (TOST)' : `non-inferiority (${better} is better)`} against ${p.reference}, ${f.id}: ${p.runs} runs`);
+  out(`margin${type === 'equivalence' ? 's' : ''} ${type === 'equivalence' ? `${num(lo)} … ${num(hi)}` : num(better === 'higher' ? lo : hi)} (${scale}); true ${scale} ${num(p.delta)}; σ ${num(p.sigma, 4)}${ratio ? ' on the log scale' + (cv !== undefined ? ` (CV ${num(cv)})` : '') : ''}; α = ${alpha}`);
+  out('');
+  out(table([{ key: 'label', label: 'comparison', align: 'left' }, { key: 'se', label: `std. error${ratio ? ' (log)' : ''}` }, { key: 'df', label: 'df' }, { key: 'power', label: 'power' }],
+    p.comparisons.map(c => ({ label: `${c.test}${ratio ? ' / ' : ' − '}${c.reference}`, se: num(c.se, 4), df: num(c.df, 4), power: num(c.power, 3) }))));
+  if (need) out(need.reached ? `\nfor ${num(target)} power: the design repeated ${need.copies} times (${need.runs} runs) gives ${num(need.power, 3)}` : `\neven ${need.copies} copies of the design (${need.runs} runs) give only ${num(need.power, 3)}: a wider margin, a smaller σ (a better measurement, or blocks), or a smaller true difference`);
+  else out(`\npower ${num(p.power, 3)} ≥ ${num(target)}`);
+  put({ factor: f.id, reference: p.reference, type, ...(type === 'noninferiority' ? { better } : {}), scale, margins: { lower: lo ?? null, upper: hi ?? null }, sigma: p.sigma, delta: p.delta, alpha, runs: p.runs,
+    comparisons: p.comparisons.map(c => ({ test: c.test, reference: c.reference, se: c.se, df: c.df, power: c.power })), power: p.power, target,
+    ...(need ? { needed: { copies: need.copies, runs: need.runs, power: need.power, reached: need.reached } } : {}) });
+}
+
 /** Equivalence and non-inferiority of a factor's levels against a reference (issue #84). */
 function cmdEquivalence({ pos, opt }) {
   const [file, a, b] = pos, study = load(file);
@@ -1265,6 +1300,7 @@ function covariateMeanNote(fit, at) {
 
 function cmdPower({ pos, opt }) {
   const study = load(pos[0]);
+  if (opt.equivalence !== undefined || opt.noninferiority !== undefined) return printEquivalencePower(study, opt);
   let delta = 2;
   if (opt.delta !== undefined) {
     const d = String(opt.delta);

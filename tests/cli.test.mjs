@@ -358,6 +358,12 @@ try {
     check('--noninferiority --test: one level, the lower end against −margin', r.code === 0 && /^M-3: non-inferior: the lower end of the 90 % interval/m.test(r.out), r.out + r.err);
     r = run('equivalence', 'media.aikidoe.json', 'medium', '--ratio', '--lower', '0.9', '--upper', '1.11', '--test', 'M-2');
     check('--ratio: the log of the response, a ratio of means', r.code === 0 && /log\(biomass\) ~ main/.test(r.out) && /M-2 \/ Standard/.test(r.out), r.out + r.err);
+    r = run('power', 'media.aikidoe.json', '--equivalence', '--margin', '0.5', '--sigma', '0.47');
+    check('power --equivalence: per level, and the copies of the design 80 % needs', r.code === 0 && /power of equivalence \(TOST\) against Standard, medium: 20 runs/.test(r.out) && /the design repeated 4 times \(80 runs\)/.test(r.out), r.out + r.err);
+    r = run('power', 'media.aikidoe.json', '--noninferiority', '--margin', '0.5', '--sigma', '0.47');
+    check('power --noninferiority', r.code === 0 && /non-inferiority \(higher is better\)/.test(r.out), r.out + r.err);
+    r = run('power', 'media.aikidoe.json', '--equivalence', '--margin', '0.5');
+    check('power --equivalence without σ: asks for it', r.code !== 0 && /give --sigma/.test(r.err), r.err);
     r = run('equivalence', 'media.aikidoe.json', 'medium');
     check('equivalence without a margin: asks for one', r.code !== 0 && /give the margin/.test(r.err), r.err);
   }
@@ -628,6 +634,8 @@ try {
   check('compare --json: levels, comparisons, the critical value', o.method === 'dunnett' && o.family === 'control' && o.levels.length === 5 && o.comparisons.length === 4 && Math.abs(o.critical - 2.7273) < 1e-4);
   o = js('compare', 'media.aikidoe.json', 'medium');
   check('compare --json: letters with all pairs', o.levels.find(l => l.label === 'M-4').letters === 'a' && o.comparisons.length === 10);
+  o = js('power', 'media.aikidoe.json', '--equivalence', '--margin', '0.5', '--sigma', '0.47');
+  check('power --equivalence --json: power per comparison, the copies needed', o.comparisons.length === 4 && o.needed?.copies === 4 && o.needed.reached);
   o = js('equivalence', 'media.aikidoe.json', 'medium', '--reference', 'Standard', '--margin', '0.5');
   check('equivalence --json: margins, the comparisons with their verdicts', o.margins.lower === -0.5 && o.comparisons.length === 4 && o.comparisons.every(x => typeof x.equivalent === 'boolean' && x.verdict));
   o = js('design', 'lsq.aikidoe.json', '--latin', '--force');
