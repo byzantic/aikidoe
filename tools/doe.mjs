@@ -152,6 +152,7 @@
 //   exercise run STUDY                     self-study: results for the runs of the design
 //   exercise run KEY SHEET.csv [--out RESULTS.csv]   class mode: results for a student's run sheet
 //   exercise answer STUDY [--active A,B] [--effect "A=est:lo:hi" …] [--best "A=…,B=…"] [--prediction v]
+//        [--better L1,L2 --difference "L1=est:lo:hi" …] (comparing treatments: the levels that beat the control)
 //        [--ec50 est:lo:hi] [--potency est:lo:hi]   (dose topic)   [--ratio "A=est:lo:hi" …] [--percent est:lo:hi]   (counts topic)
 //   exercise grade STUDY | exercise grade KEY STUDY   score, feedback, the model answer and the truth
 //        (without answers, the study's data are analysed the standard way and that is graded)
@@ -1982,6 +1983,8 @@ async function cmdExercise({ pos, opt }) {
     if (opt.best) a.best = parseSettingsLoose(study, String(opt.best));
     if (opt.prediction !== undefined) a.prediction = { value: Number(opt.prediction) };
     for (const e of list(opt.ratio)) { const [id, v] = String(e).split('='); const [est, lo, hi] = (v ?? '').split(':').map(Number); if (![est, lo, hi].every(x => Number.isFinite(x) && x > 0)) fail(`--ratio "${e}": give id=estimate:lower:upper (ratios, all > 0)`); (a.ratios ??= {})[id.trim()] = { estimate: est, lower: lo, upper: hi }; }
+    if (opt.better !== undefined) a.better = String(opt.better).split(',').map(x => x.trim()).filter(Boolean);
+    for (const e of list(opt.difference)) { const i = String(e).lastIndexOf('='), id = String(e).slice(0, i).trim(); const [est, lo, hi] = String(e).slice(i + 1).split(':').map(Number); if (i < 1 || ![est, lo, hi].every(Number.isFinite)) fail(`--difference "${e}": give level=estimate:lower:upper`); (a.differences ??= {})[id] = { estimate: est, lower: lo, upper: hi }; }
     if (opt.percent !== undefined) { const [est, lo, hi] = String(opt.percent).split(':').map(Number); if (![est, lo, hi].every(Number.isFinite)) fail('--percent: give estimate:lower:upper (percentages)'); a.percent = { estimate: est, lower: lo, upper: hi }; }
     for (const k of ['ec50', 'potency']) if (opt[k] !== undefined) { const [est, lo, hi] = String(opt[k]).split(':').map(Number); if (![est, lo, hi].every(Number.isFinite)) fail(`--${k}: give estimate:lower:upper`); a[k] = { estimate: est, lower: lo, upper: hi }; }
     save(file, createStudy({ ...study, exercise: { ...study.exercise, answers: a } }));
@@ -2001,10 +2004,11 @@ async function cmdExercise({ pos, opt }) {
     out(table([{ key: 'id', label: 'question', align: 'left' }, { key: 'pts', label: 'points' }, { key: 'note', label: '', align: 'left' }],
       g.parts.map(p => ({ ...p, pts: p.max ? `${num(p.score, 3)} / ${num(p.max, 3)}` : num(p.score, 3) }))));
     out(`score: ${g.score} / 100`);
-    out(g.truth.ec50 !== undefined ? `\ntruth: EC50 ${num(g.truth.ec50, 4)}, relative potency ${num(g.truth.potency, 4)}`
+    out(g.truth.better ? `\ntruth: better than the ${g.truth.control}: ${g.truth.better.join(', ') || 'none'}; differences ${Object.entries(g.truth.differences).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`
+      : g.truth.ec50 !== undefined ? `\ntruth: EC50 ${num(g.truth.ec50, 4)}, relative potency ${num(g.truth.potency, 4)}`
       : g.truth.ratios ? `\ntruth: active ${g.truth.active.join(', ')}; ${g.truth.ratio} ratios ${Object.entries(g.truth.ratios).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}${g.truth.percent !== undefined ? `; mean germination at the question's settings ${num(g.truth.percent, 4)} %` : ''}`
       : `\ntruth: active ${g.truth.active.join(', ')}; effects ${Object.entries(g.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}`);
-    if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(g.modelAnswer.answers.ec50 ? `  → EC50 ${num(g.modelAnswer.answers.ec50.estimate, 4)}, potency ${num(g.modelAnswer.answers.potency.estimate, 4)}; power of the reference design for the potency ${num(g.modelAnswer.power, 3)}` : `  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
+    if (g.modelAnswer) { out('model answer:'); for (const st of g.modelAnswer.steps) out(`  - ${st}`); out(g.modelAnswer.answers.better ? `  → better ${g.modelAnswer.answers.better.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}` : g.modelAnswer.answers.ec50 ? `  → EC50 ${num(g.modelAnswer.answers.ec50.estimate, 4)}, potency ${num(g.modelAnswer.answers.potency.estimate, 4)}; power of the reference design for the potency ${num(g.modelAnswer.power, 3)}` : `  → active ${g.modelAnswer.answers.active.join(', ')}; smallest power of the reference design ${num(g.modelAnswer.power, 3)}`); }
     return;
   }
   fail('exercise: new, run, answer, grade or topics');

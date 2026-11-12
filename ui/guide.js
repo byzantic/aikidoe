@@ -83,10 +83,13 @@ function result(ctx, answers, ui, set) {
   const lessons = a.lessons.map(lessonById).filter(Boolean);
   const create = () => {
     const s = guideStudy(answers);
-    state.ui = { design: { goal: a.goal ?? undefined, budget: a.budget ?? undefined }, ...(a.family === 'gauge' ? { gauge: { open: 'y' } } : {}), ...(a.family === 'dose' ? { dose: { open: true } } : {}), ...(a.family?.startsWith('mixture') ? { mixture: { kind: a.family.slice(8) } } : {}) };
+    // comparing treatments: the Design step opens on the suggested design, with its sizes
+    const cmpDesign = a.family === 'compare' ? { id: a.design, ...(a.design === 'full' ? { replicates: a.runs / (answers.treatments ?? 1) } : {}), ...(a.design === 'rcbd' ? { cbBlocks: a.blocks } : {}),
+      ...(a.design === 'bibd' ? { blockSize: a.blockSize, bibdBlocks: a.blocks } : {}), ...(a.design === 'latin' ? { squares: a.squares } : {}), ...(a.design === 'crossover' ? { subjects: a.subjects } : {}) } : {};
+    state.ui = { design: { goal: a.goal ?? undefined, budget: a.budget ?? undefined, ...cmpDesign }, ...(a.family === 'gauge' ? { gauge: { open: 'y' } } : {}), ...(a.family === 'dose' ? { dose: { open: true } } : {}), ...(a.family?.startsWith('mixture') ? { mixture: { kind: a.family.slice(8) } } : {}) };
     state.step = 'define';
     setDoc(structuredClone(s));
-    toast(a.family === 'gauge' ? 'Study created: enter the gauge readings for the response' : a.family === 'dose' ? 'Study created: set the dose range (and the samples), then Design → Dose–response design' : a.family?.startsWith('mixture') ? 'Study created: name the ingredients, set their limits and the total, then Design → Mixture design' : 'Study created: name the factors and set their ranges, then Design → Recommend');
+    toast(a.family === 'gauge' ? 'Study created: enter the gauge readings for the response' : a.family === 'dose' ? 'Study created: set the dose range (and the samples), then Design → Dose–response design' : a.family === 'compare' ? 'Study created: name the treatments on the Define step; the Design step has the suggested design' : a.family?.startsWith('mixture') ? 'Study created: name the ingredients, set their limits and the total, then Design → Mixture design' : 'Study created: name the factors and set their ranges, then Design → Recommend');
   };
   const apply = state.study && a.goal ? () => { state.ui.design = { ...(state.ui.design ?? {}), goal: a.goal, budget: a.budget ?? undefined, rec: undefined }; go('design'); toast(`Goal “${a.goal}”${a.budget ? ` and budget ${a.budget}` : ''} set on the Design step`); } : null;
 
@@ -106,7 +109,7 @@ function result(ctx, answers, ui, set) {
     h('div', { class: 'row' },
       h('button', { class: 'btn primary', id: 'guide-create', onclick: create }, a.family === 'gauge' ? 'Create a study for the gauge readings' : 'Create a study from these answers'),
       apply ? h('button', { class: 'btn', id: 'guide-apply', onclick: apply }, 'Use the goal and budget for the open study') : null),
-    h('p', { class: 'muted small' }, state.doc ? 'Creating a study replaces the open one (save it first if you want to keep it). ' : '', 'The new study has placeholder factors: rename them and set their ranges on the Define step.'),
+    h('p', { class: 'muted small' }, state.doc ? 'Creating a study replaces the open one (save it first if you want to keep it). ' : '', a.family === 'compare' ? 'The new study has one factor, the treatment, with its levels: rename them on the Define step.' : 'The new study has placeholder factors: rename them and set their ranges on the Define step.'),
     lessons.length ? h('div', {}, h('h3', {}, 'Practise first'),
       h('div', { class: 'cards' }, lessons.map(l => h('button', { class: `card lesson ${l.topic ? '' : 'locked'}`, disabled: !l.topic, 'data-guide-lesson': l.id, onclick: () => { state.ui.learn = { lesson: l.id }; go('learn'); } },
         h('b', {}, `${l.n}. ${l.title}`), h('span', { class: 'muted small' }, l.topic ? 'an exercise on a virtual process, graded' : 'coming later'))))) : null,

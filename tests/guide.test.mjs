@@ -1,8 +1,8 @@
 // The Guide (issue #60): the questionnaire's flow, the advice for every combination of answers, and
 // its agreement with the designs the app can actually build (candidates and the recommender).
 import { section, check, done } from './lib/check.mjs';
-import { QUESTIONS, asked, nextQuestion, checkAnswer, advise, guideStudy } from '../js/guide.js';
-import { candidates, recommend } from '../js/design/recommend.js';
+import { QUESTIONS, asked, nextQuestion, checkAnswer, advise, guideStudy, questionById } from '../js/guide.js';
+import { candidates, recommend, buildCandidate } from '../js/design/recommend.js';
 import { validateStudy } from '../js/study.js';
 import { LESSONS } from '../js/learn/lessons.js';
 
@@ -131,6 +131,45 @@ section('every combination: advice, a valid study, and a design the app can buil
   check('… and a valid study with the factors, hard-to-change and categorical counts asked for', !badStudy.length, badStudy.slice(0, 3).join('\n'));
   check('… and the design family is one the app offers for that study', !missing.length, [...new Set(missing)].slice(0, 8).join('\n'));
   check('… with the same run count', !runsOff.length, [...new Set(runsOff)].slice(0, 8).join('\n'));
+}
+
+section('comparing a few treatments (issue #80): advice, the study, and the design the Design step builds');
+{
+  const lessonIds = new Set(LESSONS.map(l => l.id));
+  let n = 0; const bad = [], off = [], unbalanced = [];
+  for (const treatments of [2, 3, 4, 5, 6, 8])
+    for (const control of ['yes', 'no'])
+      for (const layout of ['none', 'groups', 'small', 'two', 'subjects'])
+        for (const effect of ['large', 'medium', 'small']) {
+          if (layout === 'small' && treatments < 3) continue;
+          if (layout === 'two' && treatments < 3) continue;
+          for (const blockSize of layout === 'small' ? [2, treatments - 1] : [undefined]) {
+            const a = { aim: 'compare', treatments, treatmentNames: null, control, layout, blockSize, measurement: 'good', plates: 'no', result: 'measurement', effect, budget: null };
+            n++;
+            if (nextQuestion(a)) { bad.push(`unanswered ${nextQuestion(a).id}: ${JSON.stringify(a)}`); continue; }
+            const r = advise(a), s = guideStudy(a);
+            if (!r.headline || r.plan.length < 2 || r.family !== 'compare' || !r.lessons.every(l => lessonIds.has(l)) || validateStudy(s).errors.length || s.factors[0].levels.length !== treatments) { bad.push(JSON.stringify(a)); continue; }
+            // the Design step's candidate, with the options the guide hands over
+            const c = candidates(s).find(x => x.id === r.design);
+            if (!c) { bad.push(`no ${r.design} candidate: ${JSON.stringify(a)}`); continue; }
+            const o = { replicates: r.design === 'full' ? r.runs / treatments : undefined, cbBlocks: r.blocks, blockSize: r.blockSize, bibdBlocks: r.design === 'bibd' ? r.blocks : undefined, squares: r.squares, subjects: r.subjects };
+            const d = buildCandidate(s, c, o);
+            if (d.X.length !== r.runs) off.push(`${r.design} t=${treatments} ${blockSize ?? ''}: guide ${r.runs}, app ${d.X.length}`);
+            if (r.design === 'bibd' && !d.params.balanced) unbalanced.push(`t=${treatments} k=${blockSize} b=${r.blocks}`);
+          }
+        }
+  check(`${n} combinations: every question answered, a plan, a study with the treatments as levels`, !bad.length, bad.slice(0, 3).join('\n'));
+  check('… and the Design step builds the suggested design with the same number of runs', !off.length, off.slice(0, 6).join('\n'));
+  check('… the incomplete-block designs it suggests are balanced', !unbalanced.length, unbalanced.join('; '));
+  const a = { aim: 'compare', treatments: 5, treatmentNames: 'Standard, M-2, M-3, M-4, M-5', control: 'yes', layout: 'groups', measurement: 'good', plates: 'no', result: 'measurement', effect: 'medium', budget: 20 };
+  const r = advise(a);
+  check('five media, a standard, days: complete blocks, Dunnett, the lesson on many t tests', r.design === 'rcbd' && /Randomised complete blocks: \d+ blocks of 5/.test(r.headline) && /Dunnett/.test(r.plan[1].text) && r.lessons.includes('compare'), r.headline);
+  check('… the levels are the names given', guideStudy(a).factors[0].levels.join() === 'Standard,M-2,M-3,M-4,M-5');
+  check('… and a budget below the plan is warned about', r.warnings.some(w => /budget \(20 runs\)/.test(w)), r.warnings.join('; '));
+  check('more replicates for a smaller difference', advise({ ...a, effect: 'small' }).runs > advise({ ...a, effect: 'large' }).runs);
+  check('comparing every pair needs more than comparing with a control', advise({ ...a, control: 'no' }).runs >= r.runs && /Tukey/.test(advise({ ...a, control: 'no' }).plan[1].text));
+  check('the block size is at most the treatments less one', checkAnswer(questionById('blockSize'), 5, a) !== null && checkAnswer(questionById('blockSize'), 4, a) === null);
+  check('the factor questions are not asked', !asked(a).some(q => ['factors', 'types', 'groups', 'stages', 'curvature'].includes(q.id)));
 }
 
 section('the recommender on the guide\'s study');

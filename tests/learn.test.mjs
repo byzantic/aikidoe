@@ -175,9 +175,9 @@ for (const topic of Object.keys(TOPICS)) for (const difficulty of Object.keys(DI
   for (let seed = 1; seed <= 50; seed++) {
     const ex = generateExercise({ topic, difficulty, seed });
     // a mixture: one component at a time along its Cox direction; counts: least squares on the raw counts
-    const r = referenceStrategy(ex), o = TOPICS[topic].mixture || TOPICS[topic].counts ? comparisonStrategy(ex) : ofatStrategy(ex);
+    const r = referenceStrategy(ex), o = TOPICS[topic].mixture || TOPICS[topic].counts || TOPICS[topic].compare ? comparisonStrategy(ex) : ofatStrategy(ex);
     if (gradeStudy(ex, r.study).score === 100 && r.study.design.runs.length <= ex.budget) refFull++;
-    if (TOPICS[topic].mixture || TOPICS[topic].counts) name = o.strategy.replace(/ on the raw .*/, ' on the raw values');
+    if (TOPICS[topic].mixture || TOPICS[topic].counts || TOPICS[topic].compare) name = o.strategy.replace(/ on the raw .*/, ' on the raw values');
     const so = gradeStudy(ex, createStudy({ ...o.study, exercise: { id: ex.id, answers: o.answers } })).score;
     ofat += so; if (so === 100) ofatFull++; n++;
   }

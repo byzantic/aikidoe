@@ -12,9 +12,11 @@
 import { createStudy, FORMAT_VERSION } from './study.js';
 import { ccd, boxBehnken } from './design/rsm.js';
 import { definitiveScreening } from './design/dsd.js';
+import { studentT } from './dist.js';
 
 const PHYSICAL = (a) => a.aim && a.aim !== 'measure' && a.aim !== 'simulate';
-const FACTORIAL = (a) => PHYSICAL(a) && a.aim !== 'dose';            // the questions about factors and models
+const FACTORIAL = (a) => PHYSICAL(a) && a.aim !== 'dose' && a.aim !== 'compare';   // the questions about factors and models
+const COMPARE = (a) => a.aim === 'compare';                          // a few treatments of one factor (issue #80)
 const MIX = (a) => FACTORIAL(a) && (a.mixture === 'all' || a.mixture === 'some');   // a mixture (issue #62)
 const PLAIN = (a) => FACTORIAL(a) && !MIX(a);                        // factorial questions that a mixture replaces
 
@@ -24,6 +26,7 @@ export const QUESTIONS = [
     help: ['concepts', 'sequential-experimentation'],
     options: [
       { value: 'screen', label: 'Which of many possible factors matter', hint: 'five or more candidates, most probably unimportant' },
+      { value: 'compare', label: 'Compare a few treatments or conditions', hint: 'media, suppliers, protocols, compounds: which differ, which beat the standard' },
       { value: 'understand', label: 'How a few factors affect the result, and whether they interact', hint: 'two to eight factors you already believe matter' },
       { value: 'optimise', label: 'The best settings', hint: 'a maximum, minimum or target' },
       { value: 'robust', label: 'Settings that make the result insensitive to variation I cannot control', hint: 'e.g. incoming material, ambient conditions' },
@@ -46,10 +49,33 @@ export const QUESTIONS = [
   { id: 'curves', type: 'number', min: 1, max: 24, when: (a) => a.aim === 'dose', text: 'How many curves — compounds, samples or batches — will you compare?',
     why: 'Each compound or sample gets its own curve. With two or more, the usual question is relative potency: how many times less of one gives the same effect as the other — which is one number only if the curves have the same shape. One curve can be a standard curve, for reading unknown samples off it.',
     help: ['dose-response', 'relative-potency'] },
-  { id: 'factors', type: 'number', min: 1, max: 30, when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'dose', text: 'How many factors — things you can set — will you vary?',
+  { id: 'treatments', type: 'number', min: 2, max: 30, when: COMPARE, text: 'How many treatments or conditions will you compare, counting any control or standard?',
+    why: 'They are the levels of one factor. A few (up to about eight) are best compared with the designs here; with many more, most are probably alike, and a screening approach may suit better.',
+    help: ['designs-comparative', ''] },
+  { id: 'treatmentNames', type: 'text', optional: true, when: COMPARE, text: 'Their names (optional, separated by commas; the control or standard first)',
+    why: 'They become the levels of the factor in the new study; you can change them on the Define step.',
+    help: ['designs-comparative', ''] },
+  { id: 'control', type: 'choice', when: COMPARE, text: 'Is one of them a control or standard that the others are to be compared with?',
+    why: 'If only the comparisons with the control matter, Dunnett’s method tests each against it and needs a smaller difference to call one than Tukey’s method, which compares every pair. Either way, a t test for every comparison gives too many false alarms.',
+    help: ['analysis', 'comparing-treatments'],
+    options: [{ value: 'yes', label: 'Yes — which beat (or differ from) the control?' }, { value: 'no', label: 'No — which differ from which, and which is best?' }] },
+  { id: 'layout', type: 'choice', when: COMPARE, text: 'How will the runs be done?',
+    why: 'Days, batches, operators and animals differ, often by more than the treatments. A design that groups the runs the way they fall takes those differences out of every comparison.',
+    help: ['designs-comparative', ''],
+    options: [
+      { value: 'none', label: 'All at once, under the same conditions' },
+      { value: 'groups', label: 'In groups that differ (days, batches, plates), each with room for every treatment' },
+      { value: 'small', label: 'In groups too small for every treatment (three assays a day, say)' },
+      { value: 'two', label: 'With two things that differ at once (day and operator, rows and columns)' },
+      { value: 'subjects', label: 'On subjects that can each have every treatment in turn (animals, volunteers, cell lines)' },
+    ] },
+  { id: 'blockSize', type: 'number', min: 2, max: 29, when: (a) => COMPARE(a) && a.layout === 'small', text: 'How many runs fit in one group?',
+    why: 'The block size. A balanced incomplete block design puts every pair of treatments together in the same number of groups, so every comparison is equally precise.',
+    help: ['designs-comparative', 'balanced-incomplete-blocks'] },
+  { id: 'factors', type: 'number', min: 1, max: 30, when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'dose' && a.aim !== 'compare', text: 'How many factors — things you can set — will you vary?',
     why: 'Count every setting you might change, including ones you suspect do not matter: a factor left out cannot be found, and one held fixed is part of the conditions the result applies to. In a robust-design study, count the noise factors you can set deliberately in the experiment too.',
     help: ['concepts', 'factors-and-coded-units'] },
-  { id: 'names', type: 'text', optional: true, when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'dose', text: 'Their names (optional, separated by commas)',
+  { id: 'names', type: 'text', optional: true, when: (a) => a.aim && a.aim !== 'measure' && a.aim !== 'dose' && a.aim !== 'compare', text: 'Their names (optional, separated by commas)',
     why: 'Only to label the study the guide creates; you can rename the factors and set their ranges on the Define step.',
     help: ['concepts', 'factors-and-coded-units'] },
   { id: 'mixture', type: 'choice', when: (a) => FACTORIAL(a) && (a.factors ?? 0) >= 2, text: 'Are some of the factors ingredients that make up a fixed total — a recipe, a formulation, a composition?',
@@ -84,7 +110,7 @@ export const QUESTIONS = [
   { id: 'htc', type: 'number', min: 0, max: 30, when: PLAIN, text: 'How many factors are hard, slow or expensive to change between runs? (0 if none)',
     why: 'A furnace temperature that takes hours to settle, or a fixture that has to be rebuilt, tempts you to run all the low settings first and then all the high ones. That confounds the factor with everything that drifts over time. A split-plot design changes the hard factor a limited number of times on purpose, and its analysis tests that factor against the right, larger error.',
     help: ['designs-split-plot', ''] },
-  { id: 'groups', type: 'choice', when: PHYSICAL, text: 'Will the runs be done in groups that may differ — several days, batches of material, chambers?',
+  { id: 'groups', type: 'choice', when: (a) => PHYSICAL(a) && !COMPARE(a), text: 'Will the runs be done in groups that may differ — several days, batches of material, chambers?',
     why: 'Groups that differ add a shift to every run in them. If the design is arranged in blocks, one per group, the shifts are removed in the analysis instead of inflating the noise or masquerading as effects.',
     help: ['concepts', 'randomisation-and-blocking'],
     options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No — all in one session, from one batch' }] },
@@ -107,7 +133,7 @@ export const QUESTIONS = [
       { value: 'corners', label: 'All extremes at once would be unsafe or impractical' },
       { value: 'combos', label: 'Some combinations are impossible (e.g. high temperature with long time)' },
     ] },
-  { id: 'result', type: 'choice', when: FACTORIAL, text: 'What will each run give you?',
+  { id: 'result', type: 'choice', when: (a) => FACTORIAL(a) || COMPARE(a), text: 'What will each run give you?',
     why: 'A measurement (a yield, a strength, a time) varies by about the same amount wherever it is. A count (colonies, cells, defects) varies more the larger it is, and a percentage (germinated, viable, positive) is squeezed near 0 % and 100 %: these need their own analysis and their own sums for the number of runs. A single pass or fail per run carries little information, so it needs many more runs.',
     help: ['analysis', 'counts-and-proportions'],
     options: [
@@ -124,7 +150,7 @@ export const QUESTIONS = [
       { value: 'medium', label: 'Medium — the count up by half, the odds doubled' },
       { value: 'small', label: 'Small — the count up by a quarter, the odds up by half' },
     ] },
-  { id: 'effect', type: 'choice', when: (a) => FACTORIAL(a) && !['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
+  { id: 'effect', type: 'choice', when: (a) => (FACTORIAL(a) || COMPARE(a)) && !['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
     why: 'This is what decides the number of runs. The scatter (σ) is the standard deviation of repeated runs at the same settings, measurement included. To have an 80 % chance of detecting an effect Δ in a two-level design takes roughly N ≈ 32 / (Δ/σ)² runs, plus a few for the error estimate: about 8 runs for 2σ, 32 for 1σ, 128 for σ/2.',
     help: ['concepts', 'power'],
     options: [
@@ -136,7 +162,7 @@ export const QUESTIONS = [
   { id: 'budget', type: 'number', min: 1, max: 10000, optional: true, when: (a) => a.aim && a.aim !== 'measure', text: 'How many runs can you afford in total? (leave empty if not sure)',
     why: 'The budget for the whole investigation, follow-up and confirmation runs included. The guide warns when the plan does not fit, and the recommender ranks designs within it.',
     help: ['concepts', 'sequential-experimentation'] },
-  { id: 'stages', type: 'choice', when: PHYSICAL, text: 'Can you run in stages, looking at the results in between?',
+  { id: 'stages', type: 'choice', when: (a) => PHYSICAL(a) && !COMPARE(a), text: 'Can you run in stages, looking at the results in between?',
     why: 'Experimenting in stages is usually cheaper: the first experiment tells you where to spend the rest. A common rule is to spend no more than a quarter to a half of the budget on the first one.',
     help: ['designs-sequential', ''],
     options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No — everything must be planned and run at once' }] },
@@ -156,7 +182,7 @@ export function checkAnswer(q, v, answers = {}) {
   if (q.type !== 'number') return null;
   if (v === null || v === '' || v === undefined) return q.optional ? null : 'an answer is needed';
   if (!Number.isInteger(v)) return 'a whole number, please';
-  const max = q.id === 'htc' || q.id === 'categorical' ? answers.factors ?? q.max : q.id === 'components' ? Math.max(2, (answers.factors ?? q.max + 1) - 1) : q.max;
+  const max = q.id === 'htc' || q.id === 'categorical' ? answers.factors ?? q.max : q.id === 'blockSize' ? Math.max(2, (answers.treatments ?? q.max + 1) - 1) : q.id === 'components' ? Math.max(2, (answers.factors ?? q.max + 1) - 1) : q.max;
   if (v < q.min || v > max) return `between ${q.min} and ${max}`;
   return null;
 }
@@ -216,6 +242,7 @@ export function advise(a) {
   }
 
   let aim = a.aim;
+  if (aim === 'compare') { compareAdvice(a, out); return out; }
   if (aim === 'dose') {
     const nc = a.curves ?? 1, perCurve = 1 + 6 + 16;          // range-finding (zero and 6 doses), then 8 doses × 2
     Object.assign(out, { family: 'dose', runs: nc * 7, headline: `Dose–response: a range-finding series, then doses around the EC50${nc > 1 ? `, for ${nc} curves` : ''}` });
@@ -405,6 +432,85 @@ function mixturePlan(a, out, { plan, notes, warnings, lesson, read, stages }) {
   lesson('mixture'); read(M('designs-mixture', '', 'mixture designs'), M('designs-mixture', simplex ? 'simplex-designs' : 'constrained-regions', simplex ? 'lattice and centroid designs' : 'constrained regions'), M('designs-mixture', 'mixture-models', 'Scheffé models'));
 }
 
+// ---------------------------------------------------------------- comparing treatments (issue #80)
+
+/**
+ * Runs per treatment for an 80 % chance of detecting a difference of delta σ between two
+ * treatments at 5 %, allowing for m comparisons (Bonferroni's α / m: a little cautious against
+ * Tukey's and Dunnett's methods), with df error degrees of freedom left by the design: by the
+ * normal approximation with the t quantiles, at least 3.
+ */
+export function compareReplicates(t, delta, { control = true, extraDf = 0 } = {}) {
+  const m = control ? t - 1 : t * (t - 1) / 2;
+  for (let n = 2; n <= 200; n++) {
+    const df = Math.max(1, t * (n - 1) - extraDf(n));
+    const z = studentT.ppf(1 - 0.025 / m, df), zb = studentT.ppf(0.8, df);
+    if (delta * Math.sqrt(n / 2) >= z + zb) return Math.max(3, n);
+  }
+  return 200;
+}
+function compareAdvice(a, out) {
+  const { plan, notes, warnings } = out;
+  const t = Math.max(2, a.treatments ?? 2), control = a.control !== 'no', counted = ['count', 'percent', 'passfail'].includes(a.result);
+  const lesson = (id) => { if (!out.lessons.includes(id)) out.lessons.push(id); };
+  const read = (...ms) => { for (const m of ms) if (!out.manual.some(x => x.page === m.page && x.anchor === m.anchor)) out.manual.push(m); };
+  const delta = out.delta;
+  // runs per treatment for the difference that matters (counts: 6, checked on the Design step)
+  const layout = a.layout ?? 'none';
+  const extra = { none: () => 0, groups: (n) => n - 1, small: () => 0, two: (n) => 2 * (t - 1), subjects: () => 0 }[layout] ?? (() => 0);
+  let n = counted ? 6 : compareReplicates(t, delta, { control, extraDf: extra });
+  out.family = 'compare';
+  const what = control ? 'each against the control by Dunnett’s method' : 'every pair by Tukey’s method, with letters';
+  if (layout === 'none') {
+    Object.assign(out, { design: 'full', runs: n * t, headline: `${t} treatments, ${n} runs of each (${n * t} runs) in a completely random order` });
+    plan.push({ title: 'Design', text: `Every treatment ${n} times, all ${n * t} runs in a random order (Design step: Full factorial, ${n} replicates). Only if the conditions really are the same throughout: if the runs take several days or batches, block them.` });
+  } else if (layout === 'groups') {
+    Object.assign(out, { design: 'rcbd', blocks: n, runs: n * t, headline: `Randomised complete blocks: ${n} blocks of ${t} (${n * t} runs)` });
+    plan.push({ title: 'Design', text: `${n} blocks (a day, a batch, a plate each), every treatment once in each, in random order within the block (Design step: Randomised complete blocks, ${n} blocks). Run each block in one go: the analysis takes out the differences between them.` });
+  } else if (layout === 'small') {
+    const k = Math.min(Math.max(2, a.blockSize ?? 2), t - 1);
+    // the smallest balanced design whose effective replication (r × efficiency) reaches n
+    const sizes = bibdSizesG(t, k), pickS = sizes.find(x => x.r * (x.lambda * t) / (x.r * k) >= n) ?? sizes.at(-1);
+    if (t <= k) warnings.push(`A group of ${a.blockSize} holds every treatment: use complete blocks.`);
+    if (pickS) {
+      const eff = pickS.lambda * t / (pickS.r * k);
+      Object.assign(out, { design: 'bibd', blockSize: k, blocks: pickS.b, runs: pickS.b * k, headline: `Balanced incomplete blocks: ${pickS.b} blocks of ${k}, each treatment ${pickS.r} times (${pickS.b * k} runs)` });
+      plan.push({ title: 'Design', text: `${pickS.b} groups of ${k}; every treatment in ${pickS.r} of them and every pair together in ${pickS.lambda} (Design step: Balanced incomplete blocks, a block holds ${k}). Efficiency ${eff.toFixed(2)}: as precise as about ${(pickS.r * eff).toFixed(1)} runs of each in complete blocks.` });
+      read(M('designs-comparative', 'balanced-incomplete-blocks', 'incomplete blocks'));
+    }
+  } else if (layout === 'two') {
+    const sq = Math.max(t === 3 ? 2 : 1, Math.ceil(n / t));
+    Object.assign(out, { design: 'latin', squares: sq, runs: sq * t * t, headline: `${sq > 1 ? `${sq} Latin squares` : 'A Latin square'}: ${t} × ${t}${sq > 1 ? ` each` : ''} (${sq * t * t} runs)` });
+    plan.push({ title: 'Design', text: `Each treatment once in every row (a day, say) and once in every column (an operator), so both drop out of the comparison (Design step: Latin square; name the rows and columns).${sq > 1 ? ` ${sq} squares give ${sq * t} runs of each.` : ''}` });
+    if (t > 8) warnings.push(`A ${t} × ${t} square needs ${t} days and ${t} operators: with that many treatments, incomplete blocks may suit better.`);
+    read(M('designs-comparative', 'latin-squares', 'Latin squares'));
+  } else {
+    const S = t === 2 ? 2 : t % 2 ? 2 * t : t;
+    // within-subject comparisons: the scatter is the within-subject one, so n subjects give n runs of each
+    const subj = S * Math.max(1, Math.ceil(n / S));
+    Object.assign(out, { design: 'crossover', subjects: subj, runs: subj * t, headline: `${t === 2 ? 'An AB/BA' : 'A Williams'} crossover: ${subj} subjects × ${t} periods (${subj * t} runs)` });
+    plan.push({ title: 'Design', text: `Each subject has every treatment, one per period, in ${t === 2 ? 'the two orders AB and BA' : `${S} sequences in which each treatment follows every other equally often`} (Design step: Crossover, ${subj} subjects). Leave a wash-out between periods.` });
+    notes.push(t === 2 ? 'With two treatments, carry-over cannot be separated from the treatment difference within subjects: the wash-out has to remove it.' : 'The analysis allows for carry-over (the effect of the treatment in the period before), period and subject. The scatter that matters here is within a subject, often much smaller than between subjects.');
+    read(M('designs-comparative', 'crossovers', 'crossovers'));
+  }
+  plan.push({ title: 'Analyse', text: `Compare ${what} (Analyse → Compare levels)${control ? '' : '; a planned contrast (e.g. the new ones against the old) if one was the question'}. Not a t test for each comparison: with ${control ? t - 1 : t * (t - 1) / 2} of them, a false alarm somewhere is likely.` });
+  if (counted) notes.push('Counts and percentages: the comparisons are ratios (rate or odds ratios); the number of runs depends on the size of the counts — check the power on the Design step.');
+  if (a.plates === 'yes') notes.push('On plates: lay the runs out with the balanced layout, so no treatment sits only on the edge or in one row.');
+  if (t > 10) warnings.push(`${t} treatments: most are probably alike. Consider screening them first, or comparing them in a few groups.`);
+  if (out.budget !== null && out.runs > out.budget) warnings.push(`The budget (${out.budget} runs) is below the ${out.runs} this plan uses for a difference of ${delta}× the scatter: fewer treatments, or accept a larger difference.`);
+  lesson('compare');
+  read(M('designs-comparative', '', 'designs for comparing treatments'), M('analysis', 'comparing-treatments', 'comparing treatments'));
+}
+
+// the block counts for which (t, k) can be balanced (as comparative.js bibdSizes, here without the
+// design code): r = bk/t and λ = r(k − 1)/(t − 1) whole, b ≥ t, up to 4 C(t, k) (the full set repeated)
+function bibdSizesG(t, k) {
+  let all = 1; for (let i = 0; i < k; i++) all = all * (t - i) / (i + 1);
+  const out = [];
+  for (let b = t; b <= 4 * Math.round(all); b++) { if ((b * k) % t) continue; const r = b * k / t; if ((r * (k - 1)) % (t - 1)) continue; out.push({ b, r, lambda: r * (k - 1) / (t - 1) }); }
+  return out;
+}
+
 function budgetCheck(out, warnings, stages = false) {
   if (out.budget === null || !out.runs) return;
   if (out.budget < out.runs) warnings.push(`The budget (${out.budget} runs) is below what this plan's first experiment needs (about ${out.runs}). Fewer factors, wider ranges or a smaller design (screening first) are the options; the recommender shows what fits.`);
@@ -415,6 +521,14 @@ const sup = (k) => String(k).split('').map(d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]
 
 /** A study for the answers: placeholder factors (coded ranges −1…1) to edit on the Define step. */
 export function guideStudy(a, { name = 'Study from the guide' } = {}) {
+  if (a.aim === 'compare') {
+    const t = Math.max(2, a.treatments ?? 2), adv = advise(a);
+    const given = String(a.treatmentNames ?? '').split(',').map(x => x.trim()).filter(Boolean);
+    const levels = Array.from({ length: t }, (_, i) => given[i] ?? (i === 0 && a.control !== 'no' ? 'Control' : `T${i + (a.control !== 'no' ? 0 : 1)}`));
+    const uniq = levels.map((l, i) => (levels.indexOf(l) === i ? l : `${l} (${i + 1})`));
+    const description = [`Planned with the guide: ${adv.headline}.`, ...adv.plan.map((p, i) => `${i + 1}. ${p.title}: ${p.text}`)].join('\n');
+    return createStudy({ aikidoe: FORMAT_VERSION, name, description, factors: [{ id: 'treatment', name: 'Treatment', type: 'categorical', levels: uniq }], responses: [guideResponse(a)] });
+  }
   if (a.aim === 'dose') {
     const nc = Math.max(1, a.curves ?? 1), adv = advise(a);
     const factors = [{ id: 'dose', name: 'Dose', low: 0, high: 100 }, ...(nc > 1 ? [{ id: 'sample', name: 'Sample', levels: Array.from({ length: nc }, (_, i) => (i === 0 ? 'reference' : nc === 2 ? 'test' : `test${i}`)) }] : [])];

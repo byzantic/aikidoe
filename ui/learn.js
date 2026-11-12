@@ -94,11 +94,21 @@ function gradePanel(ctx, ex, lesson, ui, set) {
   const active = new Set(a.active ?? []);
   const parts = [];
   parts.push(h('div', { class: 'row' },
-    h('button', { class: 'btn', id: 'fill-answers', onclick: () => { try { const der = deriveAnswers(ex, study); update(dd => { dd.exercise.answers = { active: der.active, effects: der.effects, ...(der.best ? { best: der.best } : {}), ...(der.prediction ? { prediction: der.prediction } : {}), ...(der.ec50 ? { ec50: der.ec50, potency: der.potency } : {}), ...(der.ratios ? { ratios: der.ratios } : {}), ...(der.percent ? { percent: der.percent } : {}) }; }); } catch (e) { ctx.toast(e.message); } } }, 'Fill in from the standard analysis'),
+    h('button', { class: 'btn', id: 'fill-answers', onclick: () => { try { const der = deriveAnswers(ex, study); update(dd => { dd.exercise.answers = { active: der.active, effects: der.effects, ...(der.best ? { best: der.best } : {}), ...(der.prediction ? { prediction: der.prediction } : {}), ...(der.ec50 ? { ec50: der.ec50, potency: der.potency } : {}), ...(der.ratios ? { ratios: der.ratios } : {}), ...(der.percent ? { percent: der.percent } : {}), ...(der.better ? { better: der.better, differences: der.differences } : {}) }; }); } catch (e) { ctx.toast(e.message); } } }, 'Fill in from the standard analysis'),
     h('button', { class: 'btn primary', id: 'grade-analysis', onclick: () => grade(ctx, ex, lesson, set, true) }, 'Grade the standard analysis of my data'),
     h('button', { class: 'btn primary', id: 'grade-answers', onclick: () => grade(ctx, ex, lesson, set, false) }, 'Grade my answers')));
   if (qs.has('active')) parts.push(h('div', { class: 'row small' }, 'Active factors: ', fs.map(f => h('label', { class: 'inline' }, h('input', { type: 'checkbox', checked: active.has(f.id), 'aria-label': `answer active ${f.id}`,
     onchange: (e) => setA(an => { const s = new Set(an.active ?? []); e.target.checked ? s.add(f.id) : s.delete(f.id); an.active = [...s]; }) }), f.id))));
+  if (qs.has('better')) {
+    // comparing treatments: which levels beat the control, and by how much
+    const f = fs[0], ctrl = ex.questions.find(q => q.kind === 'better').control, said = new Set((a.better ?? []).map(String));
+    parts.push(h('div', { class: 'row small' }, `Better than the ${ctrl}: `, f.levels.filter(l => String(l) !== String(ctrl)).map(l => h('label', { class: 'inline' }, h('input', { type: 'checkbox', checked: said.has(String(l)), 'aria-label': `answer better ${l}`,
+      onchange: (e) => setA(an => { const st = new Set((an.better ?? []).map(String)); e.target.checked ? st.add(String(l)) : st.delete(String(l)); an.better = [...st]; }) }), String(l)))));
+    if (qs.has('differences')) parts.push(dataTable([{ key: 'f', label: `difference from the ${ctrl}` }, { key: 'e', label: 'estimate' }, { key: 'l', label: '95% lower' }, { key: 'u', label: '95% upper' }],
+      f.levels.filter(l => said.has(String(l))).map(l => { const e = a.differences?.[l] ?? {}; const inp = (k) => h('input', { class: 'num', type: 'number', step: 'any', value: e[k] ?? '', 'aria-label': `answer difference ${l} ${k}`,
+        onchange: (ev) => setA(an => { an.differences = { ...(an.differences ?? {}) }; an.differences[l] = { ...(an.differences[l] ?? {}), [k]: Number(ev.target.value) }; }) });
+        return { f: `${l} − ${ctrl}`, e: inp('estimate'), l: inp('lower'), u: inp('upper') }; })));
+  }
   if (qs.has('effects')) parts.push(dataTable([{ key: 'f', label: 'effect (low → high)' }, { key: 'e', label: 'estimate' }, { key: 'l', label: '95% lower' }, { key: 'u', label: '95% upper' }],
     fs.filter(f => active.has(f.id)).map(f => { const e = a.effects?.[f.id] ?? {}; const inp = (k) => h('input', { class: 'num', type: 'number', step: 'any', value: e[k] ?? '', 'aria-label': `answer effect ${f.id} ${k}`,
       onchange: (ev) => setA(an => { an.effects = { ...(an.effects ?? {}) }; an.effects[f.id] = { ...(an.effects[f.id] ?? {}), [k]: Number(ev.target.value) }; }) });
@@ -146,7 +156,8 @@ function feedback(r) {
     dataTable([{ key: 'id', label: 'question' }, { key: 'pts', label: 'points', cls: 'n' }, { key: 'note', label: '' }], r.parts.map(p => ({ ...p, pts: p.max ? `${num(p.score, 3)} / ${num(p.max, 3)}` : num(p.score, 3) }))),
     r.ofat ? h('p', { class: 'small', id: 'ofat-score' }, `${r.ofat.strategy[0].toUpperCase()}${r.ofat.strategy.slice(1)}, on the same process and budget, would have scored ${r.ofat.score}.`) : null,
     h('details', {}, h('summary', {}, 'The truth and the model answer'),
-      h('p', { class: 'small' }, r.truth.ec50 !== undefined ? `True EC50 of the test ${num(r.truth.ec50, 4)}; true relative potency ${num(r.truth.potency, 4)}.`
+      h('p', { class: 'small' }, r.truth.better ? `Better than the ${r.truth.control}: ${r.truth.better.join(', ') || 'none'}. True differences from the ${r.truth.control}: ${Object.entries(r.truth.differences).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ')}.`
+        : r.truth.ec50 !== undefined ? `True EC50 of the test ${num(r.truth.ec50, 4)}; true relative potency ${num(r.truth.potency, 4)}.`
         : r.truth.ratios ? `Active: ${r.truth.active.join(', ')}. True ${r.truth.ratio} ratios (high ÷ low): ${Object.entries(r.truth.ratios).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.${r.truth.percent !== undefined ? ` True mean germination at the question’s settings: ${num(r.truth.percent, 3)} %.` : ''}` : `Active: ${r.truth.active.join(', ')}. True effects: ${Object.entries(r.truth.effects).map(([k, v]) => `${k} ${num(v, 4)}`).join(', ') || '—'}.`),
       r.modelAnswer ? h('ul', { class: 'small' }, r.modelAnswer.steps.map(s => h('li', {}, s))) : null));
 }

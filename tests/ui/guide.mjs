@@ -157,6 +157,29 @@ try {
   check('no robustness or yield panels for a mixture', await page.locator('#main').getByText('Yield and sensitivity').count() === 0);
   await shot('mixture-optimise');
 
+  section('comparing a few treatments: five media over several days (issue #80)');
+  {
+    await page.click('[data-step="guide"]'); await settle();
+    await page.click('#guide-restart'); await settle();
+    await choose('compare'); await choose('good');
+    check('asked how many treatments, not factors', await current() === 'treatments');
+    await type('treatments', 5);
+    await page.fill('input[aria-label="guide treatmentNames"]', 'Standard, M-2, M-3, M-4, M-5'); await page.click('#guide-next'); await settle();
+    check('a control?', await current() === 'control');
+    await choose('yes');
+    check('how the runs are done', await current() === 'layout');
+    await choose('groups'); await choose('no'); await choose('measurement'); await choose('medium'); await page.click('#guide-skip'); await settle();
+    const t = await page.textContent('#guide-result');
+    check('the plan: randomised complete blocks, Dunnett, the lesson on many t tests', /Randomised complete blocks: \d+ blocks of 5/.test(await page.textContent('.guide-headline')) && /Dunnett/.test(t)
+      && await page.locator('[data-guide-lesson="compare"]').count() === 1 && await page.locator('#guide-designs').count() === 0, t.slice(0, 300));
+    await page.click('#guide-create'); await settle();
+    s = await state();
+    check('the study: one factor, the five media as its levels', s.study.factors.length === 1 && s.study.factors[0].levels.join() === 'Standard,M-2,M-3,M-4,M-5');
+    await page.click('[data-step="design"]'); await settle();
+    check('the Design step opens on complete blocks, with the blocks the guide suggests', await page.locator('tr.sel[data-design="rcbd"]').count() === 1 && Number(await page.inputValue('input[aria-label="complete blocks"]')) === s.ui.design.cbBlocks);
+    await shot('guide-compare');
+  }
+
   section('no page errors');
   check('no page errors', !errors.length, errors.join('\n'));
 } finally {
