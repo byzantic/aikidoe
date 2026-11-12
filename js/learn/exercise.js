@@ -15,7 +15,10 @@ import { foldover } from '../design/augment.js';
 import { fitModel, predict } from '../model/fit.js';
 import { glmConfint } from '../model/glm.js';
 import { fitMixedModel } from '../model/mixed.js';
-import { studentT } from '../dist.js';
+import { studentT, nct } from '../dist.js';
+import { completeBlocks } from '../design/comparative.js';
+import { compareLevels } from '../model/compare.js';
+import { qmvtBox } from '../mvt.js';
 import { solve as solveLin } from '../linalg.js';
 import { studyPower, studyGlmPower } from '../model/power.js';
 import { SCENARIOS } from './scenarios.js';
@@ -63,6 +66,10 @@ export const TOPICS = {
   // variation when harder); the active factors and their rate or odds ratios
   counts: { title: 'Counts and percentages', lesson: 17, counts: true, k: (d) => (d === 'easy' ? 3 : 4), budget: (k) => (k === 3 ? 16 : 32), active: (g) => 2 + g.int(2), interaction: 0.5,
     questions: ['active', 'ratios'] },
+  // comparing a few treatments (issue #80): one factor, a control and five others, one or two of
+  // them better; six runs a day, and days differ; which beat the control, and by how much
+  compare: { title: 'Comparing a few treatments', lesson: 18, compare: true, k: () => 1, budget: 30,
+    nuisance: (sigma) => ({ day: { runs: 6, sd: 2 * sigma } }), questions: ['better', 'differences'] },
   plate: { title: 'Plates: where a sample sits matters', lesson: 14, k: (d) => (d === 'easy' ? 3 : 4), budget: 48, active: (g) => 2 + g.int(2), interaction: 0.5,
     plate: true, nuisance: (sigma) => ({ plate: { edge: -2 * sigma, corner: -1 * sigma, col: 0.6 * sigma, colQuad: 1.2 * sigma, rowSd: 0.8 * sigma } }),
     questions: ['active', 'effects'] },
@@ -105,7 +112,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   const g0 = rng(seed ^ 0x5eed);
   // plate scenarios belong to the plate topic (and only they have plates), so the other topics'
   // choice of scenario — and their exercises for a given seed — are as before
-  const kindOf = (x) => (x.mixture ? 'mixture' : x.dose ? 'dose' : x.plate ? 'plate' : x.counts ? 'counts' : null);
+  const kindOf = (x) => (x.mixture ? 'mixture' : x.dose ? 'dose' : x.plate ? 'plate' : x.counts ? 'counts' : x.compare ? 'compare' : null);
   const pool0 = Object.keys(SCENARIOS).filter(id => kindOf(SCENARIOS[id]) === kindOf(T));
   const scId = scenario ?? pool0[g0.int(pool0.length)];
   const sc = SCENARIOS[scId];
@@ -115,7 +122,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   // factors: the hard-to-change one when the topic needs it; continuous for response surfaces
   let pool = sc.factors.filter(f => !f.levels && !f.htc);
   if (topic !== 'rsm' && topic !== 'split-plot' && !T.dose && g0.random() < 0.5) pool = [...pool, sc.factors.find(f => f.levels)];
-  let chosen = T.dose || T.mixture ? sc.factors : pick(g0, pool, k - (T.htc ? 1 : 0));
+  let chosen = T.dose || T.mixture || T.compare ? sc.factors : pick(g0, pool, k - (T.htc ? 1 : 0));
   if (T.htc) chosen = [sc.factors.find(f => f.htc), ...chosen];
   const mixture = T.mixture ? { components: chosen.map(f => f.id), total: sc.mixture.total } : undefined;
   const factors = createStudy({ name: 'x', factors: chosen.map(f => ({ ...f, htc: !!(T.htc && f.htc) })), ...(mixture ? { mixture } : {}) }).factors;
@@ -127,12 +134,12 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   let last = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const g = rng((seed * 2654435761 + attempt * 97 + 13) >>> 0);
-    const truth = T.dose ? { intercept: 0, terms: {} } : T.mixture ? mixtureTruth(difficulty, g, factors, response, mixture) : T.counts ? countsTruth(topic, difficulty, g, factors, response) : makeTruth(topic, difficulty, g, factors, response);
+    const truth = T.compare ? compareTruth(difficulty, g, factors, response, sc.compare.control) : T.dose ? { intercept: 0, terms: {} } : T.mixture ? mixtureTruth(difficulty, g, factors, response, mixture) : T.counts ? countsTruth(topic, difficulty, g, factors, response) : makeTruth(topic, difficulty, g, factors, response);
     const curve = T.dose ? doseTruth(sc.dose, factors, g, difficulty) : null;
     const counted = T.counts ? countNoise(difficulty, g, response) : null;
     const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, ...(counted ?? { sigma: response.sigma }), truth, decimals: response.decimals, ...(curve ? { curve } : {}) }],
       nuisance: T.nuisance ? T.nuisance(response.sigma) : {}, ...(sc.plate ? { controls: sc.plate.truth } : {}) };
-    const questions = makeQuestions(T.dose ? { ...T, refLabel: factors[1].levels[0], testLabel: factors[1].levels[1] } : T, factors, response, g, mixture);
+    const questions = makeQuestions(T.dose ? { ...T, refLabel: factors[1].levels[0], testLabel: factors[1].levels[1] } : T.compare ? { ...T, control: sc.compare.control } : T, factors, response, g, mixture);
     if (T.counts && isProportion(response.distribution)) questions.push(percentQuestion(proc, factors, response));
     const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt, mixture });
     const ref = referenceStrategy(ex, ex.truth);
@@ -145,6 +152,17 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
     }
   }
   throw new Error(`could not generate a solvable ${topic} exercise for seed ${seed} (last: score ${last.grade.score}, power ${last.power.toFixed(2)})`);
+}
+
+/**
+ * The true means of a compare exercise: the control at the scenario's base, one or two of the
+ * others better by the difficulty's effect size (and up to half as much again), the rest the same
+ * as the control. Terms: an indicator per better level.
+ */
+function compareTruth(difficulty, g, factors, response, control) {
+  const f = factors[0], m = DIFFICULTIES[difficulty], dir = response.goal === 'minimize' ? -1 : 1;
+  const better = pick(g, f.levels.filter(l => String(l) !== String(control)), 1 + g.int(2));
+  return { intercept: response.base, terms: Object.fromEntries(better.map(l => [`${f.id}.${l}`, dir * (m + 0.5 * m * g.random()) * response.sigma])) };
 }
 
 /**
@@ -240,6 +258,8 @@ function makeQuestions(T, factors, response, g, mixture) {
         ? `For each factor that matters, estimate its odds ratio (the odds of ${response.oddsOf ?? response.name.toLowerCase()} at its high setting ÷ at its low setting), with a 95 % interval.`
         : `For each factor that matters, estimate its rate ratio (the mean ${response.name.toLowerCase()}${per} at its high setting ÷ at its low setting), with a 95 % interval.` });
     }
+    if (q === 'better') qs.push({ id: 'better', kind: 'better', control: T.control, text: `Which ${factors[0].name.toLowerCase()}s give ${response.goal === 'minimize' ? 'less' : 'more'} ${response.name.toLowerCase()} than the ${T.control}?` });
+    if (q === 'differences') qs.push({ id: 'differences', kind: 'differences', control: T.control, text: `For each that does, how much ${response.goal === 'minimize' ? 'less' : 'more'} (${factors[0].name.toLowerCase()} − ${T.control}), with a 95 % interval?` });
     if (q === 'effects') qs.push({ id: 'effects', kind: 'effects', text: `For each factor that matters, estimate its effect (low → high) on ${response.name.toLowerCase()}, with a 95 % interval.` });
     if (q === 'best') qs.push({ id: 'best', kind: 'best', goal: response.goal, text: `Which settings ${goal} ${response.name.toLowerCase()}, within the ranges?` });
     if (q === 'prediction') {
@@ -331,6 +351,7 @@ export function deriveAnswers(ex, study, { alpha = 0.05 } = {}) {
   const T = TOPICS[ex.topic], r = study.responses[0].id;
   if (T.dose) return doseAnswers(ex, study);
   if (T.counts) return countAnswers(ex, study, { alpha });
+  if (T.compare) return compareAnswers(ex, study, { alpha });
   const formula = T.mixture ? `${r} ~ mixquadratic` : T.curvature ? `${r} ~ quadratic` : (ex.topic === 'screening' || ex.topic === 'fraction') ? `${r} ~ main` : `${r} ~ 2fi`;
   const mixed = study.design.runs.some(x => x.wholePlot !== undefined);
   const fit = mixed ? fitMixedModel(study, formula) : fitModel(study, formula);
@@ -418,6 +439,11 @@ export function referenceStrategy(ex, truth = truthOf(ex)) {
       const a = countAnswers(ex, st);
       steps.push(`a ${prop ? 'binomial' : 'Poisson'} model (${prop ? 'logit' : 'log'} link${prop ? '' : ', the volume plated as the exposure'}) with main effects and two-factor interactions; ${a.analysis === 'as declared' ? 'no overdispersion' : `${a.analysis}`}; ${prop ? 'odds' : 'rate'} ratios from the coefficients, with ${/Firth/.test(a.analysis) ? 'Wald' : 'profile-likelihood'} intervals`);
       return { strategy: 'reference', steps, study: st, answers: a };
+    }
+    case 'compare': {
+      const f = base.factors[0], t = f.levels.length, b = Math.floor(ex.budget / t);
+      st = make(completeBlocks(t, b), `randomised complete blocks: ${b} blocks of ${t}, one a day, each ${f.name.toLowerCase()} once per day (${b * t} runs); fit with the day as a block; compare each with the ${controlOf(ex)} by Dunnett's method`);
+      break;
     }
     case 'split-plot': st = make(splitPlotFull(levels, base.factors.map(f => !!f.htc), { replicates: 3 }), `split-plot full factorial, hard-to-change ${base.factors.find(f => f.htc).id} reset for 6 whole plots (3 per level); mixed model, Kenward–Roger tests`); break;
     default: throw new Error(`no reference strategy for ${ex.topic}`);
@@ -531,11 +557,51 @@ export function coxStrategy(ex, truth = truthOf(ex)) {
 /** The strategy a lesson compares with: one factor at a time, the tidy plate layout, or evenly spaced doses. */
 export function comparisonStrategy(ex, truth = truthOf(ex)) {
   const T = TOPICS[ex.topic];
+  if (T.compare) return tTestStrategy(ex, truth);
   if (T.dose) return linearDoseStrategy(ex, truth);
   if (T.mixture) return coxStrategy(ex, truth);
   if (T.plate) return tidyPlateStrategy(ex, truth);
   if (T.counts) return leastSquaresCountStrategy(ex, truth);
   return ofatStrategy(ex, truth);
+}
+
+// ---------------------------------------------------------------- comparing treatments
+
+const controlOf = (ex) => ex.questions.find(q => q.control !== undefined)?.control;
+
+/**
+ * The compare topic's analysis: the one-factor model (with the block term when the design has
+ * blocks), each level against the control by Dunnett's method; the levels better than the control
+ * (in the response's goal) at α, with their simultaneous intervals.
+ */
+export function compareAnswers(ex, study, { alpha = 0.05 } = {}) {
+  const f = study.factors[0], r = study.responses[0], dir = r.goal === 'minimize' ? -1 : 1;
+  const fit = fitModel(study, `${r.id} ~ ${f.id}`);
+  const cmp = compareLevels(fit, f.id, { control: controlOf(ex), method: 'dunnett' });
+  const better = cmp.comparisons.filter(c => c.p < alpha && Math.sign(c.estimate) === dir).map(c => c.a);
+  const differences = Object.fromEntries(cmp.comparisons.filter(c => better.includes(c.a)).map(c => [c.a, { estimate: c.estimate, lower: c.lower, upper: c.upper }]));
+  return { better, differences, runs: study.design.runs.length, formula: fit.formula ?? `${r.id} ~ ${f.id}` };
+}
+
+/**
+ * A t test for each level against the control, as often done by hand: every level the same number
+ * of times in a completely random order (no blocks), each test on its own two groups, at 5 %
+ * without adjustment, its interval the plain t interval. For comparison with the reference.
+ */
+export function tTestStrategy(ex, truth = truthOf(ex)) {
+  const base = ex.study, f = base.factors[0], t = f.levels.length, reps = Math.floor(ex.budget / t), ctrl = controlOf(ex);
+  const dir = base.responses[0].goal === 'minimize' ? -1 : 1;
+  let st = createStudy({ ...base, design: toStudyDesign(base, fullFactorial([t], { replicates: reps }), { seed: ex.seed }) });
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  const r = base.responses[0].id, y = (lv) => st.design.runs.filter(x => String(x.settings[f.id]) === String(lv)).map(x => st.observations.find(o => o.run === x.run && o.response === r).value);
+  const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length, ss = (a) => a.reduce((s, v) => s + (v - mean(a)) ** 2, 0);
+  const yc = y(ctrl), better = [], differences = {};
+  for (const lv of f.levels.filter(l => String(l) !== String(ctrl))) {
+    const ya = y(lv), df = ya.length + yc.length - 2, sp = Math.sqrt((ss(ya) + ss(yc)) / df), se = sp * Math.sqrt(1 / ya.length + 1 / yc.length);
+    const d = mean(ya) - mean(yc), tq = studentT.ppf(0.975, df);
+    if (Math.abs(d) > tq * se && Math.sign(d) === dir) { better.push(lv); differences[lv] = { estimate: d, lower: d - tq * se, upper: d + tq * se }; }
+  }
+  return { strategy: 'a t test for each, no blocks', steps: [`every ${f.name.toLowerCase()} ${reps} times in a random order, no blocks; a two-sample t test of each against the ${ctrl} at 5 %, unadjusted`], study: st, answers: { better, differences, runs: st.design.runs.length } };
 }
 
 /**
@@ -622,6 +688,18 @@ export function leastSquaresCountStrategy(ex, truth = truthOf(ex)) {
 
 export function referencePower(ex, truth, study) {
   if (TOPICS[ex.topic].counts) return countPower(ex, truth, study);
+  if (TOPICS[ex.topic].compare) {
+    // each better level against the control by Dunnett's method (balanced: correlation ½), with
+    // the error df of the blocked one-way model: the smallest power
+    const resp = truth.process.responses[0], f = study.factors[0], t = f.levels.length;
+    const n = study.design.runs.length / t, blocks = new Set(study.design.runs.map(r => r.block)).size;
+    const df = study.design.runs.length - t - (blocks > 1 ? blocks - 1 : 0);
+    const R = Array.from({ length: t - 1 }, (_, i) => Array.from({ length: t - 1 }, (_, j) => (i === j ? 1 : 0.5)));
+    const c = qmvtBox(0.95, R, df);
+    let min = 1;
+    for (const b of Object.values(resp.truth.terms)) min = Math.min(min, nct.sf(c, df, Math.abs(b) / (resp.sigma * Math.sqrt(2 / n))));
+    return min;
+  }
   if (TOPICS[ex.topic].dose) {
     // the potency question: the power of the reference's last stage for the true ratio
     const resp = truth.process.responses[0], c = resp.curve, [ref, test] = Object.keys(c.levels);
@@ -690,6 +768,11 @@ export function trueFacts(ex, truth = truthOf(ex)) {
     const [ref, test] = Object.keys(resp.curve.levels);
     return { active: [], effects: {}, sigma: resp.sigma, ec50: resp.curve.levels[test].e, potency: resp.curve.levels[ref].e / resp.curve.levels[test].e, reference: ref, test };
   }
+  if (TOPICS[ex.topic].compare) {
+    const f = ex.study.factors[0], diff = (l) => resp.truth.terms[`${f.id}.${l}`] ?? 0, dir = (ex.study.responses[0].goal ?? MAX) === 'minimize' ? -1 : 1;
+    const others = f.levels.filter(l => String(l) !== String(controlOf(ex)));
+    return { active: [], effects: {}, better: others.filter(l => dir * diff(l) > 0), differences: Object.fromEntries(others.map(l => [l, diff(l)])), sigma: resp.sigma, control: controlOf(ex) };
+  }
   const active = [...new Set(Object.keys(resp.truth.terms).flatMap(t => t.replace(/I\((\w+)\^2\)/g, '$1').split(':')))];
   const effects = Object.fromEntries(ex.study.factors.filter(f => resp.truth.terms[f.id] !== undefined).map(f => [f.id, 2 * resp.truth.terms[f.id]]));
   if (resp.distribution) {
@@ -715,7 +798,7 @@ export function trueFacts(ex, truth = truthOf(ex)) {
  */
 export function gradeAnswers(ex, truth, answers, { runs } = {}) {
   const F = trueFacts(ex, truth), parts = [];
-  const W = { active: 40, effects: 25, ratios: 25, percent: 20, best: 25, prediction: 10, ec50: 50, potency: 50 };
+  const W = { active: 40, effects: 25, ratios: 25, percent: 20, best: 25, prediction: 10, ec50: 50, potency: 50, better: 50, differences: 50 };
   const qs = ex.questions.filter(q => W[q.kind]);
   const total = qs.reduce((a, q) => a + W[q.kind], 0);
   for (const q of qs) {
@@ -726,6 +809,25 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
       const f1 = prec + rec ? 2 * prec * rec / (prec + rec) : 0;
       const missed = [...real].filter(x => !said.has(x)), extra = [...said].filter(x => !real.has(x));
       parts.push({ id: 'active', max, score: max * f1, note: `precision ${(100 * prec).toFixed(0)} %, recall ${(100 * rec).toFixed(0)} %${missed.length ? `; missed ${missed.join(', ')}` : ''}${extra.length ? `; not active: ${extra.join(', ')}` : ''}` });
+    } else if (q.kind === 'better') {
+      // as the active factors: precision and recall of the levels said to beat the control
+      const said = new Set((answers.better ?? []).map(String)), real = new Set(F.better.map(String));
+      const tp = [...said].filter(x => real.has(x)).length, prec = said.size ? tp / said.size : real.size ? 0 : 1, rec = real.size ? tp / real.size : 1;
+      const f1 = prec + rec ? 2 * prec * rec / (prec + rec) : 0;
+      const missed = [...real].filter(x => !said.has(x)), extra = [...said].filter(x => !real.has(x));
+      parts.push({ id: 'better', max, score: max * f1, note: `${missed.length ? `missed ${missed.join(', ')}` : 'none missed'}${extra.length ? `; no better than the ${F.control}: ${extra.join(', ')} (a false alarm)` : ''}` });
+    } else if (q.kind === 'differences') {
+      // for each level truly better: the sign and whether the interval holds the true difference
+      const ids = F.better.map(String);
+      let s = 0; const notes = [];
+      for (const id of ids) {
+        const a = answers.differences?.[id], t = F.differences[id];
+        if (!a || !Number.isFinite(a.estimate)) { notes.push(`${id}: no estimate`); continue; }
+        const signOk = Math.sign(a.estimate) === Math.sign(t), inside = a.lower <= t && t <= a.upper;
+        s += (signOk ? 0.5 : 0) + (inside ? 0.5 : 0);
+        if (!signOk || !inside) notes.push(`${id}: true difference ${t.toPrecision(3)}, yours ${a.estimate.toPrecision(3)} [${(a.lower ?? NaN).toPrecision(3)}, ${(a.upper ?? NaN).toPrecision(3)}]`);
+      }
+      parts.push({ id: 'differences', max, score: ids.length ? max * s / ids.length : max, note: notes.join('; ') || 'every true difference is inside your interval' });
     } else if (q.kind === 'effects') {
       const ids = Object.keys(F.effects);
       let s = 0; const notes = [];
@@ -785,7 +887,7 @@ export function gradeAnswers(ex, truth, answers, { runs } = {}) {
     if (over) score -= 20;
   }
   score = Math.max(0, Math.round(score * 10) / 10);
-  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue, ...(F.ec50 !== undefined ? { ec50: F.ec50, potency: F.potency } : {}), ...(F.ratios ? { ratios: F.ratios, ratio: F.ratio } : {}), ...(F.percent !== undefined ? { percent: F.percent } : {}) } };
+  return { score, parts, truth: { active: F.active, effects: F.effects, best: F.best, bestValue: F.bestValue, ...(F.better ? { better: F.better, differences: F.differences, control: F.control } : {}), ...(F.ec50 !== undefined ? { ec50: F.ec50, potency: F.potency } : {}), ...(F.ratios ? { ratios: F.ratios, ratio: F.ratio } : {}), ...(F.percent !== undefined ? { percent: F.percent } : {}) } };
 }
 
 /** Grade a study: its exercise answers if given, else answers derived by the standard analysis. */

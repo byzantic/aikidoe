@@ -47,6 +47,7 @@ const DESIGN = {
   },
   counts: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '2'); await page.keyboard.press('Tab'); },
   plate: async () => { await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
+  compare: async () => { await page.click('tr[data-design="rcbd"]'); await settle(); await page.fill('input[aria-label="complete blocks"]', '5'); await page.keyboard.press('Tab'); },
   'split-plot': async () => { await page.click('tr[data-design="sp-full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '3'); await page.keyboard.press('Tab'); },
 };
 
@@ -139,6 +140,35 @@ try {
     await page.fill(`input[aria-label="answer ratio ${f} upper"]`, String(1 / v.lower)); await page.keyboard.press('Tab'); await settle();
     await page.click('#grade-answers'); await settle();
     check('a ratio the wrong way up loses its points', Number(await page.getAttribute('#grade-result [data-score]', 'data-score')) < 100 && /true (rate|odds) ratio/.test(await page.textContent('#grade-result')));
+  }
+
+  section('comparing treatments: which beat the control, answered by hand (issue #80)');
+  {
+    await page.goto(`${url}#lesson=compare&difficulty=hard&seed=6`); await page.waitForSelector('#exercise'); await settle();
+    const ex = generateExercise({ topic: 'compare', difficulty: 'hard', seed: 6 }), ref = referenceStrategy(ex);
+    check('hint before a design: six a day, days differ — complete blocks', /randomised complete blocks/.test(await page.textContent('#exercise-hints')));
+    await page.click('tr[data-design="full"]'); await settle(); await page.fill('input[aria-label="replicates"]', '5'); await page.keyboard.press('Tab'); await settle();
+    await page.click('#create-design'); await settle();
+    check('hint: a design without blocks — the days', /days differ/.test(await page.textContent('#exercise-hints')));
+    await page.click('[data-step="design"]'); await settle();
+    await page.click('tr[data-design="rcbd"]'); await settle(); await page.fill('input[aria-label="complete blocks"]', '5'); await page.keyboard.press('Tab'); await settle();
+    await page.click('#create-design'); await settle();
+    await page.click('#get-results'); await settle();
+    check('hint: compare each with the control, not a t test for each', /Dunnett/.test(await page.textContent('#exercise-hints')));
+    await page.click('#toggle-grade'); await settle();
+    await page.click('#fill-answers'); await settle();
+    const a = (await st()).exercise.answers;
+    check('"fill in" gives the model answer\'s levels and differences', JSON.stringify(a.better.slice().sort()) === JSON.stringify(ref.answers.better.slice().sort())
+      && Object.entries(a.differences).every(([k, v]) => Math.abs(v.estimate - ref.answers.differences[k].estimate) < 1e-9));
+    const lv = ref.answers.better[0];
+    check('the answer form: a box per level, a difference row for each one ticked', await page.locator('input[aria-label^="answer better "]').count() === 5 && await page.locator(`input[aria-label="answer difference ${lv} estimate"]`).count() === 1);
+    // a false alarm: tick a level that is no better
+    const other = ex.study.factors[0].levels.slice(1).find(l => !ref.answers.better.includes(l));
+    await page.check(`input[aria-label="answer better ${other}"]`); await settle();
+    await page.click('#grade-answers'); await settle();
+    const sc = Number(await page.getAttribute('#grade-result [data-score]', 'data-score'));
+    check('a false alarm costs points', sc < 100 && /a false alarm/.test(await page.textContent('#grade-result')), String(sc));
+    check('the comparison: a t test for each, no blocks', /A t test for each, no blocks, on the same process and budget, would have scored/.test(await page.textContent('#ofat-score')));
   }
 
   section('counts: germination asks a percentage near 0 or 100 %');

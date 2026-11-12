@@ -30,6 +30,7 @@ and ranks the designs that fit.
 
 | situation | design | runs |
 |---|---|---|
+| a few treatments of one factor: media, suppliers, protocols | randomised complete blocks; a Latin square for two groupings; incomplete blocks; a crossover ([designs](designs-comparative.md)); compare by Tukey or Dunnett | t × (4–8) |
 | 2–4 factors, interactions matter | full factorial 2ᵏ, replicated or with centre points | 8–32 |
 | 5–8 factors, all interactions wanted | resolution V fraction | 16 (5), 32 (6), 64 (7–8) |
 | 6–16 factors, screening | resolution IV fraction | 16 (≤ 8), 32 (≤ 16) |

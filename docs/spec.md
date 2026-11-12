@@ -509,7 +509,7 @@ Progress: best score per lesson in `localStorage` (`aikidoe:learn`, guarded). Li
 in CI): for every available lesson and two exercises each, the reference strategy driven through
 the UI — design chosen on the Design step, results, the fold-over as a next stage — produces the
 reference design and gets 100; hints, the answer form, progress and locked lessons; every manual
-link in the lesson texts resolves (manual tests). **Tested:** for each lesson and a range of seeds and difficulties, the reference
+link in the lesson texts resolves (manual tests). Lesson 18 (#80, `compare`): one factor, a control and five others, one or two better by the difficulty's size, six runs a day with day shifts of 2σ; the reference is randomised complete blocks (5 × 6) and Dunnett's method; the comparison is a t test for each, completely randomised; questions `better` (graded as the active factors) and `differences` (sign and coverage); its power is Dunnett's, the critical value from the multivariate t with correlation ½. The Guide's aim `compare` asks the number of treatments (and names), whether there is a control, and how the runs fall (`none`, `groups`, `small` with a block size, `two`, `subjects`), and suggests the full factorial, complete blocks, a BIBD (the smallest balanced b whose r × efficiency reaches the replication), Latin squares or a Williams crossover, with the replication for an 80 % chance at Bonferroni's α/m; Create opens the Design step on that design with its sizes. **Tested:** for each lesson and a range of seeds and difficulties, the reference
 strategy solves the generated exercise and the grader gives it full marks; a deliberately poor
 strategy (one-factor-at-a-time, ignoring blocks) scores lower; generation is reproducible from
 the seed.

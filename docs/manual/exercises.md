@@ -8,17 +8,17 @@ and grade the answers against the truth.
 
 ## Learn mode
 
-The app's **Learn** tab is a tutorial built on these exercises: seventeen lessons, from why
-one-factor-at-a-time falls short to split-plots, plates, dose–response, mixtures and counts. Each lesson is a short explanation with links into
+The app's **Learn** tab is a tutorial built on these exercises: eighteen lessons, from why
+one-factor-at-a-time falls short to split-plots, plates, dose–response, mixtures, counts and comparing a few treatments. Each lesson is a short explanation with links into
 this manual and a task on a generated exercise. While you work, a banner over the four steps
 shows the task, the budget and hints (a design over budget, days that are not blocked, a
 hard-to-change factor reset every run, a fraction whose effects are aliased). **Get results** asks
 the virtual process for the runs you designed; **Answer and grade** takes your answers — or grades
 the standard analysis of your data — and shows the score, the truth and the model answer. Lesson 1
 also shows what one-factor-at-a-time would have scored on the same process; the plate, dose,
-mixture and counts lessons compare with the usual shortcut for their kind of experiment (a tidy
+mixture, counts and comparing-treatments lessons compare with the usual shortcut for their kind of experiment (a tidy
 plate layout, evenly spaced doses, one component at a time, least squares on the raw counts or
-on the percentages).
+on the percentages, a t test for each treatment without blocks).
 
 Lessons whose exercises are not written yet (constraints, several responses, gauge studies,
 robust design, simulation) are listed but locked; the features themselves are in the app. Progress
@@ -60,6 +60,7 @@ The app's simulated examples are virtual processes too.
 | `dose` | dose–response | a reference and a test compound, 48 runs: the EC50 of the test and its relative potency ([dose–response](dose-response.md)) |
 | `mixture` | mixtures | three components adding up to 100, with limits, 14 runs: the best blend and a prediction ([mixture designs](designs-mixture.md)) |
 | `counts` | counts and percentages | colonies per plate (with the volume plated) or seeds germinated per dish (10–50 sown, recorded with each dish), 16 or 32 runs: the active factors and their rate or odds ratios; for germination also the percentage at the corner nearest 0 or 100 % ([counts and proportions](analysis.md#counts-and-proportions)) |
+| `compare` | comparing a few treatments | a control and five others, six runs a day and days that differ, 30 runs: which beat the control, and by how much ([comparing treatments](analysis.md#comparing-treatments), [complete blocks](designs-comparative.md#randomised-complete-blocks)) |
 | `plate` | microplates | 48 runs in a 96-well plate whose edge, rows and columns differ: lay the runs out, then analyse ([microplates](plates.md)) |
 
 Each comes in three difficulties — *easy*, *medium*, *hard* — which set the smallest active effect
@@ -70,7 +71,8 @@ the variation beyond Poisson or binomial: none when easy, then a negative binomi
 etch, CVD deposition, reactor yield, coupler tuning; for the plate topic, an enzyme assay and a
 cell-viability assay; for the dose topic, compound potency and an inhibitor batch; for the mixture topic, a
 cell-culture supplement, a ceramic glaze and a bronze; for the counts topic, bacterial
-transformation and seed germination) give the factors
+transformation and seed germination; for the compare topic, growth media, catalyst suppliers and
+antibody clones) give the factors
 names, units and ranges.
 
 ## Solvable by construction
@@ -111,7 +113,8 @@ cvd.aikidoe.json: results for 16 runs (budget 16)
 
 Analyse as usual, then either record your answers (`doe exercise answer cvd.aikidoe.json
 --active … --effect "id=estimate:lower:upper" … --best "…" --prediction v`, and for counts
-`--ratio "id=estimate:lower:upper"` and `--percent estimate:lower:upper`) or let the grader
+`--ratio "id=estimate:lower:upper"` and `--percent estimate:lower:upper`; for comparing treatments
+`--better L1,L2` and `--difference "L1=estimate:lower:upper"`) or let the grader
 analyse your data the standard way:
 
 ```console

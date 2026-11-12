@@ -78,6 +78,13 @@ A **generalised linear model** works on the log of the mean count (or the log-od
 
 The design is the easy part: a replicated full factorial fits the budget. Run it (the Run step shows the volume plated beside each colony count, or the seeds sown beside each dish's germinated seeds). On the Analyse step, look at the overdispersion check and switch model if it asks, then answer with the active factors and their ratios from low to high, each with its interval (the Analyse step's ratios are per coded unit, half the range: square them, ends of the interval too). For germination, you are also asked the percentage at one setting — near 0 or 100 %, where a straight line through percentages runs out of room. Then compare with what least squares on the raw numbers would have given.`,
     manual: [M('analysis', 'counts-and-proportions', 'counts and proportions'), M('concepts', 'power', 'power for counts')] },
+  { id: 'compare', n: 18, title: 'Comparing a few treatments: why many t tests mislead', topic: 'compare', difficulty: 'medium', compare: true,
+    text: `Six media, a standard and five new ones: which of the new ones beat the standard? The obvious way is a t test of each against the standard. But each test has a 5 % chance of a false alarm, and if none of the five is really better, the chance that at least one of them looks "significant" is about 18 % (the tests share the standard, so it is a little under 1 − 0.95⁵ = 23 %). Compare every pair (fifteen tests) and it is about 34 %. The more you look, the more you find, even where there is nothing.
+
+**Dunnett's method** compares each level with the control and allows for all the comparisons at once, so the chance of any false alarm stays at 5 %. **Tukey's method** does the same for every pair, with **letters**: levels that share a letter are not shown to differ. The price is a slightly larger difference needed to call each one.
+
+Here six runs fit in a day, and days differ. Put each day in a **block** that holds every treatment once (randomised complete blocks), so the day-to-day shifts drop out of every comparison. Then compare each treatment with the control (Analyse → Compare levels, each with a control). Answer with the ones that are better and by how much.`,
+    manual: [M('analysis', 'comparing-treatments', 'comparing treatments'), M('designs-comparative', 'randomised-complete-blocks', 'randomised complete blocks'), M('designs-comparative', '', 'designs for comparing treatments')] },
   { id: 'gauge', n: 11, title: 'Measurement systems: gauge R&R', topic: null,
     text: 'Coming later: is the measurement good enough for the experiment? A gauge study on a virtual gauge.', manual: [M('process', 'gauge-rr', 'gauge R&R')] },
   { id: 'robust', n: 12, title: 'Robust design', topic: null,
@@ -91,7 +98,8 @@ export function hints(lesson, ex, study) {
   const out = [], d = study.design, budget = ex.budget, T = TOPICS[ex.topic];
   const results = d && study.observations.some(o => o.value !== null);
   if (!d) {
-    out.push(T.counts ? `Choose a design of at most ${budget} runs on the Design step: a full factorial, replicated, fits the budget. The power section has a choice for count and proportion responses.`
+    out.push(T.compare ? `Choose a design of at most ${budget} runs on the Design step. Six runs fit in a day and days differ: randomised complete blocks, one block a day, take the days out of the comparison.`
+      : T.counts ? `Choose a design of at most ${budget} runs on the Design step: a full factorial, replicated, fits the budget. The power section has a choice for count and proportion responses.`
       : T.mixture ? `Choose a mixture design of at most ${budget} runs on the Design step: the components add up to ${study.mixture?.total}, so factorial designs do not apply.`
       : T.dose ? `Plan the doses on the Design step (Dose–response design), at most ${budget} runs: a wide range-finding series first, a decade or so apart, leaves room for a second stage.`
       : `Choose a design of at most ${budget} runs on the Design step${ex.topic === 'screening' ? ' — Recommend, with goal "screen" and the budget, ranks the options' : ''}.`);
@@ -103,6 +111,14 @@ export function hints(lesson, ex, study) {
     if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
     if (results && stages === 1 && n < budget) out.push(`Look at the curves on the Analyse step: are there several doses on the slope? If not, add doses around the EC50 as a second stage (${budget - n} runs left).`);
     if (results && !out.length) out.push('Analyse the curves, then grade: by your own answers, or by the standard analysis (parallel curves) of your data.');
+    return out;
+  }
+  if (T.compare) {
+    const n = d.runs.length, f = study.factors[0];
+    if (n > budget) out.push(`${n} runs; the budget is ${budget}.`);
+    if (!d.runs.some(r => r.block !== undefined)) out.push(`The runs take ${Math.ceil(n / 6)} days, six a day, and days differ. With randomised complete blocks (Design step) each day holds every ${f.name.toLowerCase()} once, and the day-to-day shifts drop out.`);
+    if (results && d.runs.some(x => !study.observations.some(o => o.run === x.run && o.value !== null))) out.push('Some runs have no results yet: get them before analysing.');
+    if (results && !out.length) out.push(`On the Analyse step, Compare levels: each with a control (${ex.questions.find(q => q.control)?.control}), Dunnett's method. Not a t test for each: with five comparisons, one false alarm somewhere is likely.`);
     return out;
   }
   if (T.counts) {

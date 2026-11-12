@@ -68,7 +68,7 @@ ratio
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,
 hard-to-change ones, groups of runs, curvature, constraints, the effect that matters, budget — one
 question at a time with why it matters, then suggests a staged plan, ranks the designs that fit,
-and creates the study (link: `index.html#guide`). **Learn** has lessons on generated exercises. The
+and creates the study (link: `index.html#guide`). Comparing a few treatments is one of its aims: it suggests complete blocks, a Latin square, incomplete blocks or a crossover, and Tukey or Dunnett. **Learn** has lessons on generated exercises, one of them on why many t tests mislead. The
 manual's [cheat sheet](docs/manual/cheat-sheet.md) has the same questions on one page.
 
 Once GitHub Pages is enabled (Settings → Pages → Source: GitHub Actions), every push to main

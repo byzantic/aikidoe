@@ -592,6 +592,13 @@ try {
   o = js('exercise', 'grade', 'jex.aikidoe.json');
   check('exercise grade --json: the reference-like design earns full marks', o.score === 100 && o.derived === true && o.truth.active.length >= 2, JSON.stringify(o.parts));
   js('exercise', 'topics');
+  // comparing treatments (issue #80, phase 3): the levels that beat the control, by hand
+  run('exercise', 'new', 'cmpx.aikidoe.json', '--topic', 'compare', '--difficulty', 'medium', '--seed', '4');
+  run('design', 'cmpx.aikidoe.json', '--complete-blocks', '5');
+  run('exercise', 'run', 'cmpx.aikidoe.json');
+  run('exercise', 'answer', 'cmpx.aikidoe.json', '--better', 'M-3,M-5', '--difference', 'M-3=0.9:0.3:1.5', '--difference', 'M-5=1:0.4:1.6');
+  o = js('exercise', 'grade', 'cmpx.aikidoe.json');
+  check('exercise answer --better/--difference: graded 100, the truth lists the better levels', o.score === 100 && o.truth.better.join() === 'M-3,M-5' && o.parts.some(p => p.id === 'differences'), JSON.stringify(o.parts));
   o = js('schema');
   check('schema --json: the study schema', o.jsonSchema?.title === 'aikidoe study');
   o = js('info', 'jseq.aikidoe.json');

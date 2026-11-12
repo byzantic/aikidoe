@@ -193,4 +193,27 @@ export const SCENARIOS = {
       { id: 'soak', name: 'Soaking medium', levels: ['water', 'KNO3'] },
     ],
   },
+  // comparing treatments (issue #80): used by the compare topic only. One factor, the treatment,
+  // with the control first; the runs fit six to a day, and days differ
+  'growth-media': {
+    title: 'Growth media',
+    text: 'A cell line is grown in a standard medium. Five new media are offered by suppliers, and the lab wants to know which of them, if any, give more biomass than the standard. Six flasks fit in the shaker each day, and the shaker runs a little differently from day to day.',
+    response: { id: 'biomass', name: 'Biomass', units: 'g/L', base: 6.5, sigma: 0.35, goal: 'maximize', decimals: 2 },
+    factors: [{ id: 'medium', name: 'Medium', levels: ['Standard', 'M-2', 'M-3', 'M-4', 'M-5', 'M-6'] }],
+    compare: { control: 'Standard' },
+  },
+  'catalyst-lots': {
+    title: 'Catalyst suppliers',
+    text: 'A hydrogenation uses a catalyst from the current supplier. Five other suppliers offer cheaper or faster catalysts, and the process group wants to know which give a higher yield than the current one. The autoclave holds six reactions at a time, one batch a day, and the batches differ.',
+    response: { id: 'yield', name: 'Yield', units: '%', base: 82, sigma: 1.1, goal: 'maximize', decimals: 1 },
+    factors: [{ id: 'catalyst', name: 'Catalyst', levels: ['Current', 'S-B', 'S-C', 'S-D', 'S-E', 'S-F'] }],
+    compare: { control: 'Current' },
+  },
+  'antibody-clones': {
+    title: 'Antibody clones',
+    text: 'An ELISA uses a reference antibody. Five new clones have been raised, and the assay group wants to know which give a stronger signal than the reference. Six samples are run per assay day, and the days differ.',
+    response: { id: 'signal', name: 'Signal', units: 'OD × 1000', base: 850, sigma: 30, goal: 'maximize', decimals: 0 },
+    factors: [{ id: 'clone', name: 'Clone', levels: ['Reference', 'C-11', 'C-17', 'C-23', 'C-31', 'C-42'] }],
+    compare: { control: 'Reference' },
+  },
 };
