@@ -13,6 +13,7 @@ import { createStudy, FORMAT_VERSION } from './study.js';
 import { ccd, boxBehnken } from './design/rsm.js';
 import { definitiveScreening } from './design/dsd.js';
 import { studentT } from './dist.js';
+import { tostPower } from './model/equivalence.js';
 
 const PHYSICAL = (a) => a.aim && a.aim !== 'measure' && a.aim !== 'simulate';
 const FACTORIAL = (a) => PHYSICAL(a) && a.aim !== 'dose' && a.aim !== 'compare';   // the questions about factors and models
@@ -55,7 +56,24 @@ export const QUESTIONS = [
   { id: 'treatmentNames', type: 'text', optional: true, when: COMPARE, text: 'Their names (optional, separated by commas; the control or standard first)',
     why: 'They become the levels of the factor in the new study; you can change them on the Define step.',
     help: ['designs-comparative', ''] },
-  { id: 'control', type: 'choice', when: COMPARE, text: 'Is one of them a control or standard that the others are to be compared with?',
+  { id: 'show', type: 'choice', when: COMPARE, text: 'What do you need to show?',
+    why: 'Finding a difference and showing that there is none are different questions. "No significant difference" does not show that two things are the same: with few runs nothing is significant. To show that a new supplier, method or site is as good as the old one, set a margin — the largest difference that would not matter — and test against it (equivalence), or against one side of it (non-inferiority).',
+    help: ['analysis', 'equivalence-and-non-inferiority'],
+    options: [
+      { value: 'differ', label: 'Which of them differ, or beat a control' },
+      { value: 'same', label: 'That a new one is as good as the current one — the same within a margin (equivalence)' },
+      { value: 'noworse', label: 'That a new one is not worse than the current one by more than a margin (non-inferiority)' },
+    ] },
+  { id: 'equivMargin', type: 'choice', when: (a) => COMPARE(a) && (a.show === 'same' || a.show === 'noworse'), text: 'How big a difference would not matter, compared with the run-to-run scatter?',
+    why: 'The margin decides the number of runs, and it has to be set before the results are seen — from a specification, the smallest difference that would change a decision, or a convention (0.8 … 1.25 for bioequivalence). A narrow margin against a large scatter needs many runs.',
+    help: ['analysis', 'equivalence-and-non-inferiority'],
+    options: [
+      { value: 'wide', label: 'About twice the scatter or more' },
+      { value: 'medium', label: 'About the size of the scatter' },
+      { value: 'narrow', label: 'About half the scatter' },
+      { value: 'unknown', label: 'I do not know yet' },
+    ] },
+  { id: 'control', type: 'choice', when: (a) => COMPARE(a) && (a.show ?? 'differ') === 'differ', text: 'Is one of them a control or standard that the others are to be compared with?',
     why: 'If only the comparisons with the control matter, Dunnett’s method tests each against it and needs a smaller difference to call one than Tukey’s method, which compares every pair. Either way, a t test for every comparison gives too many false alarms.',
     help: ['analysis', 'comparing-treatments'],
     options: [{ value: 'yes', label: 'Yes — which beat (or differ from) the control?' }, { value: 'no', label: 'No — which differ from which, and which is best?' }] },
@@ -150,7 +168,7 @@ export const QUESTIONS = [
       { value: 'medium', label: 'Medium — the count up by half, the odds doubled' },
       { value: 'small', label: 'Small — the count up by a quarter, the odds up by half' },
     ] },
-  { id: 'effect', type: 'choice', when: (a) => (FACTORIAL(a) || COMPARE(a)) && !['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
+  { id: 'effect', type: 'choice', when: (a) => (FACTORIAL(a) || (COMPARE(a) && (a.show ?? 'differ') === 'differ')) && !['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
     why: 'This is what decides the number of runs. The scatter (σ) is the standard deviation of repeated runs at the same settings, measurement included. To have an 80 % chance of detecting an effect Δ in a two-level design takes roughly N ≈ 32 / (Δ/σ)² runs, plus a few for the error estimate: about 8 runs for 2σ, 32 for 1σ, 128 for σ/2.',
     help: ['concepts', 'power'],
     options: [
@@ -449,6 +467,21 @@ export function compareReplicates(t, delta, { control = true, extraDf = 0 } = {}
   }
   return 200;
 }
+/**
+ * Runs per treatment for an 80 % chance of showing equivalence (TOST) or non-inferiority against a
+ * margin of m σ when the true difference is zero, each level against the reference: the exact
+ * power with k = √(2/n) and the design's error df (at least 3).
+ */
+export function equivalenceReplicates(t, m, { type = 'equivalence', extraDf = () => 0 } = {}) {
+  for (let n = 2; n <= 400; n++) {
+    const df = t * (n - 1) - extraDf(n);
+    if (df < 1) continue;
+    const p = tostPower({ k: Math.sqrt(2 / n), df, sigma: 1, delta: 0, lower: -m, upper: m, type });
+    if (p >= 0.8) return Math.max(3, n);
+  }
+  return 400;
+}
+
 function compareAdvice(a, out) {
   const { plan, notes, warnings } = out;
   const t = Math.max(2, a.treatments ?? 2), control = a.control !== 'no', counted = ['count', 'percent', 'passfail'].includes(a.result);
@@ -458,9 +491,14 @@ function compareAdvice(a, out) {
   // runs per treatment for the difference that matters (counts: 6, checked on the Design step)
   const layout = a.layout ?? 'none';
   const extra = { none: () => 0, groups: (n) => n - 1, small: () => 0, two: (n) => 2 * (t - 1), subjects: () => 0 }[layout] ?? (() => 0);
-  let n = counted ? 6 : compareReplicates(t, delta, { control, extraDf: extra });
+  const show = a.show ?? 'differ', equiv = show !== 'differ';
+  const mSigma = { wide: 2, medium: 1, narrow: 0.5, unknown: 1 }[a.equivMargin] ?? 1;
+  let n = counted ? 6 : equiv ? equivalenceReplicates(t, mSigma, { type: show === 'same' ? 'equivalence' : 'noninferiority', extraDf: extra }) : compareReplicates(t, delta, { control, extraDf: extra });
   out.family = 'compare';
-  const what = control ? 'each against the control by Dunnett’s method' : 'every pair by Tukey’s method, with letters';
+  if (equiv) Object.assign(out, { show, margin: mSigma });
+  const ref = 'the current one (the first level)';
+  const what = equiv ? (show === 'same' ? `each new one against ${ref} by two one-sided tests (TOST): equivalent when the 90 % interval of the difference lies within ± the margin` : `each new one against ${ref}: non-inferior when the 90 % interval's lower end (or upper, if lower is better) is beyond −the margin`)
+    : control ? 'each against the control by Dunnett’s method' : 'every pair by Tukey’s method, with letters';
   if (layout === 'none') {
     Object.assign(out, { design: 'full', runs: n * t, headline: `${t} treatments, ${n} runs of each (${n * t} runs) in a completely random order` });
     plan.push({ title: 'Design', text: `Every treatment ${n} times, all ${n * t} runs in a random order (Design step: Full factorial, ${n} replicates). Only if the conditions really are the same throughout: if the runs take several days or batches, block them.` });
@@ -493,13 +531,19 @@ function compareAdvice(a, out) {
     notes.push(t === 2 ? 'With two treatments, carry-over cannot be separated from the treatment difference within subjects: the wash-out has to remove it.' : 'The analysis allows for carry-over (the effect of the treatment in the period before), period and subject. The scatter that matters here is within a subject, often much smaller than between subjects.');
     read(M('designs-comparative', 'crossovers', 'crossovers'));
   }
-  plan.push({ title: 'Analyse', text: `Compare ${what} (Analyse → Compare levels)${control ? '' : '; a planned contrast (e.g. the new ones against the old) if one was the question'}. Not a t test for each comparison: with ${control ? t - 1 : t * (t - 1) / 2} of them, a false alarm somewhere is likely.` });
+  if (equiv) {
+    plan.unshift({ title: 'Set the margin', text: `Before any runs: the largest difference that would not matter (here about ${mSigma === 1 ? 'the' : `${mSigma} ×`} run-to-run scatter), from a specification, the smallest difference that would change a decision, or a convention. Write it down; a margin chosen after the results proves nothing.` });
+    plan.push({ title: 'Analyse', text: `Test ${what} (Analyse → Equivalence and non-inferiority; doe equivalence). "No significant difference" is not the same: it is what too few runs give anyway.` });
+    notes.push(`The number of runs gives an 80 % chance of showing ${show === 'same' ? 'equivalence' : 'non-inferiority'} when the true difference is zero; if you expect some difference, more are needed (Design step: power, "to show ${show === 'same' ? 'equivalence' : 'non-inferiority'}", with the true difference).`);
+    if (a.equivMargin === 'unknown') warnings.push('Without a margin there is no equivalence test: decide it before the runs. The plan assumes about one run-to-run scatter.');
+    out.lessons.splice(0); read(M('analysis', 'equivalence-and-non-inferiority', 'equivalence and non-inferiority'));
+  } else plan.push({ title: 'Analyse', text: `Compare ${what} (Analyse → Compare levels)${control ? '' : '; a planned contrast (e.g. the new ones against the old) if one was the question'}. Not a t test for each comparison: with ${control ? t - 1 : t * (t - 1) / 2} of them, a false alarm somewhere is likely.` });
   if (counted) notes.push('Counts and percentages: the comparisons are ratios (rate or odds ratios); the number of runs depends on the size of the counts — check the power on the Design step.');
   if (a.plates === 'yes') notes.push('On plates: lay the runs out with the balanced layout, so no treatment sits only on the edge or in one row.');
   if (t > 10) warnings.push(`${t} treatments: most are probably alike. Consider screening them first, or comparing them in a few groups.`);
   if (out.budget !== null && out.runs > out.budget) warnings.push(`The budget (${out.budget} runs) is below the ${out.runs} this plan uses for a difference of ${delta}× the scatter: fewer treatments, or accept a larger difference.`);
-  lesson('compare');
-  read(M('designs-comparative', '', 'designs for comparing treatments'), M('analysis', 'comparing-treatments', 'comparing treatments'));
+  if (!equiv) lesson('compare');
+  read(M('designs-comparative', '', 'designs for comparing treatments'), ...(equiv ? [] : [M('analysis', 'comparing-treatments', 'comparing treatments')]));
 }
 
 // the block counts for which (t, k) can be balanced (as comparative.js bibdSizes, here without the

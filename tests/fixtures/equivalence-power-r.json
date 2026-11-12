@@ -1,0 +1,327 @@
+{
+  "fixture": "equivalence-power-r",
+  "generator": "tests/ref/equivalence_power_r.R",
+  "meta": {
+    "R": "4.3.3",
+    "packages": {
+      "PowerTOST": "1.5.7"
+    }
+  },
+  "cases": [
+    {
+      "name": "power parallel additive theta0=0 CV=1 n=20",
+      "input": {
+        "design": "parallel",
+        "theta0": 0,
+        "CV": 1,
+        "n": 20,
+        "logscale": false,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "power": 0.390939222163712
+      }
+    },
+    {
+      "name": "power parallel additive theta0=0.2 CV=1 n=40",
+      "input": {
+        "design": "parallel",
+        "theta0": 0.2,
+        "CV": 1,
+        "n": 40,
+        "logscale": false,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "power": 0.780694934229429
+      }
+    },
+    {
+      "name": "power parallel additive theta0=0.5 CV=0.8 n=30",
+      "input": {
+        "design": "parallel",
+        "theta0": 0.5,
+        "CV": 0.8,
+        "n": 30,
+        "logscale": false,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "power": 0.509677530136387
+      }
+    },
+    {
+      "name": "power parallel additive theta0=0 CV=2 n=12",
+      "input": {
+        "design": "parallel",
+        "theta0": 0,
+        "CV": 2,
+        "n": 12,
+        "logscale": false,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "power": 0.000459231754383616
+      }
+    },
+    {
+      "name": "power paired additive theta0=0.3 CV=1.2 n=15",
+      "input": {
+        "design": "paired",
+        "theta0": 0.3,
+        "CV": 1.2,
+        "n": 15,
+        "logscale": false,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "power": 0.335170931917566
+      }
+    },
+    {
+      "name": "power paired additive theta0=0 CV=0.5 n=6",
+      "input": {
+        "design": "paired",
+        "theta0": 0,
+        "CV": 0.5,
+        "n": 6,
+        "logscale": false,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "power": 0.81152579173377
+      }
+    },
+    {
+      "name": "power parallel log theta0=0.95 CV=0.25 n=40",
+      "input": {
+        "design": "parallel",
+        "theta0": 0.95,
+        "CV": 0.25,
+        "n": 40,
+        "logscale": true,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "power": 0.664723853706127
+      }
+    },
+    {
+      "name": "power parallel log theta0=1 CV=0.3 n=24",
+      "input": {
+        "design": "parallel",
+        "theta0": 1,
+        "CV": 0.3,
+        "n": 24,
+        "logscale": true,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "power": 0.15974505921883
+      }
+    },
+    {
+      "name": "power 2x2 log theta0=0.95 CV=0.2 n=20",
+      "input": {
+        "design": "2x2",
+        "theta0": 0.95,
+        "CV": 0.2,
+        "n": 20,
+        "logscale": true,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "power": 0.834680190857028
+      }
+    },
+    {
+      "name": "power 2x2 log theta0=1.05 CV=0.3 n=32",
+      "input": {
+        "design": "2x2",
+        "theta0": 1.05,
+        "CV": 0.3,
+        "n": 32,
+        "logscale": true,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "power": 0.726578699309657
+      }
+    },
+    {
+      "name": "power paired log theta0=0.9 CV=0.15 n=12",
+      "input": {
+        "design": "paired",
+        "theta0": 0.9,
+        "CV": 0.15,
+        "n": 12,
+        "logscale": true,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "power": 0.566598653213924
+      }
+    },
+    {
+      "name": "noninferiority parallel margin=-1 theta0=0 CV=1 n=20",
+      "input": {
+        "design": "parallel",
+        "margin": -1,
+        "theta0": 0,
+        "CV": 1,
+        "n": 20,
+        "logscale": false
+      },
+      "output": {
+        "power": 0.693557491937063
+      }
+    },
+    {
+      "name": "noninferiority parallel margin=-0.5 theta0=0.2 CV=1 n=50",
+      "input": {
+        "design": "parallel",
+        "margin": -0.5,
+        "theta0": 0.2,
+        "CV": 1,
+        "n": 50,
+        "logscale": false
+      },
+      "output": {
+        "power": 0.786661429582429
+      }
+    },
+    {
+      "name": "noninferiority 2x2 margin=0.8 theta0=0.95 CV=0.25 n=24",
+      "input": {
+        "design": "2x2",
+        "margin": 0.8,
+        "theta0": 0.95,
+        "CV": 0.25,
+        "n": 24,
+        "logscale": true
+      },
+      "output": {
+        "power": 0.757258614650332
+      }
+    },
+    {
+      "name": "sample size parallel additive theta0=0 CV=1",
+      "input": {
+        "design": "parallel",
+        "logscale": false,
+        "theta0": 0,
+        "CV": 1,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "n": 36,
+        "power": 0.804544977395375
+      }
+    },
+    {
+      "name": "sample size parallel additive theta0=0.2 CV=1",
+      "input": {
+        "design": "parallel",
+        "logscale": false,
+        "theta0": 0.2,
+        "CV": 1,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "n": 42,
+        "power": 0.802033887213897
+      }
+    },
+    {
+      "name": "sample size parallel additive theta0=0.3 CV=0.6",
+      "input": {
+        "design": "parallel",
+        "logscale": false,
+        "theta0": 0.3,
+        "CV": 0.6,
+        "lower": -1,
+        "upper": 1
+      },
+      "output": {
+        "n": 20,
+        "power": 0.804860805524622
+      }
+    },
+    {
+      "name": "sample size 2x2 log theta0=0.95 CV=0.25",
+      "input": {
+        "design": "2x2",
+        "logscale": true,
+        "theta0": 0.95,
+        "CV": 0.25,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "n": 28,
+        "power": 0.807439464165083
+      }
+    },
+    {
+      "name": "sample size 2x2 log theta0=0.9 CV=0.2",
+      "input": {
+        "design": "2x2",
+        "logscale": true,
+        "theta0": 0.9,
+        "CV": 0.2,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "n": 38,
+        "power": 0.815494064848777
+      }
+    },
+    {
+      "name": "sample size parallel log theta0=0.95 CV=0.3",
+      "input": {
+        "design": "parallel",
+        "logscale": true,
+        "theta0": 0.95,
+        "CV": 0.3,
+        "lower": 0.8,
+        "upper": 1.25
+      },
+      "output": {
+        "n": 76,
+        "power": 0.803122677583259
+      }
+    },
+    {
+      "name": "sample size noninferiority parallel",
+      "input": {
+        "design": "parallel",
+        "logscale": false,
+        "margin": -1,
+        "theta0": 0,
+        "CV": 1
+      },
+      "output": {
+        "n": 28,
+        "power": 0.824085854570408
+      }
+    }
+  ],
+  "tolerance": {
+    "rel": 1e-07,
+    "abs": 1e-09
+  }
+}

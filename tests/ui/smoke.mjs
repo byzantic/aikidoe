@@ -507,6 +507,12 @@ try {
     await page.fill('input[aria-label="equivalence margin"]', '1.25'); await page.keyboard.press('Tab'); await settle();
     t = await page.textContent('#equivalence');
     check('a ratio of means (log scale), margin 1.25: ratios against 0.8', /ratio of means/.test(t) && /above the margin 0\.8/.test(t), t.slice(0, 500));
+    // phase 2: the power of an equivalence test on the Design step
+    await page.click('[data-step="design"]'); await settle();
+    check('Design: the equivalence row asks for a margin', /give the margin for the power of an equivalence test/.test(await page.textContent('#power-equivalence')));
+    await page.fill('input[aria-label="power equivalence margin"]', '1'); await page.keyboard.press('Tab'); await settle();
+    t = await page.textContent('#equivalence-power');
+    check('margin σ: the power against Standard (or no test with one run per level), and the runs 80 % needs', /(power 0\.\d+ for each level|no error df in this design, so no test) against Standard — 80 % needs this design \d+ times \(\d+ runs\)/.test(t), t);
   }
 
   section('projectivity: the active factors fitted from the same runs (issue #79)');

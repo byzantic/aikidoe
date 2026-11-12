@@ -165,6 +165,8 @@ try {
     check('asked how many treatments, not factors', await current() === 'treatments');
     await type('treatments', 5);
     await page.fill('input[aria-label="guide treatmentNames"]', 'Standard, M-2, M-3, M-4, M-5'); await page.click('#guide-next'); await settle();
+    check('what to show: which differ', await current() === 'show');
+    await choose('differ');
     check('a control?', await current() === 'control');
     await choose('yes');
     check('how the runs are done', await current() === 'layout');
@@ -178,6 +180,24 @@ try {
     await page.click('[data-step="design"]'); await settle();
     check('the Design step opens on complete blocks, with the blocks the guide suggests', await page.locator('tr.sel[data-design="rcbd"]').count() === 1 && Number(await page.inputValue('input[aria-label="complete blocks"]')) === s.ui.design.cbBlocks);
     await shot('guide-compare');
+  }
+
+  section('equivalence: is the new method as good as the old? (issue #84)');
+  {
+    await page.click('[data-step="guide"]'); await settle();
+    await page.click('#guide-restart'); await settle();
+    await choose('compare'); await choose('good'); await type('treatments', 2);
+    await page.fill('input[aria-label="guide treatmentNames"]', 'old, new'); await page.click('#guide-next'); await settle();
+    check('asked what to show', await current() === 'show');
+    await choose('same');
+    check('… then the margin, not the control', await current() === 'equivMargin');
+    await choose('medium'); await choose('groups'); await choose('no'); await choose('measurement'); await page.click('#guide-skip'); await settle();
+    const t = await page.textContent('#guide-result');
+    check('the plan: set the margin, complete blocks, TOST', /Set the margin/.test(t) && /Randomised complete blocks: \d+ blocks of 2/.test(await page.textContent('.guide-headline')) && /TOST/.test(t), t.slice(0, 300));
+    await page.click('#guide-create'); await settle();
+    await page.click('[data-step="design"]'); await settle();
+    const e = await page.textContent('#equivalence-power');
+    check('the Design step: the equivalence power row with the margin, power at least 0.8', /power 0\.8\d* for each level against old/.test(e) || /power 0\.9/.test(e), e);
   }
 
   section('no page errors');

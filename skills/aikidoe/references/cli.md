@@ -119,6 +119,11 @@ Commands
   power STUDY [--model "…"] [--delta Δ | --delta "A=3,default=2"] [--sigma σ] [--alpha 0.05] [--target 0.8] [--eta η]
        [--rho ρ]   with a covariate correlated ρ with the response (balanced against the factors):
                    residual σ√(1 − ρ²), one residual df fewer
+  power STUDY --equivalence [FACTOR] | --noninferiority [FACTOR]  (--margin M | --lower L --upper U) --sigma σ
+       [--true d] [--reference LEVEL] [--test LEVEL] [--better higher|lower] [--ratio --cv CV] [--model "…"] [--target 0.8]
+       power to show equivalence (TOST) or non-inferiority of each level against the reference in this
+       design, when the true difference is d (default 0; --ratio: the true ratio, default 1, with the
+       coefficient of variation); below the target, how many copies of the design reach it
   power STUDY --response R (a count or proportion) | --distribution D  --baseline b [--ratio r | --ratio "A=2,default=1.5"]
        [--trials n] [--exposure e] [--theta θ] [--dispersion φ] [--link L] [--simulate N [--seed S]]
        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting

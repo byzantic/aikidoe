@@ -138,13 +138,13 @@ section('comparing a few treatments (issue #80): advice, the study, and the desi
   const lessonIds = new Set(LESSONS.map(l => l.id));
   let n = 0; const bad = [], off = [], unbalanced = [];
   for (const treatments of [2, 3, 4, 5, 6, 8])
-    for (const control of ['yes', 'no'])
+    for (const [control, show] of [['yes', 'differ'], ['no', 'differ'], ['yes', 'same'], ['yes', 'noworse']])
       for (const layout of ['none', 'groups', 'small', 'two', 'subjects'])
         for (const effect of ['large', 'medium', 'small']) {
           if (layout === 'small' && treatments < 3) continue;
           if (layout === 'two' && treatments < 3) continue;
           for (const blockSize of layout === 'small' ? [2, treatments - 1] : [undefined]) {
-            const a = { aim: 'compare', treatments, treatmentNames: null, control, layout, blockSize, measurement: 'good', plates: 'no', result: 'measurement', effect, budget: null };
+            const a = { aim: 'compare', treatments, treatmentNames: null, show, ...(show !== 'differ' ? { equivMargin: effect === 'large' ? 'wide' : effect === 'small' ? 'narrow' : 'medium' } : {}), control, layout, blockSize, measurement: 'good', plates: 'no', result: 'measurement', effect, budget: null };
             n++;
             if (nextQuestion(a)) { bad.push(`unanswered ${nextQuestion(a).id}: ${JSON.stringify(a)}`); continue; }
             const r = advise(a), s = guideStudy(a);
@@ -170,6 +170,15 @@ section('comparing a few treatments (issue #80): advice, the study, and the desi
   check('comparing every pair needs more than comparing with a control', advise({ ...a, control: 'no' }).runs >= r.runs && /Tukey/.test(advise({ ...a, control: 'no' }).plan[1].text));
   check('the block size is at most the treatments less one', checkAnswer(questionById('blockSize'), 5, a) !== null && checkAnswer(questionById('blockSize'), 4, a) === null);
   check('the factor questions are not asked', !asked(a).some(q => ['factors', 'types', 'groups', 'stages', 'curvature'].includes(q.id)));
+  // equivalence (issue #84): the margin instead of the effect, TOST in the plan, sized by TOST power
+  const e = { aim: 'compare', treatments: 2, treatmentNames: null, show: 'same', equivMargin: 'medium', layout: 'none', measurement: 'good', plates: 'no', result: 'measurement', budget: null };
+  check('equivalence: the margin is asked, not the effect or the control', asked(e).some(q => q.id === 'equivMargin') && !asked(e).some(q => q.id === 'effect' || q.id === 'control') && nextQuestion(e) === null);
+  const re = advise(e);
+  check('… the plan sets the margin first and tests by TOST', re.plan[0].title === 'Set the margin' && /TOST/.test(re.plan.at(-1).text) && re.manual.some(m => m.anchor === 'equivalence-and-non-inferiority'), re.plan.map(p => p.title).join());
+  check('… 18 runs of each for ±1σ, as PowerTOST sampleN.TOST (parallel, CV 1, margins ±1: n = 36)', re.runs === 36, re.headline);
+  check('non-inferiority needs fewer runs than equivalence', advise({ ...e, show: 'noworse' }).runs < re.runs);
+  check('a narrower margin needs more', advise({ ...e, equivMargin: 'narrow' }).runs > re.runs && advise({ ...e, equivMargin: 'wide' }).runs < re.runs);
+  check('no margin yet: warned', advise({ ...e, equivMargin: 'unknown' }).warnings.some(w => /Without a margin/.test(w)));
 }
 
 section('the recommender on the guide\'s study');

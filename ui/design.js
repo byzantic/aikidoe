@@ -21,6 +21,7 @@ import { doseDesignPanel } from './dose.js';
 import { mixtureDesignPanel } from './mixture.js';
 import { platesWithoutWells } from '../js/plate.js';
 import { designPower, detectableEffect, detectableRatio, simulatePower } from '../js/model/power.js';
+import { equivalencePower, equivalenceRuns } from '../js/model/equivalence.js';
 import { glmmPowerFromMatrix, detectableGlmmRatio, simulateGlmmPower } from '../js/model/power-glmm.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
 import { candidates, buildCandidate, intendedModel, wholePlotChoices, defaultWholePlots, recommend, GOALS, defaultBlockSize } from '../js/design/recommend.js';
@@ -381,7 +382,36 @@ function powerSection(study, d, cand, ui, set) {
         rho ? `With the covariate in the analysis (ρ = ${rho}), the residual σ is σ·√(1 − ρ²) = ${num(Math.sqrt(1 - rho * rho), 3)} σ and one residual df goes to it; Δ/σ is still in units of σ without it. ` : '',
         'Power below 0.8 is marked; Δ/σ for 80% is the smallest effect this design would usually find.'));
   }
-  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, units, body);
+  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, units, body, equivalencePowerRow(study, d, pw, setP));
+}
+
+// equivalence or non-inferiority of each level against the first (issue #84): the margin and the
+// true difference in units of σ, as Δ/σ above; the power in this design, and the copies of it 80 % needs
+function equivalencePowerRow(study, d, pw, setP) {
+  const f = study.factors.find(x => x.type === 'categorical');
+  if (!f || !d?.X?.length) return null;
+  const m = pw.eqMargin, type = pw.eqType === 'noninferiority' ? 'noninferiority' : 'equivalence', alpha = pw.alpha ?? 0.05;
+  let line = null;
+  if (m > 0) {
+    try {
+      const st = { ...study, design: toStudyDesign(study, d, { seed: study.seed }), observations: [] };
+      const r = study.responses.find(x => !x.derived) ?? study.responses[0], better = r?.goal === 'minimize' ? 'lower' : 'higher';
+      const opts = { factor: f.id, margin: m, sigma: 1, delta: pw.eqTrue ?? 0, type, better, alpha };
+      // a design with no error df (one run per level) has no test, but its copies do
+      let p = null;
+      try { p = equivalencePower(st, opts); } catch (e) { if (!/no degrees of freedom/.test(e.message)) throw e; }
+      const need = !p || p.power < 0.8 ? equivalenceRuns(st, opts) : null, ref = p?.reference ?? f.levels[0];
+      line = h('span', { id: 'equivalence-power', class: !p || p.power < 0.8 ? 'low-power' : '' }, p ? `power ${num(p.power, 3)} for each level against ${ref}` : `no error df in this design, so no test against ${ref}`,
+        need ? (need.reached ? ` — 80 % needs this design ${need.copies} times (${need.runs} runs)` : ` — not 80 % even with ${need.runs} runs`) : '');
+    } catch (e) { line = h('span', { class: 'muted', id: 'equivalence-power' }, e.message); }
+  }
+  return h('div', { class: 'row small', id: 'power-equivalence' },
+    h('label', { class: 'inline' }, 'to show', select([{ value: 'equivalence', label: 'equivalence' }, { value: 'noninferiority', label: 'non-inferiority' }], type, (v) => setP({ eqType: v }), { 'aria-label': 'power equivalence type' })),
+    h('label', { class: 'inline', title: 'the largest difference that would not matter, in units of σ' }, 'margin/σ',
+      h('input', { class: 'num', type: 'number', min: 0, step: 0.1, value: m ?? '', placeholder: 'e.g. 1', 'aria-label': 'power equivalence margin', onchange: (e) => setP({ eqMargin: Number(e.target.value) > 0 ? Number(e.target.value) : undefined }) })),
+    h('label', { class: 'inline', title: 'the true difference you expect, in units of σ (0: none)' }, 'true difference/σ',
+      h('input', { class: 'num', type: 'number', step: 0.1, value: pw.eqTrue ?? 0, 'aria-label': 'power equivalence true', onchange: (e) => setP({ eqTrue: Number(e.target.value) || 0 }) })),
+    line ?? h('span', { class: 'muted' }, 'give the margin for the power of an equivalence test'), help('analysis', 'equivalence-and-non-inferiority'));
 }
 
 function optimalOptions(study, ui, set, split = false) {

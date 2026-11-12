@@ -322,9 +322,40 @@ degrees of freedom (`--random block`). When several levels are each tested again
 reference, each is its own question, so there is no multiplicity adjustment. If *all* of them
 must be equivalent, each must pass.
 
+**Planning: how many runs.** Showing equivalence takes more runs than finding a difference of
+the same size. The interval has to fit *inside* the margins, not just miss zero, so its whole
+width counts. The power depends on the margin, the run-to-run σ, the true difference (assume
+zero only if you have reason to) and the design. `doe power --equivalence` gives the power of
+each level against the reference in the study's design. If that is below the target, it also
+gives how many copies of the design reach it:
+
+```console
+$ doe power examples/media-compare.aikidoe.json --equivalence --margin 0.5 --sigma 0.47
+power of equivalence (TOST) against Standard, medium: 20 runs
+margins -0.5 … 0.5 (difference); true difference 0; σ 0.47; α = 0.05
+
+comparison      std. error  df  power
+--------------  ----------  --  ------
+M-2 − Standard  0.3323      15  0.0343
+M-3 − Standard  0.3323      15  0.0343
+M-4 − Standard  0.3323      15  0.0343
+M-5 − Standard  0.3323      15  0.0343
+
+for 0.8 power: the design repeated 4 times (80 runs) gives 0.819
+```
+
+On the Design step, the power section has a row *to show equivalence* (or non-inferiority), with
+the margin and true difference in units of σ. The Guide asks about equivalence under *Compare a
+few treatments* ("What do you need to show?") and sizes the design for it. The power is exact,
+as PowerTOST's `power.TOST`, and it comes from the design itself, so blocks, crossovers and
+other factors count as they will in the analysis. For a ratio, give the coefficient of
+variation: `--ratio --lower 0.8 --upper 1.25 --cv 0.2 --true 0.95`.
+
 These results are checked against R: `TOSTER` (`t_TOST` unpaired and paired, `log_TOST`) and
 `emmeans` equivalence and non-inferiority tests (blocks, a factor in a larger model, a mixed
-model, Poisson rate ratios, a difference of proportions and odds ratios).
+model, Poisson rate ratios, a difference of proportions and odds ratios). Power and sample sizes
+are checked against `PowerTOST` (`power.TOST`, `power.noninf`, `sampleN.TOST`, `sampleN.noninf`)
+for parallel groups, paired data and the 2×2 crossover, on both the additive and the log scale.
 
 ## Covariates
 
