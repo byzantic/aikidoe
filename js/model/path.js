@@ -336,7 +336,9 @@ export function nextStudy(study, at, { design = 'factorial', centre = 4, name } 
   });
   const base = { aikidoe: study.aikidoe, name: name ?? `${study.name} — next region`, seed: (study.seed ?? 1) + 1,
     description: `Centred where the path of steepest ascent of "${study.name}" peaked (${Object.entries(at).map(([k, v]) => `${k} = ${+Number(v).toPrecision(5)}`).join(', ')}).`,
-    factors, responses: study.responses.map(({ measurement, ...r }) => r), constraints: study.constraints ?? [] };
+    factors, responses: study.responses.map(({ measurement, ...r }) => r), constraints: study.constraints ?? [],
+    // an exercise (Learn) goes on in the new study, counting the runs already spent
+    ...(study.exercise ? { exercise: (({ answers, ...e }) => ({ ...e, previousRuns: (e.previousRuns ?? 0) + (study.design?.runs.length ?? 0) }))(study.exercise) } : {}) };
   let st = createStudy(base);
   if (design === 'none') return st;
   const cont = st.factors.map(f => f.type !== 'categorical');

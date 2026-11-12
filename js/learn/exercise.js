@@ -17,6 +17,7 @@ import { glmConfint } from '../model/glm.js';
 import { fitMixedModel } from '../model/mixed.js';
 import { studentT, nct } from '../dist.js';
 import { completeBlocks } from '../design/comparative.js';
+import { pathStage, pathResults, nextStudy } from '../model/path.js';
 import { compareLevels } from '../model/compare.js';
 import { qmvtBox } from '../mvt.js';
 import { solve as solveLin } from '../linalg.js';
@@ -66,6 +67,10 @@ export const TOPICS = {
   // variation when harder); the active factors and their rate or odds ratios
   counts: { title: 'Counts and percentages', lesson: 17, counts: true, k: (d) => (d === 'easy' ? 3 : 4), budget: (k) => (k === 3 ? 16 : 32), active: (g) => 2 + g.int(2), interaction: 0.5,
     questions: ['active', 'ratios'] },
+  // moving to a better region (issue #81): two factors around today's settings, the optimum well
+  // outside their ranges but within the operating limits; first design, the path of steepest
+  // ascent, then a response surface where the path peaked; the best settings within the limits
+  ascent: { title: 'Moving to a better region', lesson: 19, ascent: true, k: () => 2, budget: 32, questions: ['best'] },
   // comparing a few treatments (issue #80): one factor, a control and five others, one or two of
   // them better; six runs a day, and days differ; which beat the control, and by how much
   compare: { title: 'Comparing a few treatments', lesson: 18, compare: true, k: () => 1, budget: 30,
@@ -122,10 +127,10 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   // factors: the hard-to-change one when the topic needs it; continuous for response surfaces
   let pool = sc.factors.filter(f => !f.levels && !f.htc);
   if (topic !== 'rsm' && topic !== 'split-plot' && !T.dose && g0.random() < 0.5) pool = [...pool, sc.factors.find(f => f.levels)];
-  let chosen = T.dose || T.mixture || T.compare ? sc.factors : pick(g0, pool, k - (T.htc ? 1 : 0));
+  let chosen = T.dose || T.mixture || T.compare ? sc.factors : T.ascent ? pick(g0, sc.factors.filter(f => !f.levels && !f.htc), k) : pick(g0, pool, k - (T.htc ? 1 : 0));
   if (T.htc) chosen = [sc.factors.find(f => f.htc), ...chosen];
   const mixture = T.mixture ? { components: chosen.map(f => f.id), total: sc.mixture.total } : undefined;
-  const factors = createStudy({ name: 'x', factors: chosen.map(f => ({ ...f, htc: !!(T.htc && f.htc) })), ...(mixture ? { mixture } : {}) }).factors;
+  const factors = createStudy({ name: 'x', factors: (T.ascent ? ascentFactors(chosen, g0) : chosen).map(f => ({ ...f, htc: !!(T.htc && f.htc) })), ...(mixture ? { mixture } : {}) }).factors;
   const response = { ...sc.response };
   const budget = typeof T.budget === 'function' ? T.budget(k) : T.budget;
   const id = `${topic}-${difficulty}-${seed}`;
@@ -134,7 +139,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
   let last = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const g = rng((seed * 2654435761 + attempt * 97 + 13) >>> 0);
-    const truth = T.compare ? compareTruth(difficulty, g, factors, response, sc.compare.control) : T.dose ? { intercept: 0, terms: {} } : T.mixture ? mixtureTruth(difficulty, g, factors, response, mixture) : T.counts ? countsTruth(topic, difficulty, g, factors, response) : makeTruth(topic, difficulty, g, factors, response);
+    const truth = T.ascent ? ascentTruth(difficulty, g, factors, response) : T.compare ? compareTruth(difficulty, g, factors, response, sc.compare.control) : T.dose ? { intercept: 0, terms: {} } : T.mixture ? mixtureTruth(difficulty, g, factors, response, mixture) : T.counts ? countsTruth(topic, difficulty, g, factors, response) : makeTruth(topic, difficulty, g, factors, response);
     const curve = T.dose ? doseTruth(sc.dose, factors, g, difficulty) : null;
     const counted = T.counts ? countNoise(difficulty, g, response) : null;
     const proc = { seed: (seed * 31 + attempt) >>> 0, factors, responses: [{ id: response.id, ...(counted ?? { sigma: response.sigma }), truth, decimals: response.decimals, ...(curve ? { curve } : {}) }],
@@ -143,7 +148,7 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
     if (T.counts && isProportion(response.distribution)) questions.push(percentQuestion(proc, factors, response));
     const ex = assemble({ id, topic, difficulty, seed, scenario: scId, sc, factors, response, budget, questions, process: proc, attempt, mixture });
     const ref = referenceStrategy(ex, ex.truth);
-    const grade = gradeAnswers(ex, ex.truth, ref.answers, { runs: ref.study.design.runs.length });
+    const grade = gradeAnswers(ex, ex.truth, ref.answers, { runs: (ref.study.exercise?.previousRuns ?? 0) + ref.study.design.runs.length });
     const power = referencePower(ex, ex.truth, ref.study);
     last = { ex, ref, grade, power };
     if (grade.score === 100 && power >= 0.8) {
@@ -152,6 +157,46 @@ export function generateExercise({ topic = 'factorial', difficulty = 'medium', s
     }
   }
   throw new Error(`could not generate a solvable ${topic} exercise for seed ${seed} (last: score ${last.grade.score}, power ${last.power.toFixed(2)})`);
+}
+
+/**
+ * The factors of an ascent exercise: today's ranges narrowed to a fifth of the scenario's (a small
+ * window around the centre, as a first experiment around current conditions usually is) and
+ * operating limits at the scenario's ranges widened by half their width (not below 0 for a factor
+ * whose range starts at or above 0; positive for a log factor).
+ */
+function ascentFactors(chosen, g) {
+  return chosen.map(f => {
+    const log = f.transform === 'log', lo0 = f.low, hi0 = f.high;
+    const c = log ? Math.sqrt(lo0 * hi0) : (lo0 + hi0) / 2;
+    const r = (x) => +x.toPrecision(4);
+    if (log) { const w = Math.sqrt(hi0 / lo0) ** 0.2; return { ...f, low: r(c / w), high: r(c * w), limits: { lower: r(lo0 / Math.sqrt(hi0 / lo0) ** 0.5), upper: r(hi0 * Math.sqrt(hi0 / lo0) ** 0.5) } }; }
+    const h = (hi0 - lo0) / 10, wide = (hi0 - lo0) / 4;
+    return { ...f, low: r(c - h), high: r(c + h), limits: { lower: r(lo0 >= 0 ? Math.max(0, lo0 - wide) : lo0 - wide), upper: r(hi0 + wide) } };
+  });
+}
+
+/**
+ * The true surface of an ascent exercise, in the coded units of today's ranges: a maximum (or a
+ * minimum for a response to minimise) at x* = 3 … 5 coded units from the centre in each factor,
+ * within the operating limits; curvature c with the slope at the centre, 2c|x*ᵢ|, giving a change
+ * of the difficulty's effect size (in σ) over each factor's range; a mild interaction.
+ */
+function ascentTruth(difficulty, g, factors, response) {
+  const m = DIFFICULTIES[difficulty], dir = response.goal === 'minimize' ? -1 : 1;
+  const xs = factors.map(f => {
+    const lo = code(f, f.limits.lower), hi = code(f, f.limits.upper);
+    const room = [hi > 4 ? 1 : null, lo < -4 ? -1 : null].filter(Boolean);
+    const sgn = room.length ? room[g.int(room.length)] : (hi >= -lo ? 1 : -1);
+    const span = sgn > 0 ? hi : -lo;
+    return sgn * Math.min(span * 0.8, 3 + 2 * g.random());
+  });
+  // slope at the centre: the effect over the range (2 coded units) is m σ, so 2·(2c|x*|) = m σ
+  const c = Math.min(...xs.map(x => (m * response.sigma) / (4 * Math.abs(x))));
+  const terms = {};
+  factors.forEach((f, i) => { terms[f.id] = dir * 2 * c * xs[i]; terms[`I(${f.id}^2)`] = -dir * c; });
+  terms[`${factors[0].id}:${factors[1].id}`] = dir * 0.1 * c * (g.random() < 0.5 ? -1 : 1);
+  return { intercept: response.base - dir * c * xs.reduce((a, x) => a + x * x, 0), terms, optimum: xs };
 }
 
 /**
@@ -261,7 +306,7 @@ function makeQuestions(T, factors, response, g, mixture) {
     if (q === 'better') qs.push({ id: 'better', kind: 'better', control: T.control, text: `Which ${factors[0].name.toLowerCase()}s give ${response.goal === 'minimize' ? 'less' : 'more'} ${response.name.toLowerCase()} than the ${T.control}?` });
     if (q === 'differences') qs.push({ id: 'differences', kind: 'differences', control: T.control, text: `For each that does, how much ${response.goal === 'minimize' ? 'less' : 'more'} (${factors[0].name.toLowerCase()} − ${T.control}), with a 95 % interval?` });
     if (q === 'effects') qs.push({ id: 'effects', kind: 'effects', text: `For each factor that matters, estimate its effect (low → high) on ${response.name.toLowerCase()}, with a 95 % interval.` });
-    if (q === 'best') qs.push({ id: 'best', kind: 'best', goal: response.goal, text: `Which settings ${goal} ${response.name.toLowerCase()}, within the ranges?` });
+    if (q === 'best') qs.push({ id: 'best', kind: 'best', goal: response.goal, text: T.ascent ? `Which settings ${goal} ${response.name.toLowerCase()}, within the operating limits? (Today's ranges are only a start: the best settings may lie well outside them.)` : `Which settings ${goal} ${response.name.toLowerCase()}, within the ranges?` });
     if (q === 'prediction') {
       const at = mixture ? (() => { const st = createStudy({ name: 'q', seed: 1, factors, mixture }); const b = randomBlend(st, g); const r = Object.fromEntries(Object.entries(b).map(([k, v]) => [k, +v.toPrecision(4)])); const last = mixture.components.at(-1); r[last] = +(mixture.total - mixture.components.slice(0, -1).reduce((a, k) => a + r[k], 0)).toPrecision(6); return r; })()
         : Object.fromEntries(factors.map(f => [f.id, f.type === 'categorical' ? f.levels[0] : +decode(f, Math.round((g.random() * 1.2 - 0.6) * 20) / 20).toPrecision(6)]));
@@ -316,7 +361,9 @@ export function runExercise(ex, study, opts = {}) {
     const loose = (study.design?.runs ?? []).filter(r => !inWell.has(r.run));
     if (loose.length) throw new Error(`lay the runs out on the plates first (Design step → plate layout, or doe plate): run${loose.length > 1 ? 's' : ''} ${loose.slice(0, 6).map(r => r.run).join(', ')}${loose.length > 6 ? ' …' : ''} ${loose.length > 1 ? 'are' : 'is'} not in a well`);
   }
-  const proc = { ...t.process, factors: study.factors };
+  // an ascent exercise's truth is in the coded units of the first study's ranges, which a next
+  // study centred elsewhere does not share: the process keeps its own factors
+  const proc = { ...t.process, factors: TOPICS[ex.topic]?.ascent ? t.process.factors : study.factors };
   return createStudy(runVirtual(proc, study, { ...opts, offset: nuisanceOffsets(proc, study) }));
 }
 
@@ -352,6 +399,7 @@ export function deriveAnswers(ex, study, { alpha = 0.05 } = {}) {
   if (T.dose) return doseAnswers(ex, study);
   if (T.counts) return countAnswers(ex, study, { alpha });
   if (T.compare) return compareAnswers(ex, study, { alpha });
+  if (T.ascent) return ascentAnswers(ex, study);
   const formula = T.mixture ? `${r} ~ mixquadratic` : T.curvature ? `${r} ~ quadratic` : (ex.topic === 'screening' || ex.topic === 'fraction') ? `${r} ~ main` : `${r} ~ 2fi`;
   const mixed = study.design.runs.some(x => x.wholePlot !== undefined);
   const fit = mixed ? fitMixedModel(study, formula) : fitModel(study, formula);
@@ -440,6 +488,7 @@ export function referenceStrategy(ex, truth = truthOf(ex)) {
       steps.push(`a ${prop ? 'binomial' : 'Poisson'} model (${prop ? 'logit' : 'log'} link${prop ? '' : ', the volume plated as the exposure'}) with main effects and two-factor interactions; ${a.analysis === 'as declared' ? 'no overdispersion' : `${a.analysis}`}; ${prop ? 'odds' : 'rate'} ratios from the coefficients, with ${/Firth/.test(a.analysis) ? 'Wald' : 'profile-likelihood'} intervals`);
       return { strategy: 'reference', steps, study: st, answers: a };
     }
+    case 'ascent': return ascentReference(ex, truth);
     case 'compare': {
       const f = base.factors[0], t = f.levels.length, b = Math.floor(ex.budget / t);
       st = make(completeBlocks(t, b), `randomised complete blocks: ${b} blocks of ${t}, one a day, each ${f.name.toLowerCase()} once per day (${b * t} runs); fit with the day as a block; compare each with the ${controlOf(ex)} by Dunnett's method`);
@@ -557,12 +606,68 @@ export function coxStrategy(ex, truth = truthOf(ex)) {
 /** The strategy a lesson compares with: one factor at a time, the tidy plate layout, or evenly spaced doses. */
 export function comparisonStrategy(ex, truth = truthOf(ex)) {
   const T = TOPICS[ex.topic];
+  if (T.ascent) return inTheBoxStrategy(ex, truth);
   if (T.compare) return tTestStrategy(ex, truth);
   if (T.dose) return linearDoseStrategy(ex, truth);
   if (T.mixture) return coxStrategy(ex, truth);
   if (T.plate) return tidyPlateStrategy(ex, truth);
   if (T.counts) return leastSquaresCountStrategy(ex, truth);
   return ofatStrategy(ex, truth);
+}
+
+// ---------------------------------------------------------------- moving to a better region (#81)
+
+/**
+ * The standard analysis of an ascent exercise, by where the work has got to: in a next study
+ * (centred where the path peaked) the quadratic (main effects if it cannot be fitted) and its best
+ * settings within that study's ranges; with results along a path, the best point on it; else the
+ * best corner of the first-order fit.
+ */
+export function ascentAnswers(ex, study) {
+  const r = study.responses[0], goal = r.goal ?? MAX;
+  const runs = (study.exercise?.previousRuns ?? 0) + (study.design?.runs.length ?? 0);
+  if (study.exercise?.previousRuns) {
+    let fit;
+    try { fit = fitModel(study, `${r.id} ~ quadratic`); if (fit.coef.some(c => !Number.isFinite(c))) throw new Error('aliased'); } catch { fit = fitModel(study, `${r.id} ~ main`); }
+    return { best: bestSettings(study, (s) => predict(fit, [s])[0].fit, goal), runs, formula: fit.formula ?? `${r.id} ~ quadratic` };
+  }
+  const res = pathResults(study);
+  if (res?.best) return { best: res.best.settings, runs, formula: 'the best run along the path' };
+  const fit = fitModel(study, `${r.id} ~ main`);
+  return { best: bestSettings(study, (s) => predict(fit, [s])[0].fit, goal), runs, formula: `${r.id} ~ main` };
+}
+
+/**
+ * The reference for an ascent exercise: a 2² factorial, replicated, with 2 centre points each, around
+ * today's settings; the main-effects fit and 8 steps along the path of steepest ascent; a new
+ * study centred at the path's best step with a central composite design (4 centre points); the
+ * quadratic there and its best settings.
+ */
+function ascentReference(ex, truth) {
+  const base = ex.study, steps = [];
+  let st = createStudy({ ...base, design: toStudyDesign(base, fullFactorial([2, 2], { continuous: [true, true], replicates: 2, centre: 2 }), { seed: ex.seed }) });
+  const first = st.design;
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  steps.push(`a 2² factorial, replicated, with 2 centre points in each replicate, around today's settings (${first.runs.length} runs); main effects: a strong slope, no curvature`);
+  const fit = fitModel(st, `${base.responses[0].id} ~ main`);
+  st = createStudy(appendStage(st, pathStage(st, fit, { steps: 8 })));
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  const res = pathResults(st);
+  steps.push(`8 runs along the path of steepest ${res.goal}; the response peaked at step ${res.best.step}`);
+  let next = nextStudy({ ...st, exercise: { id: ex.id, first } }, res.best.settings, { design: 'ccd' });
+  next = createStudy(runExercise({ ...ex, truth }, next));
+  steps.push(`a new study centred there, a central composite design (${next.design.runs.length} runs); the quadratic and its best settings within its ranges`);
+  return { strategy: 'reference', steps, study: next, answers: ascentAnswers(ex, next) };
+}
+
+/** Staying in the box: the first design with axial points (a central composite in today's ranges), the quadratic, its best settings there. */
+function inTheBoxStrategy(ex, truth) {
+  const base = ex.study;
+  let st = createStudy({ ...base, design: toStudyDesign(base, ccd(2, { centre: 5 }), { seed: ex.seed }) });
+  st = createStudy(runExercise({ ...ex, truth }, st));
+  const fit = fitModel(st, `${base.responses[0].id} ~ quadratic`);
+  return { strategy: 'staying in today\'s ranges', steps: ['a central composite design in today\'s ranges; the quadratic and its best settings there'], study: st,
+    answers: { best: bestSettings(st, (s) => predict(fit, [s])[0].fit, base.responses[0].goal ?? MAX), runs: st.design.runs.length } };
 }
 
 // ---------------------------------------------------------------- comparing treatments
@@ -688,6 +793,18 @@ export function leastSquaresCountStrategy(ex, truth = truthOf(ex)) {
 
 export function referencePower(ex, truth, study) {
   if (TOPICS[ex.topic].counts) return countPower(ex, truth, study);
+  if (TOPICS[ex.topic].ascent) {
+    // the first design's power for each factor's slope at the centre (the path rests on them)
+    const resp = truth.process.responses[0], first = study.exercise?.first;
+    const st = first ? createStudy({ ...ex.study, design: first }) : study;
+    let min = 1;
+    for (const f of ex.study.factors) {
+      const p = studyPower({ ...st, observations: [] }, { model: 'main', delta: Math.abs(2 * resp.truth.terms[f.id]) / resp.sigma });
+      const pt = p.terms.find(x => x.term === f.id);
+      if (pt && Number.isFinite(pt.power)) min = Math.min(min, pt.power);
+    }
+    return min;
+  }
   if (TOPICS[ex.topic].compare) {
     // each better level against the control by Dunnett's method (balanced: correlation ½), with
     // the error df of the blocked one-way model: the smallest power
@@ -763,7 +880,16 @@ function countPower(ex, truth, study) {
 
 /** The true active factors, effects (low → high) and optimum of an exercise. */
 export function trueFacts(ex, truth = truthOf(ex)) {
-  const resp = truth.process.responses[0], proc = { ...truth.process, factors: ex.study.factors };
+  const resp = truth.process.responses[0], proc = { ...truth.process, factors: TOPICS[ex.topic]?.ascent ? truth.process.factors : ex.study.factors };
+  if (TOPICS[ex.topic]?.ascent) {
+    // the best settings within the operating limits (the region the question asks about)
+    const region = createStudy({ name: 'limits', factors: truth.process.factors.map(f => ({ ...f, low: f.limits.lower, high: f.limits.upper, limits: undefined })) });
+    const mu = (s) => trueMean(proc, resp.id, s), goal = ex.study.responses[0].goal ?? MAX;
+    // regret is measured against the gain available from today's settings (the first study's centre),
+    // not the whole region's range: staying near today's settings scores little
+    const opt = bestSettings(region, mu, goal), today = Object.fromEntries(truth.process.factors.map(f => [f.id, decode(f, 0)]));
+    return { active: [], effects: {}, best: opt, bestValue: mu(opt), worstValue: mu(today), mu, sigma: resp.sigma, goal };
+  }
   if (resp.curve) {
     const [ref, test] = Object.keys(resp.curve.levels);
     return { active: [], effects: {}, sigma: resp.sigma, ec50: resp.curve.levels[test].e, potency: resp.curve.levels[ref].e / resp.curve.levels[test].e, reference: ref, test };
@@ -895,5 +1021,6 @@ export function gradeStudy(ex, study, truth = truthOf(ex)) {
   const given = study.exercise?.answers;
   const derived = !given;
   const answers = given ?? deriveAnswers(ex, study);
-  return { ...gradeAnswers(ex, truth, answers, { runs: study.design?.runs.length ?? 0 }), answers, derived, modelAnswer: truth.modelAnswer };
+  // a next study (Learn, moving to a better region) counts the runs of the studies before it
+  return { ...gradeAnswers(ex, truth, answers, { runs: (study.exercise?.previousRuns ?? 0) + (study.design?.runs.length ?? 0) }), answers, derived, modelAnswer: truth.modelAnswer };
 }

@@ -372,6 +372,17 @@ try {
     check('path --results --next: best at step 5, a new study centred there', r.code === 0 && /best: step 5/.test(r.out) && /stopped improving after step 5/.test(r.out) && /next\.aikidoe\.json: a new study centred at .*temp 175 … 185 °C; full-factorial, 8 runs/.test(r.out), r.out + r.err);
     r = run('path', 'rpath.aikidoe.json', '--results', '--next', 'next2.aikidoe.json', '--design', 'ccd', '--at', 'time=50,temp=170');
     check('--next --design ccd --at: centred where asked', r.code === 0 && /centred at time=50, temp=170/.test(r.out) && /12 runs/.test(r.out), r.out + r.err);
+    // Learn lesson 19: the exercise goes on in the next study, counting the runs already spent
+    run('exercise', 'new', 'asc.aikidoe.json', '--topic', 'ascent', '--seed', '3');
+    run('design', 'asc.aikidoe.json', '--full', '--replicates', '2', '--centre', '2');
+    run('exercise', 'run', 'asc.aikidoe.json');
+    run('augment', 'asc.aikidoe.json', '--path', '--steps', '8');
+    run('exercise', 'run', 'asc.aikidoe.json');
+    run('path', 'asc.aikidoe.json', '--results', '--next', 'asc2.aikidoe.json', '--design', 'ccd');
+    r = run('exercise', 'run', 'asc2.aikidoe.json');
+    check('exercise --topic ascent: the next study counts the earlier runs', r.code === 0 && /32 of the budget of 32, with the earlier studies/.test(r.out), r.out + r.err);
+    r = run('exercise', 'grade', 'asc2.aikidoe.json');
+    check('… graded on the quadratic in the new region: 100, the true best settings within the limits', r.code === 0 && /score: 100 \/ 100/.test(r.out) && /truth: best settings within the operating limits/.test(r.out), r.out + r.err);
     r = run('path', 'ascent.aikidoe.json', 'yield ~ quadratic');
     check('path with a quadratic model the design cannot fit: an error', r.code !== 0, r.out + r.err);
   }

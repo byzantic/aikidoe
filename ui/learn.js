@@ -70,13 +70,15 @@ export function banner(ctx) {
   const sealed = !!study.exercise.sealed;
   const d = study.design, done = d ? new Set(study.observations.filter(o => o.value !== null).map(o => o.run)).size : 0;
   const pending = d ? d.runs.length - done : 0;
+  // runs spent in earlier studies of the same exercise (moving to a better region, #81)
+  const used = (study.exercise.previousRuns ?? 0) + (d?.runs.length ?? 0);
   const hs = lesson ? hints(lesson, ex, study) : [];
   const getResults = d && pending > 0 && sealed ? h('button', { class: 'btn primary', id: 'get-results', onclick: () => {
-    if (d.runs.length > ex.budget) toast(`Over budget: ${d.runs.length} runs, budget ${ex.budget}`);
+    if (used > ex.budget) toast(`Over budget: ${used} runs, budget ${ex.budget}`);
     try { const next = runExercise(ex, study); state.step = 'analyse'; ctx.setDoc(structuredClone(next)); toast(`Results for ${pending} runs`); } catch (e) { toast(e.message); }
   } }, `Get results (${pending} runs)`) : null;
   return h('section', { class: 'panel exercise', id: 'exercise' },
-    h('div', { class: 'row' }, h('b', {}, lesson ? `Lesson ${lesson.n}: ${lesson.title}` : ex.title), h('span', { class: 'muted small' }, `${ex.difficulty} · exercise ${ex.seed} · ${d ? `${d.runs.length} of ${ex.budget} runs` : `budget ${ex.budget} runs`}`),
+    h('div', { class: 'row' }, h('b', {}, lesson ? `Lesson ${lesson.n}: ${lesson.title}` : ex.title), h('span', { class: 'muted small' }, `${ex.difficulty} · exercise ${ex.seed} · ${d ? `${used} of ${ex.budget} runs` : `budget ${ex.budget} runs`}`),
       h('span', { style: 'margin-left:auto' }), getResults,
       h('button', { class: 'btn', id: 'toggle-grade', onclick: () => set({ open: !ui.open }) }, ui.open ? 'Hide answers' : 'Answer and grade')),
     h('details', { open: !d }, h('summary', {}, 'The task'), h('p', { class: 'small' }, ex.text), h('ul', { class: 'small' }, ex.questions.map(q => h('li', {}, q.text)))),
