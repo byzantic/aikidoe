@@ -361,6 +361,17 @@ try {
     check('path --step-size: 5 min a step', r.code === 0 && /each step: time \+5 min/.test(r.out), r.out + r.err);
     r = run('path', 'ascent.aikidoe.json', '--descent', '--steps', '1');
     check('path --descent', r.code === 0 && /path of steepest descent/.test(r.out), r.out + r.err);
+    r = run('path', 'ascent.aikidoe.json', '--results');
+    check('path --results before any path runs: says how to add them', r.code !== 0 && /doe augment ascent\.aikidoe\.json --path/.test(r.err), r.err);
+    r = run('augment', 'ascent.aikidoe.json', '--path', '--steps', '4');
+    check('augment --path: 4 runs along the path as block 2, predictions printed', r.code === 0 && /step 4: time=45\.1345, temp=175 — predicted 82\.626/.test(r.out) && /4 runs added as block 2/.test(r.out), r.out + r.err);
+    r = run('path', 'ascent.aikidoe.json', '--results');
+    check('path --results without results: run them in order', r.code === 0 && /no results yet/.test(r.out), r.out + r.err);
+    copyFileSync(new URL('../examples/reaction-path.aikidoe.json', import.meta.url), join(dir, 'rpath.aikidoe.json'));
+    r = run('path', 'rpath.aikidoe.json', '--results', '--next', 'next.aikidoe.json');
+    check('path --results --next: best at step 5, a new study centred there', r.code === 0 && /best: step 5/.test(r.out) && /stopped improving after step 5/.test(r.out) && /next\.aikidoe\.json: a new study centred at .*temp 175 … 185 °C; full-factorial, 8 runs/.test(r.out), r.out + r.err);
+    r = run('path', 'rpath.aikidoe.json', '--results', '--next', 'next2.aikidoe.json', '--design', 'ccd', '--at', 'time=50,temp=170');
+    check('--next --design ccd --at: centred where asked', r.code === 0 && /centred at time=50, temp=170/.test(r.out) && /12 runs/.test(r.out), r.out + r.err);
     r = run('path', 'ascent.aikidoe.json', 'yield ~ quadratic');
     check('path with a quadratic model the design cannot fit: an error', r.code !== 0, r.out + r.err);
   }
@@ -649,6 +660,8 @@ try {
   check('compare --json: levels, comparisons, the critical value', o.method === 'dunnett' && o.family === 'control' && o.levels.length === 5 && o.comparisons.length === 4 && Math.abs(o.critical - 2.7273) < 1e-4);
   o = js('compare', 'media.aikidoe.json', 'medium');
   check('compare --json: letters with all pairs', o.levels.find(l => l.label === 'M-4').letters === 'a' && o.comparisons.length === 10);
+  o = js('path', 'rpath.aikidoe.json', '--results');
+  check('path --results --json: the points, the best step', o.best.step === 5 && o.points.length === 8 && o.stoppedImproving);
   o = js('path', 'ascent.aikidoe.json', '--steps', '3');
   check('path --json: method, direction, cone, points in natural units', o.method === 'linear' && o.region.determined && o.points.length === 4 && o.points[1].settings.temp === 160);
   o = js('power', 'media.aikidoe.json', '--equivalence', '--margin', '0.5', '--sigma', '0.47');

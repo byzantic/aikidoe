@@ -17,7 +17,9 @@
 // of the remaining gradient (first order). A constraint, or a limit on a ridge path, ends the path.
 // Checked against rsm::steepest and rsm::canonical.path.
 
-import { decode, code, studyConstraints, feasible } from '../study.js';
+import { decode, code, studyConstraints, feasible, createStudy } from '../study.js';
+import { fullFactorial, toStudyDesign } from '../design/factorial.js';
+import { ccd } from '../design/rsm.js';
 import { eigSym, solve } from '../linalg.js';
 import { fDist, betaInc } from '../dist.js';
 import { predict } from './fit.js';
@@ -248,4 +250,102 @@ export function directionRegion(study, fit, { alpha = 0.05 } = {}) {
   const theta = Math.acos(Math.sqrt(c2)), s2 = 1 - c2;
   const fraction = 0.5 * betaInc(s2, (k - 1) / 2, 0.5).I;
   return { k, df, F, sb2, angle: theta * 180 / Math.PI, fraction, determined: fraction < 0.05 };
+}
+
+// ---------------------------------------------------------------- running the path (phase 2)
+//
+//   pathStage(study, fit, opts)       the path's points (after the centre) as a stage of runs for
+//                                     appendStage: kind 'path', run in step order, the predictions
+//                                     kept with the stage
+//   pathResults(study)                the path runs' results against what was predicted, and where
+//                                     the response stopped improving
+//   nextStudy(study, at, opts)        a new study centred where the path peaked: the same factors,
+//                                     the same widths (within the operating limits), with a
+//                                     factorial and centre points or a central composite design
+
+/**
+ * The path as a stage of runs (appendStage: augment.js): its points after the centre, each once
+ * (opts as steepestPath; from 1 to steps), kind 'path', in step order. The predictions are kept in
+ * the stage's params to compare with the results.
+ */
+export function pathStage(study, fit, opts = {}) {
+  const p = steepestPath(study, fit, opts);
+  const pts = p.points.filter(q => q.step > 0);
+  if (!pts.length) throw new Error(p.stopped ? `no points on the path: ${p.stopped}` : 'no points on the path');
+  const X = pts.map(q => study.factors.map(f => (f.type === 'categorical' ? (f.levels.length === 2 ? 2 * f.levels.indexOf(q.settings[f.id]) - 1 : f.levels.indexOf(q.settings[f.id])) : code(f, q.settings[f.id]))));
+  return { kind: 'path', X, runKind: pts.map(() => 'path'), ordered: true,
+    note: `${pts.length} run${pts.length > 1 ? 's' : ''} along the path of steepest ${p.goal} for ${fit.response}`,
+    params: { response: fit.response, formula: `${fit.response} ~ ${fit.model.terms.filter(t => !t.block).map(t => t.label).join(' + ')}`, method: p.method, goal: p.goal,
+      ...(p.increments ? { increments: p.increments } : {}), held: p.held, stopped: p.stopped,
+      predictions: pts.map(q => ({ step: q.step, distance: q.distance, settings: q.settings, fit: q.fit, lower: q.lower, upper: q.upper, outside: q.outside })) } };
+}
+
+/**
+ * The results along the path: for each path stage, its points in step order with what was
+ * predicted and what was observed (the mean of the run's results), the base (the mean of the
+ * first stage's centre runs, step 0), the best step, and whether the response had stopped
+ * improving (two steps in a row no better than the best so far, by default). Returns null when the
+ * study has no path runs. { response, goal, points: [{ step, run, settings, predicted, lower, upper,
+ * observed }], base, best: { step, run, settings, observed }, stoppedImproving, after }.
+ */
+export function pathResults(study, { response, patience = 2 } = {}) {
+  const runs = study.design?.runs ?? [];
+  const pathRuns = runs.filter(r => r.kind === 'path');
+  if (!pathRuns.length) return null;
+  const hist = (study.history ?? []).filter(h => h.stage === 'path' && h.params?.predictions);
+  const params = hist.at(-1)?.params ?? {};
+  const rid = response ?? params.response ?? study.responses[0].id;
+  const resp = study.responses.find(r => r.id === rid);
+  if (!resp) throw new Error(`no response "${rid}"`);
+  const sign = (params.goal ?? (resp.goal === 'minimize' ? 'descent' : 'ascent')) === 'descent' ? -1 : 1;
+  const mean = (run) => { const v = study.observations.filter(o => o.run === run && o.response === rid && o.value !== null).map(o => o.value); return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null; };
+  const preds = hist.flatMap(h => h.runs.map((run, i) => ({ run, ...(h.params.predictions[i] ?? {}) })));
+  const points = pathRuns.slice().sort((a, b) => a.order - b.order).map((r, i) => {
+    const p = preds.find(x => x.run === r.run) ?? {};
+    return { step: p.step ?? i + 1, run: r.run, settings: r.settings, predicted: p.fit ?? null, lower: p.lower ?? null, upper: p.upper ?? null, observed: mean(r.run) };
+  });
+  // step 0: the centre runs of the region the path started from
+  const centre = runs.filter(r => r.kind === 'centre' && r.block === (runs.find(x => x.kind !== 'path')?.block)).map(r => mean(r.run)).filter(v => v !== null);
+  const base = centre.length ? centre.reduce((a, x) => a + x, 0) / centre.length : null;
+  let best = null, since = 0, stoppedImproving = false, after = null;
+  for (const q of points) {
+    if (q.observed === null) break;
+    if (!best || sign * q.observed > sign * best.observed) { best = q; since = 0; } else if (++since >= patience) { stoppedImproving = true; after = q.step; break; }
+  }
+  return { response: rid, goal: sign > 0 ? 'ascent' : 'descent', points, base, best, stoppedImproving, after, done: points.filter(q => q.observed !== null).length };
+}
+
+/**
+ * A new study centred at settings `at` (natural units; default the best point of the path): the
+ * same factors and responses, each continuous factor's range moved to be centred there with the
+ * same width (a log factor: the same ratio), shifted to stay within its operating limits;
+ * categorical factors as they were. design: 'factorial' (2ᵏ with centre points, default 4),
+ * 'ccd' (a rotatable central composite) or 'none'. Returns the new study (validated).
+ */
+export function nextStudy(study, at, { design = 'factorial', centre = 4, name } = {}) {
+  const factors = study.factors.map(f => {
+    if (f.type === 'categorical' || at[f.id] === undefined) return f;
+    let lo, hi;
+    if (f.transform === 'log') { const r = Math.sqrt(f.high / f.low); lo = at[f.id] / r; hi = at[f.id] * r; }
+    else { const h = (f.high - f.low) / 2; lo = at[f.id] - h; hi = at[f.id] + h; }
+    const L = f.limits ?? {};
+    if (L.upper !== undefined && hi > L.upper) { const d = hi - L.upper; hi = L.upper; lo = f.transform === 'log' ? lo * (L.upper / (hi + d)) : lo - d; }
+    if (L.lower !== undefined && lo < L.lower) { const d = L.lower - lo; lo = L.lower; hi = f.transform === 'log' ? hi * (L.lower / (L.lower - d)) : hi + d; }
+    const round = (x) => +x.toPrecision(6);
+    return { ...f, low: round(lo), high: round(hi) };
+  });
+  const base = { aikidoe: study.aikidoe, name: name ?? `${study.name} — next region`, seed: (study.seed ?? 1) + 1,
+    description: `Centred where the path of steepest ascent of "${study.name}" peaked (${Object.entries(at).map(([k, v]) => `${k} = ${+Number(v).toPrecision(5)}`).join(', ')}).`,
+    factors, responses: study.responses.map(({ measurement, ...r }) => r), constraints: study.constraints ?? [] };
+  let st = createStudy(base);
+  if (design === 'none') return st;
+  const cont = st.factors.map(f => f.type !== 'categorical');
+  let d;
+  if (design === 'ccd') {
+    if (cont.some(c => !c)) throw new Error('a central composite design needs continuous factors only');
+    d = ccd(st.factors.length, { centre });
+  } else if (design === 'factorial') d = fullFactorial(st.factors.map(f => (f.type === 'categorical' ? f.levels.length : 2)), { continuous: cont, centre: cont.some(Boolean) ? centre : 0 });
+  else throw new Error('design: factorial, ccd or none');
+  st = createStudy({ ...st, design: toStudyDesign(st, d, { seed: st.seed }) });
+  return st;
 }

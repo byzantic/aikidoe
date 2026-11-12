@@ -30,7 +30,7 @@ export class StudyError extends Error {
 // ---------------------------------------------------------------- schema
 
 const ID = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const RUN_KINDS = ['factorial', 'fraction', 'axial', 'centre', 'confirm', 'augment', 'optimal', 'space-filling', 'other'];
+const RUN_KINDS = ['factorial', 'fraction', 'axial', 'centre', 'confirm', 'augment', 'optimal', 'space-filling', 'path', 'other'];
 const GOALS = ['none', 'maximize', 'minimize', 'target', 'range'];
 const LEVELS = ['lot', 'run', 'wholePlot', 'wafer', 'site'];
 // a response's distribution (issue #64) and the links each takes (the first is the default)

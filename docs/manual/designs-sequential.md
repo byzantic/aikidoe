@@ -133,6 +133,59 @@ believe. Run the points one or two at a
 time, and stop when the response no longer improves. Then centre the next design (a factorial,
 with centre points to check for curvature) on the best point found.
 
+**Running the path.** `doe augment --path` adds the path's points as a new block of runs. They
+are marked as *path* runs, listed in step order on the run sheet, and the fitted predictions are
+kept with them. The path runs are not fitted with the first experiment, because they come from
+another region. On the Optimise step, the *Moving to a better region* panel shows the path, and
+*Add these runs as a new stage* does the same.
+
+```console
+$ doe augment examples/reaction-ascent.aikidoe.json --path --steps 8
+step 1: time=37.5336, temp=160 — predicted 61.607 (95% CI 60.464 … 62.749)
+step 2: time=40.0673, temp=165 — predicted 68.613 (95% CI 66.564 … 70.662, extrapolated)
+step 3: time=42.6009, temp=170 — predicted 75.62 (95% CI 72.617 … 78.622, extrapolated)
+step 4: time=45.1345, temp=175 — predicted 82.626 (95% CI 78.655 … 86.597, extrapolated)
+step 5: time=47.6682, temp=180 — predicted 89.633 (95% CI 84.688 … 94.577, extrapolated)
+step 6: time=50.2018, temp=185 — predicted 96.639 (95% CI 90.719 … 102.56, extrapolated)
+step 7: time=52.7354, temp=190 — predicted 103.65 (95% CI 96.748 … 110.54, extrapolated)
+step 8: time=55.2691, temp=190 — predicted 105.08 (95% CI 97.968 … 112.19, extrapolated)
+run them in this order, one or two at a time; stop when the response no longer improves (doe path --results)
+examples/reaction-ascent.aikidoe.json: 8 runs along the path of steepest ascent for yield; 8 runs added as block 2 (runs 10–17), 17 runs in all
+```
+
+When results come in, `doe path --results` sets them against the predictions. It finds the best
+step and says whether the response has stopped improving (two steps in a row no better than the
+best). The example *Reaction yield, along the path* has the eight runs done. The yield climbs to
+step 5 and then falls, well behind the plane's predictions, as expected near an optimum. `--next`
+writes a new study centred at the best step, with the same factor widths moved there (and kept
+within the operating limits). It comes with a factorial and four centre points, to check for
+curvature (`--design ccd` for a central composite):
+
+```console
+$ doe path examples/reaction-path.aikidoe.json --results --next next.aikidoe.json
+yield along the path of steepest ascent: 8 of 8 runs with results; 55.1 at the centre of the first experiment
+
+step  run  time (min)  temp (°C)  predicted  observed
+----  ---  ----------  ---------  ---------  --------  ----
+   1   10  37.534      160        61.607     61
+   2   11  40.067      165        68.613     65.6
+   3   12  42.601      170        75.62      68.8
+   4   13  45.135      175        82.626     70.2
+   5   14  47.668      180        89.633     70.5      best
+   6   15  50.202      185        96.639     69.3
+   7   16  52.735      190        103.65     65.6
+   8   17  55.269      190        105.08     66.9
+
+best: step 5, time=47.6682, temp=180: 70.5
+the response stopped improving after step 5 (no better at steps 6–7): centre the next design at step 5
+the results fall behind the predictions further along: the first-order model no longer holds there (curvature), as expected near an optimum
+
+next.aikidoe.json: a new study centred at time=47.6682, temp=180: time 42.668 … 52.668 min, temp 175 … 185 °C; full-factorial, 8 runs
+```
+
+On the Optimise step, the panel shows the same table once the path runs have results. *Open it*
+starts the next study there (download the current one first to keep it).
+
 **With curvature.** When the model has squares or interactions, `doe path` uses **ridge
 analysis**. For each distance from the centre, it finds the best point at that distance on the
 fitted surface. Away from the centre the path bends towards the optimum. `--canonical` gives the

@@ -233,7 +233,7 @@ export function simulateGlmmPower(mm, groupLabels, opts = {}) {
  */
 export function studyGlmmMatrix(study, model = 'main', { random = 'wholePlot' } = {}) {
   if (!study.design) throw new Error('the study has no design yet');
-  const runs = study.design.runs.filter(r => r.kind !== 'confirm');
+  const runs = study.design.runs.filter(r => r.kind !== 'confirm' && r.kind !== 'path');
   const keys = String(random).split(',').map(x => x.trim()).sort((a, b) => (a === 'block' ? -1 : b === 'block' ? 1 : 0));
   for (const key of keys) {
     if (!['block', 'wholePlot'].includes(key)) throw new Error(`power with a random "${key}" effect: use wholePlot, block or block,wholePlot`);

@@ -515,6 +515,32 @@ try {
     check('margin σ: the power against Standard (or no test with one run per level), and the runs 80 % needs', /(power 0\.\d+ for each level|no error df in this design, so no test) against Standard — 80 % needs this design \d+ times \(\d+ runs\)/.test(t), t);
   }
 
+  section('moving to a better region: steepest ascent (issue #81)');
+  {
+    await page.click('#btn-examples'); await page.click('[data-example="reaction-ascent"]'); await page.waitForTimeout(300);
+    await page.click('[data-step="define"]'); await settle();
+    check('Define: the operating limits of each factor', (await page.inputValue('tr[data-factor="temp"] input[aria-label="limit upper"]')) === '190');
+    await page.click('[data-step="optimise"]'); await settle();
+    let t = await page.textContent('#path');
+    check('Optimise: the path, 5 °C a step, the cone, 7 points', /each step moves time \+2\.534 min, temp \+5 °C/.test(t) && /half-angle 8\.06°/.test(t) && await page.locator('#path [data-path-point]').count() === 7, t.slice(0, 300));
+    await shot('21-path');
+    await page.click('#path-add'); await settle();
+    let st = await state();
+    check('added as a stage of 6 path runs, in step order; the Run step', st.step === 'run' && st.study.design.runs.filter(r => r.kind === 'path').length === 6
+      && st.study.design.runs.filter(r => r.kind === 'path').every((r, i, a) => i === 0 || r.order > a[i - 1].order));
+    await page.click('[data-step="optimise"]'); await settle();
+    check('… the panel waits for their results', /No results along the path yet/.test(await page.textContent('#path-verdict')));
+    await page.click('#btn-examples'); await page.click('[data-example="reaction-path"]'); await page.waitForTimeout(300);
+    await page.click('[data-step="optimise"]'); await settle();
+    t = await page.textContent('#path-verdict');
+    check('with results: stopped improving after step 5', /stopped improving after step 5/.test(t) && /fall behind the predictions/.test(t), t);
+    await shot('22-path-results');
+    await page.click('#path-next-open'); await settle();
+    st = await state();
+    const tf = st.study.factors.find(f => f.id === 'temp');
+    check('the next study: centred at step 5 (temp 175 … 185 °C), a factorial with centre points', st.step === 'design' && tf.low === 175 && tf.high === 185 && st.study.design.runs.length === 8);
+  }
+
   section('projectivity: the active factors fitted from the same runs (issue #79)');
   {
     const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];

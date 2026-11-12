@@ -1,5 +1,6 @@
 // The Optimise step (issue #18): desirability goals for the responses, the best settings over
 // the fitted models, a prediction profiler and a two-factor overlay of the desirability.
+import { pathPanel } from './path.js';
 import { h, select, dataTable, messages, help } from './dom.js';
 import { plot } from './plot.js';
 import { num } from '../js/format.js';
@@ -122,7 +123,7 @@ export function render(ctx) {
   const notes = missing.map(m => `${m.id}: ${m.reason}`);
   if (!ms.length) {
     const centre0 = Object.fromEntries(study.factors.map(f => [f.id, f.noise ? f.noise.mean ?? decode(f, 0) : f.type === 'categorical' ? f.levels[0] : decode(f, 0)]));
-    return h('div', {}, goals, messages([...notes, 'Give at least one response with results a goal and its limits (lower / target / upper) to optimise.'], 'warning'), robustPanel(ctx, { ...centre0, ...(ui.at ?? {}) }, set, ui), yieldPanel(ctx, { ...centre0, ...(ui.at ?? {}) }, set, ui));
+    return h('div', {}, goals, messages([...notes, 'Give at least one response with results a goal and its limits (lower / target / upper) to optimise.'], 'warning'), pathPanel(ctx), robustPanel(ctx, { ...centre0, ...(ui.at ?? {}) }, set, ui), yieldPanel(ctx, { ...centre0, ...(ui.at ?? {}) }, set, ui));
   }
 
   // current settings: chosen by the user, else the optimum, else the centre
@@ -232,5 +233,5 @@ export function render(ctx) {
         h('label', { class: 'inline' }, 'y', select(contF.map(f => f.id), fy, (v) => set({ oy: v }), { 'aria-label': 'overlay y' }))),
       svg, h('p', { class: 'muted small' }, `Overall desirability over ${fx} and ${fy} (the factor ranges), the other factors at the settings above. Grey: some response outside its acceptable range (or a constraint violated) — the sweet spot is the coloured region. ○ the runs (faded when their other factors differ from the settings above), ● the settings above: a sweet spot far from any run rests on extrapolation.`));
   }
-  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, covRow, res), profPanel, overlay, ...(study.mixture ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));
+  return h('div', {}, goals, messages(notes, 'warning'), h('section', { class: 'panel' }, h('h2', {}, 'Best settings', help('optimisation','best-settings')), controls, covRow, res), pathPanel(ctx), profPanel, overlay, ...(study.mixture ? [] : [robustPanel(ctx, at, set, ui), yieldPanel(ctx, at, set, ui)]));
 }

@@ -11,6 +11,10 @@
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+//   path STUDY --results [--next NEW.aikidoe.json [--design factorial|ccd|none] [--centre 4] [--at "A=…,B=…"]]
+//        the runs along the path (doe augment --path): predicted against observed, the best step and
+//        whether the response has stopped improving; --next: a new study centred there (the same
+//        widths, within the operating limits) with a factorial and centre points or a CCD
 //   path STUDY ["y ~ …"] [--steps 5] [--step 1 | --step-size "A=5"] [--distances "0,0.5,…"] [--ascent | --descent]
 //        [--canonical [--axis k]]
 //        where to run next when the optimum lies outside the ranges studied: the path of steepest
@@ -129,7 +133,8 @@
 //   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
-//                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n])  [--seed S] [--sheet FILE.csv]
+//                 | --confirm "A=15,B=2,…" … --formula "y ~ …" [--replicates n]
+//                 | --path [--formula "y ~ main"] [--steps 5] [--step 1 | --step-size "A=5"] [--descent])  [--seed S] [--sheet FILE.csv]
 //        adds a stage of runs to the design as a new block
 //   predict STUDY "y ~ formula" --at "A=15,B=2,…" …   predictions with 95% confidence and prediction intervals
 //        (counts and proportions: [--exposure e] [--trials n] for the new run; with a random effect
@@ -227,7 +232,7 @@ import { adjustedMeans, equalSlopes } from '../js/model/adjusted.js';
 import { allocate, applyAllocation } from '../js/design/allocate.js';
 import { compareLevels } from '../js/model/compare.js';
 import { equivalence, logResponse, equivalencePower, equivalenceRuns } from '../js/model/equivalence.js';
-import { steepestPath, canonicalPath, directionRegion } from '../js/model/path.js';
+import { steepestPath, canonicalPath, directionRegion, pathStage, pathResults, nextStudy } from '../js/model/path.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -989,7 +994,17 @@ function cmdAugment({ pos, opt }) {
     stage = confirmationRuns(study, fit, list(opt.confirm).map(t => parseSettings(study, t)), { replicates: reps, inOneWholePlot: !opt['separate-whole-plots'] });
     for (const p of stage.params.predictions) out(`predicted ${fit.response} at ${showSettings(p.settings)}: ${num(p.fit)} (95% prediction interval ${num(p.predLower)} … ${num(p.predUpper)}${stage.params.mixed ? ' for one run' : ''}${stage.params.mixed && reps > 1 ? `; ${num(p.meanLower)} … ${num(p.meanUpper)} for the mean of the ${reps} runs` : ''})`);
     if (stage.params.mixed) out('mixed model: intervals include the whole-plot, run and wafer variation; confirmation runs at one setting share a new whole plot (--separate-whole-plots to give each its own)');
-  } else fail('augment: choose --foldover, --axial, --optimal or --confirm');
+  } else if (opt.path) {
+    // runs along the path of steepest ascent (#81): the path's points after the centre, in order
+    const formula = opt.formula ? String(opt.formula) : `${(study.responses.find(r => !r.derived && study.observations.some(o => o.response === r.id && o.value !== null)) ?? fail('no response has results yet')).id} ~ main`;
+    let fit; try { fit = fitModel(study, formula); } catch (e) { fail(e.message); }
+    let stepFactor, stepNatural;
+    if (opt['step-size']) { const [id, v] = String(opt['step-size']).split('=').map(x => x.trim()); stepFactor = id; stepNatural = Number(v); }
+    try { stage = pathStage(study, fit, { steps: opt.steps !== undefined ? int(opt.steps, 'steps') : 5, ...(opt.step !== undefined ? { step: Number(opt.step) } : {}), stepFactor, stepNatural, ...(opt.descent ? { descent: true } : {}) }); } catch (e) { fail(e.message); }
+    for (const p of stage.params.predictions) out(`step ${p.step}: ${showSettings(p.settings)} — predicted ${num(p.fit, 5)} (95% CI ${num(p.lower, 5)} … ${num(p.upper, 5)}${p.outside ? ', extrapolated' : ''})`);
+    if (stage.params.stopped) out(`stopped: ${stage.params.stopped}`);
+    out('run them in this order, one or two at a time; stop when the response no longer improves (doe path --results)');
+  } else fail('augment: choose --foldover, --axial, --optimal, --confirm or --path');
   const next = appendStage(study, stage, opt.seed !== undefined ? { seed: int(opt.seed, 'seed') } : {});
   save(file, next);
   const added = next.history[next.history.length - 1].runs;
@@ -1096,6 +1111,7 @@ function printEquivalencePower(study, opt) {
 /** The path of steepest ascent or descent, ridge analysis, or a canonical path (issue #81). */
 function cmdPath({ pos, opt }) {
   const [file, a] = pos, study = load(file);
+  if (opt.results || opt.next) return pathRunsReport(file, study, opt);
   let formula = a !== undefined && String(a).includes('~') ? String(a) : null;
   if (!formula) {
     const resp = study.responses.find(r => !r.derived && study.observations.some(o => o.response === r.id && o.value !== null)) ?? fail('no response has results yet');
@@ -1140,6 +1156,36 @@ function cmdPath({ pos, opt }) {
     points: p.points.map(q => ({ step: q.step, distance: q.distance, coded: q.coded, settings: q.settings, fit: q.fit, se: q.se, lower: q.lower, upper: q.upper, outside: q.outside, limited: q.limited })), stopped: p.stopped });
 }
 const decodeCentre = (f) => decode(f, 0);
+
+/** The runs along a path: predicted against observed, where the response stopped improving; --next FILE: a new study there. */
+function pathRunsReport(file, study, opt) {
+  const res = pathResults(study, opt.response ? { response: String(opt.response) } : {});
+  if (!res) fail(`${file} has no runs along a path: add them with doe augment ${file} --path`);
+  const fs = study.factors.filter(f => res.points.some(q => q.settings[f.id] !== res.points[0].settings[f.id]) || f.type === 'categorical');
+  out(`${res.response} along the path of steepest ${res.goal}: ${res.done} of ${res.points.length} runs with results${res.base !== null ? `; ${num(res.base, 5)} at the centre of the first experiment` : ''}`);
+  out('');
+  out(table([{ key: 'step', label: 'step' }, { key: 'run', label: 'run' }, ...fs.map(f => ({ key: f.id, label: f.units ? `${f.id} (${f.units})` : f.id })), { key: 'pred', label: 'predicted' }, { key: 'obs', label: 'observed' }, { key: 'note', label: '', align: 'left' }],
+    res.points.map(q => ({ step: q.step, run: q.run, ...Object.fromEntries(fs.map(f => [f.id, typeof q.settings[f.id] === 'number' ? num(q.settings[f.id], 5) : q.settings[f.id]])), pred: q.predicted === null ? '' : num(q.predicted, 5), obs: q.observed === null ? '—' : num(q.observed, 5),
+      note: res.best && q.run === res.best.run ? 'best' : '' }))));
+  if (!res.best) { out('\nno results yet: run the path in step order (doe sheet), then doe path --results'); }
+  else {
+    out(`\nbest: step ${res.best.step}, ${showSettings(res.best.settings)}: ${num(res.best.observed, 5)}`);
+    out(res.stoppedImproving ? `the response stopped improving after step ${res.best.step} (no better at steps ${res.best.step + 1}–${res.after}): centre the next design at step ${res.best.step}${opt.next ? '' : ` (doe path ${file} --next NEW.aikidoe.json)`}`
+      : res.done < res.points.length ? 'still improving: run the next steps' : 'still improving at the last step: extend the path (doe augment --path with more steps) or centre the next design at the last step');
+    const gap = res.points.filter(q => q.observed !== null && q.predicted !== null).map(q => q.observed - q.predicted);
+    if (gap.length >= 2 && Math.abs(gap.at(-1)) > 2 * Math.abs(gap[0]) + 1e-9) out('the results fall behind the predictions further along: the first-order model no longer holds there (curvature), as expected near an optimum');
+  }
+  let next = null;
+  if (opt.next) {
+    if (!res.best && !opt.at) fail('--next: no results along the path yet (or give --at "A=…,B=…")');
+    const at = opt.at ? parseSettingsLoose(study, String(opt.at)) : res.best.settings;
+    try { next = nextStudy(study, at, { design: opt.design ? String(opt.design) : 'factorial', ...(opt.centre !== undefined ? { centre: int(opt.centre, 'centre') } : {}) }); } catch (e) { fail(e.message); }
+    save(String(opt.next), next);
+    out(`\n${opt.next}: a new study centred at ${showSettings(Object.fromEntries(Object.entries(at).filter(([k]) => study.factors.find(f => f.id === k)?.type !== 'categorical')))}: ${next.factors.filter(f => f.type !== 'categorical').map(f => `${f.id} ${num(f.low, 5)} … ${num(f.high, 5)}${f.units ? ` ${f.units}` : ''}`).join(', ')}${next.design ? `; ${next.design.kind}, ${next.design.runs.length} runs` : ''}`);
+  }
+  put({ response: res.response, goal: res.goal, base: res.base, done: res.done, points: res.points, best: res.best ? { step: res.best.step, run: res.best.run, settings: res.best.settings, observed: res.best.observed } : null,
+    stoppedImproving: res.stoppedImproving, after: res.after, ...(next ? { next: { file: String(opt.next), factors: next.factors, runs: next.design?.runs.length ?? 0 } } : {}) });
+}
 
 /** Equivalence and non-inferiority of a factor's levels against a reference (issue #84). */
 function cmdEquivalence({ pos, opt }) {
