@@ -17,8 +17,15 @@ centre points they make a central composite design.
 covariate known in advance is uncorrelated with the factors' effects, instead of leaving it to
 chance. See [Covariates known in advance](analysis.md#covariates-known-in-advance).
 
+**Balanced incomplete block design** — blocks too small for every treatment, arranged so that
+every pair of treatments shares the same number of blocks; every comparison is then equally
+precise. See [incomplete blocks](designs-comparative.md#balanced-incomplete-blocks).
+
 **Block** — a group of runs that may differ systematically from other groups (a day, a batch, a
 stage); the design and analysis account for it.
+
+**Carry-over** — in a crossover, a treatment still acting in the next period. A Williams design
+lets the analysis estimate it and allow for it. See [crossovers](designs-comparative.md#crossovers).
 
 **Centre point** — a run at the middle of every continuous factor's range.
 
@@ -35,6 +42,10 @@ the new media minus the standard". See [comparing treatments](analysis.md#compar
 **Covariate** — a variable measured at each run but not set (a starting weight, the room
 temperature). In the model it explains part of the scatter, and the factors' effects are compared
 at the same value of it. See [Covariates](analysis.md#covariates).
+
+**Crossover design** — each subject (an animal, a volunteer, a cell line) receives every
+treatment in turn, one per period, so the treatments are compared within subjects.
+See [crossovers](designs-comparative.md#crossovers).
 
 **Cox direction** — in a mixture, the line along which one component changes while the others keep
 their proportions to each other; the traces of the response along it show each component's effect.
@@ -59,6 +70,10 @@ asymptotes. See [dose–response](dose-response.md).
 
 **Edge effect** — wells on the outer ring of a microplate reading differently from the inner
 wells (evaporation, temperature). See [microplates](plates.md).
+
+**Efficiency (of a block design)** — how much of the information on the treatment comparisons the
+blocks keep, against complete blocks with the same replication: 1 for complete blocks, λt/(rk)
+for a balanced incomplete block design.
 
 **Effect** — the change in a response from a factor's low to its high setting (twice the coded
 coefficient).
@@ -95,6 +110,10 @@ made of.
 
 **Kenward–Roger** — a method for standard errors and degrees of freedom of fixed effects in a mixed
 model, accurate in small samples.
+
+**Latin square** — t treatments in t rows × t columns (days × operators), each treatment once in
+every row and every column, so that both groupings are taken out of the comparison.
+See [Latin squares](designs-comparative.md#latin-squares).
 
 **Lack of fit** — the part of the residual variation that replicates show the model cannot
 explain.
@@ -190,6 +209,9 @@ give many chances of a false alarm. See [comparing treatments](analysis.md#compa
 
 **Variance dispersion graph** — the smallest, average and largest scaled prediction variance at
 each distance from the centre of a design: one picture to compare response-surface designs.
+
+**Williams design** — an order of the treatments for a crossover in which each treatment follows
+every other equally often, so carry-over is balanced (Williams 1949).
 
 **Whole plot** — a group of runs sharing the settings of the hard-to-change factors.
 

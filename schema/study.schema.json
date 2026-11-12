@@ -595,6 +595,17 @@
           ],
           "description": "complete; restricted (split-plot); blocked; or none"
         },
+        "blocking": {
+          "type": "array",
+          "description": "named blocking variables, when the runs are grouped two or more ways (a Latin square's rows and columns, a crossover's subjects and periods); each run gives its label for each in blocks",
+          "items": {
+            "$ref": "#/$defs/blocking"
+          }
+        },
+        "carryover": {
+          "type": "boolean",
+          "description": "a crossover design: the analysis adds a carry-over term (the treatment each subject had in the period before)"
+        },
         "runs": {
           "type": "array",
           "items": {
@@ -628,6 +639,13 @@
         "block": {
           "$ref": "#/$defs/label",
           "description": "block (stage, day, batch)"
+        },
+        "blocks": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/label"
+          },
+          "description": "the run's label for each of design.blocking"
         },
         "kind": {
           "enum": [
@@ -1042,6 +1060,39 @@
               }
             }
           }
+        }
+      }
+    },
+    "blocking": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "used in run sheets and for --random"
+        },
+        "name": {
+          "type": "string",
+          "description": "a readable name (Day, Operator)"
+        },
+        "role": {
+          "enum": [
+            "row",
+            "column",
+            "subject",
+            "period"
+          ],
+          "description": "rows and columns of a Latin square; subjects and periods of a crossover"
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          },
+          "description": "the labels in order (a crossover's periods in time order)"
         }
       }
     }

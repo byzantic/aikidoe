@@ -859,9 +859,56 @@
                         "string"
                       ]
                     }
+                  },
+                  "blocks": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "number",
+                        "string"
+                      ]
+                    }
+                  },
+                  "block": {
+                    "type": [
+                      "number",
+                      "string"
+                    ]
                   }
                 }
               }
+            },
+            "blocking": {
+              "type": "array",
+              "description": "named blocking variables (Latin squares, crossovers)",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "row",
+                      "column",
+                      "subject",
+                      "period"
+                    ]
+                  },
+                  "levels": {
+                    "type": "array"
+                  }
+                }
+              }
+            },
+            "carryover": {
+              "type": "boolean"
             }
           }
         }

@@ -8,6 +8,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Innovation, and Discovery*, 2nd ed. Wiley. (The reactor data of the
   [screening example](example-screening.md) are from the first edition: Box, Hunter & Hunter
   (1978), p. 379.)
+- Cochran, W. G. & Cox, G. M. (1957). *Experimental Designs*, 2nd ed. Wiley. (Latin squares,
+  balanced incomplete blocks and their table of the smallest designs.)
 - Cornell, J. A. (2002). *Experiments with Mixtures: Designs, Models, and the Analysis of Mixture
   Data*, 3rd ed. Wiley. (The yarn data of the [mixture analysis](designs-mixture.md#analysis).)
 - Agresti, A. (2013). *Categorical Data Analysis*, 3rd ed. Wiley.
@@ -17,6 +19,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Montgomery, D. C. (2017). *Design and Analysis of Experiments*, 9th ed. Wiley. (The
   filtration-rate data of the [robust-design example](optimisation.md#an-example) are its
   example 6.2.)
+- Jones, B. & Kenward, M. G. (2014). *Design and Analysis of Cross-Over Trials*, 3rd ed. CRC
+  Press. (Crossovers, carry-over and its estimability.)
 - Milliken, G. A. & Johnson, D. E. (2002). *Analysis of Messy Data, Volume III: Analysis of
   Covariance*. Chapman & Hall/CRC. ([Covariates](analysis.md#covariates): one slope or several,
   adjusted means.)
@@ -137,6 +141,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   model: an alternative to least squares means. *The American Statistician* 34, 216–221.
   ([Adjusted means](analysis.md#adjusted-means); the reference grid of R's `emmeans`, which
   aikidoe follows and is checked against.)
+- Sailer, M. O. (2022). crossdes: Construction of crossover designs. R package version 1.1-2.
+  (Williams designs, which aikidoe's are checked against.)
 - Saltelli, A., Annoni, P., Azzini, I., Campolongo, F., Ratto, M. & Tarantola, S. (2010). Variance
   based sensitivity analysis of model output: design and estimator for the total sensitivity
   index. *Computer Physics Communications* 181, 259–270.
@@ -153,6 +159,11 @@ Books for learning and reference, and the papers behind specific methods in aiki
   [relative potency](dose-response.md#relative-potency).)
 - Vining, G. G. & Myers, R. H. (1990). Combining Taguchi and response surface philosophies: a dual
   response approach. *Journal of Quality Technology* 22, 38–45.
+- Williams, E. J. (1949). Experimental designs balanced for the estimation of residual effects of
+  treatments. *Australian Journal of Scientific Research A* 2, 149–168.
+- Yates, F. (1936). Incomplete randomized blocks. *Annals of Eugenics* 7, 121–140.
+- Yates, F. (1940). The recovery of inter-block information in balanced incomplete block designs.
+  *Annals of Eugenics* 10, 317–325.
 - Zhang, J.-H., Chung, T. D. Y. & Oldenburg, K. R. (1999). A simple statistical parameter for use in
   evaluation and validation of high throughput screening assays. *Journal of Biomolecular Screening*
   4, 67–73. (The Z′ factor of [plate controls](plates.md#controls).)
@@ -162,4 +173,4 @@ Books for learning and reference, and the papers behind specific methods in aiki
 R (`lm`, `anova`, `car::Anova`, `MASS::boxcox`, `nls`), lme4 and pbkrtest (mixed models), drc and
 numDeriv (dose–response), FrF2
 (fractions and split-plot fractions), rsm, AlgDesign, skpr (power), SixSigma (gauge R&R),
-desirability, BsMD (Lenth), emmeans, mvtnorm and multcompView (multiple comparisons); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.
+desirability, BsMD (Lenth), emmeans, mvtnorm and multcompView (multiple comparisons), crossdes (crossover designs); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.

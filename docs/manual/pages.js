@@ -10,6 +10,7 @@ export const PAGES = [
   { id: 'designs-rsm', title: 'Response surfaces: central composite and Box–Behnken', part: 'Designs' },
   { id: 'designs-optimal', title: 'Optimal designs', part: 'Designs' },
   { id: 'designs-split-plot', title: 'Split-plot designs', part: 'Designs' },
+  { id: 'designs-comparative', title: 'Designs for comparing treatments', part: 'Designs' },
   { id: 'designs-sequential', title: 'Sequential experiments: augmenting and confirming', part: 'Designs' },
   { id: 'designs-space-filling', title: 'Space-filling designs', part: 'Designs' },
   { id: 'designs-mixture', title: 'Mixture designs', part: 'Designs' },

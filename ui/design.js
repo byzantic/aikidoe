@@ -23,7 +23,7 @@ import { platesWithoutWells } from '../js/plate.js';
 import { designPower, detectableEffect, detectableRatio, simulatePower } from '../js/model/power.js';
 import { glmmPowerFromMatrix, detectableGlmmRatio, simulateGlmmPower } from '../js/model/power-glmm.js';
 import { splitPlotFraction, splitPlotFull } from '../js/design/splitplot.js';
-import { candidates, buildCandidate, intendedModel, wholePlotChoices, defaultWholePlots, recommend, GOALS } from '../js/design/recommend.js';
+import { candidates, buildCandidate, intendedModel, wholePlotChoices, defaultWholePlots, recommend, GOALS, defaultBlockSize } from '../js/design/recommend.js';
 
 // the optimal-design search runs in a worker; one search at a time
 let worker = null, searchId = 0;
@@ -60,7 +60,7 @@ function build(study, cand, o) {
 export { candidates };
 
 const designHelp = (kind) => [({ full: 'designs-factorial', fraction: 'designs-factorial', pb: 'designs-screening', dsd: 'designs-screening', ccd: 'designs-rsm', bbd: 'designs-rsm',
-  optimal: 'designs-optimal', lhs: 'designs-space-filling' })[kind] ?? (kind.startsWith('sp-') ? 'designs-split-plot' : 'designs-factorial')];
+  optimal: 'designs-optimal', lhs: 'designs-space-filling', rcbd: 'designs-comparative', latin: 'designs-comparative', bibd: 'designs-comparative', crossover: 'designs-comparative' })[kind] ?? (kind.startsWith('sp-') ? 'designs-split-plot' : 'designs-factorial')];
 
 export function render(ctx) {
   const { state, setDoc, setUI } = ctx;
@@ -91,7 +91,7 @@ export function render(ctx) {
     dataTable([
       ...(rec ? [{ key: 'rank', label: '#', cls: 'n', fmt: (_, r) => recOf(r.id)?.rank ?? '—' }] : []),
       { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n', fmt: (v, r) => recOf(r.id)?.runs ?? v },
-      { key: 'res', label: 'resolution', fmt: (v, r) => (r.kind === 'pb' && r.gres !== null ? h('span', { title: 'generalised resolution (Deng & Tang): between III and IV — main effects only partially aliased with 2fis' }, num(r.gres, 3)) : ['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full', 'lhs'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) },
+      { key: 'res', label: 'resolution', fmt: (v, r) => (r.kind === 'pb' && r.gres !== null ? h('span', { title: 'generalised resolution (Deng & Tang): between III and IV — main effects only partially aliased with 2fis' }, num(r.gres, 3)) : ['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full', 'lhs', 'rcbd', 'latin', 'bibd', 'crossover'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) },
       ...(rec ? [{ key: 'proj', label: 'P', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return h('span', { title: 'projectivity: any P factors form a full two-level factorial' }, o?.projectivity != null && o.projectivity < study.factors.length ? `${o.projectivity}${o.projectivityCapped ? '+' : ''}` : '—'); } }] : []),
       ...(rec ? [{ key: 'pw', label: 'min power', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return o?.minPower != null ? num(o.minPower, 2) : '—'; } }] : []),
       { key: 'note', label: '', fmt: (v, r) => { const o = recOf(r.id); if (!o) return v; return h('div', { class: 'small', 'data-reasons': r.id }, o.reasons.length ? h('div', {}, o.reasons.join('; ')) : null, o.warnings.length ? h('div', { class: 'warn-text' }, o.warnings.join('; ')) : null); } },
@@ -106,9 +106,21 @@ export function render(ctx) {
   // ---------------------------------------------------------------- options
   const isRSM = cand.kind === 'ccd' || cand.kind === 'bbd' || cand.kind === 'dsd' || cand.kind === 'optimal' || cand.kind === 'sp-optimal' || cand.kind === 'lhs';
   const isSP = cand.kind.startsWith('sp-');
+  // designs for comparing the levels of one factor (issue #80): their own options only
+  const isCmp = !!cand.comparative;
   const field = (label, el) => h('label', { class: 'inline' }, label, el);
   const numIn = (key, attrs = {}) => h('input', { class: 'num', type: 'number', min: 0, value: ui[key] ?? '', 'aria-label': key, ...attrs, onchange: (e) => set({ [key]: e.target.value === '' ? undefined : Number(e.target.value) }) });
-  const options = h('div', { class: 'row' },
+  const textIn = (key, placeholder, label) => h('input', { type: 'text', style: 'width:8em', value: ui[key] ?? '', placeholder, 'aria-label': label, onchange: (e) => set({ [key]: e.target.value.trim() || undefined }) });
+  const tLev = isCmp ? (study.factors[0].levels?.length ?? 0) : 0;
+  const options = isCmp ? h('div', { class: 'row' },
+    cand.kind === 'rcbd' ? field('blocks', numIn('cbBlocks', { min: 2, placeholder: '4', 'aria-label': 'complete blocks' })) : null,
+    cand.kind === 'latin' ? [field('rows are', textIn('rowName', 'Row', 'latin rows')), field('columns are', textIn('colName', 'Column', 'latin columns')),
+      field('squares', numIn('squares', { min: 1, placeholder: tLev === 3 ? '2' : '1', 'aria-label': 'squares' }))] : null,
+    cand.kind === 'bibd' ? [field('block holds', select([...Array(tLev - 2).keys()].map(i => ({ value: i + 2, label: `${i + 2} runs` })), ui.blockSize ?? defaultBlockSize(tLev), (v) => set({ blockSize: Number(v), bibdBlocks: undefined }), { 'aria-label': 'block size' })),
+      field('blocks', numIn('bibdBlocks', { min: 2, placeholder: 'smallest balanced', 'aria-label': 'incomplete blocks' }))] : null,
+    cand.kind === 'crossover' ? [field('subjects', numIn('subjects', { min: 2, placeholder: 'auto', 'aria-label': 'subjects' })), field('subjects are', textIn('subjectName', 'Subject', 'crossover subjects')), field('periods are', textIn('periodName', 'Period', 'crossover periods'))] : null,
+    field('seed', h('input', { class: 'num', type: 'number', value: ui.seed ?? study.seed, 'aria-label': 'seed', onchange: (e) => set({ seed: Number(e.target.value) }) })))
+    : h('div', { class: 'row' },
     cand.kind === 'lhs' ? field('runs', numIn('lhsRuns', { min: 2, placeholder: String(cand.runs), 'aria-label': 'lhs runs' })) : null,
     cand.kind !== 'pb' && cand.kind !== 'optimal' && cand.kind !== 'lhs' && !isSP ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
     cand.kind === 'sp-frac' ? (() => { const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length; const ch = wholePlotChoices(k1, htc.length - k1, cand.opts.runs);
@@ -131,7 +143,7 @@ export function render(ctx) {
   if (err) body = h('div', { class: 'msg error' }, err);
   else if (!d) body = h('div', { class: 'msg' }, ui.searching ? 'Searching… (several random starts of a coordinate-exchange search)' : 'Set the model, runs and criterion, then search.');
   else body = h('div', {}, cand.ignoresHtc ? h('div', { class: 'msg warning' }, `This design ignores the hard-to-change factors: runs are completely randomised, so ${study.factors.filter(f => f.htc).map(f => f.id).join(', ')} must be reset for every run. Split-plot versions are offered for factorial and optimal designs.`) : null,
-    diagnostics(study, d, cand.kind === 'dsd' || cand.kind === 'lhs' ? 'quadratic' : null),
+    isCmp ? comparativeInfo(study, d) : diagnostics(study, d, cand.kind === 'dsd' || cand.kind === 'lhs' ? 'quadratic' : null),
     cand.kind === 'lhs' ? h('p', { class: 'small' }, `Each factor’s range is cut into ${d.X.length} equal slices with one run in each; among such designs this one keeps the runs as far apart as it can (smallest distance ${num(d.params.minDist, 3)} in coded units). A simulator gives the same answer every time, so there is no replication, randomisation or power: the question is how well a surrogate model fitted to these runs predicts between them — its cross-validated error, shown with the yield analysis.`)
       : powerSection(study, d, cand, ui, set));
   const detail = h('section', { class: 'panel' }, h('h2', {}, cand.label, help(...designHelp(cand.kind))), options, body);
@@ -166,6 +178,34 @@ export function render(ctx) {
   if (study.design && study.design.kind !== 'dose-response') try { curSpace = spacePanel(study, { ui, set, key: 'spaceCurrent', intended: study.design.params?.model ?? (['ccd', 'box-behnken', 'definitive-screening'].includes(study.design.kind) ? 'quadratic' : undefined), title: `Where the runs are: this study's design (${study.design.runs.length} runs)` }); } catch { /* not drawable */ }
   return h('div', {}, plates, doseDesignPanel(ctx), covariateDesignPanel(ctx), next, curSpace, next ? h('h2', { class: 'section-title' }, 'Or start again with a new design') : null, list, detail, candSpace, create);
 }
+
+// what a design for comparing treatments does, and its layout (issue #80)
+function comparativeInfo(study, d) {
+  const f = study.factors[0], lv = (i) => String(f.levels[i - 1]), p = d.params;
+  const label = (x) => String(f.levels[f.levels.length === 2 ? (x + 1) / 2 : x]);
+  const grid = (rowsOf, colsOf, rowHead, colHead) => {
+    const R = [...new Set(rowsOf)], C = [...new Set(colsOf)].sort((a, b) => a - b);
+    const cell = new Map(d.X.map((x, i) => [`${rowsOf[i]}|${colsOf[i]}`, label(x[0])]));
+    return h('table', { class: 'data layout', 'data-layout': '' }, h('thead', {}, h('tr', {}, h('th', {}, `${rowHead} \\ ${colHead}`), ...C.map(c => h('th', {}, String(c))))),
+      h('tbody', {}, ...R.map(r => h('tr', {}, h('th', {}, String(r)), ...C.map(c => h('td', {}, cell.get(`${r}|${c}`) ?? ''))))));
+  };
+  if (d.kind === 'complete-blocks') return h('div', {}, h('p', { class: 'small' }, `${p.blocks} blocks, each with every level of ${f.name} once, in random order within the block. Run a block in one go (a day, a batch, a plate): the analysis takes out the differences between blocks, so they do not blur the comparison.`));
+  if (d.kind === 'latin-square') {
+    const [r, c] = d.blocking;
+    return h('div', {}, h('p', { class: 'small' }, `Each level of ${f.name} once in every ${r.name.toLowerCase()} and once in every ${c.name.toLowerCase()}: the analysis takes out both, so neither blurs the comparison. ${t3note(p)}The ${r.name.toLowerCase()}s are run in turn.`),
+      grid(r.labels, c.labels, r.name, c.name));
+  }
+  if (d.kind === 'bibd') {
+    return h('div', {}, h('p', { class: 'small' }, `${p.blocks} blocks of ${p.blockSize}; each level ${p.replicates} times${p.balanced ? `, every pair of levels together in ${p.lambda} block${p.lambda > 1 ? 's' : ''}, so every comparison is equally precise` : ' — not balanced: no balanced design was found with that many blocks, so some comparisons are less precise than others'}. `,
+      `Efficiency ${num(p.efficiency, 3)}: the comparisons are as precise as with complete blocks and ${num(p.efficiency * p.replicates, 3)} runs of each level. With the blocks as random (Analyse), some of the information between blocks is recovered.`),
+      h('table', { class: 'data layout', 'data-layout': '' }, h('tbody', {}, ...p.layout.map((b, j) => h('tr', {}, h('th', {}, `block ${j + 1}`), ...b.map(i => h('td', {}, lv(i))))))));
+  }
+  const [s, per] = d.blocking;
+  return h('div', {}, h('p', { class: 'small' }, `${p.design === 'AB/BA' ? 'AB/BA' : 'Williams'} sequences: each ${s.name.toLowerCase()} has every level of ${f.name}, one per ${per.name.toLowerCase()}${p.design === 'AB/BA' ? '' : ', and each level follows every other equally often'}, so differences between ${s.name.toLowerCase()}s drop out of the comparison and carry-over (an effect lasting into the next ${per.name.toLowerCase()}) can be allowed for. `,
+    p.balanced ? '' : h('b', {}, `${p.subjects} is not a multiple of the ${p.sequences.length} sequences, so the design is not balanced. `), `Leave a wash-out between ${per.name.toLowerCase()}s.`),
+    grid(s.labels, per.labels, s.name, per.name));
+}
+const t3note = (p) => (p.treatments === 3 && p.squares === 1 ? 'One 3 × 3 square leaves only 2 degrees of freedom for the error: use two squares. ' : '');
 
 function diagnostics(study, d, modelFor) {
   const ids = study.factors.map(f => f.id);
@@ -325,7 +365,7 @@ function powerSection(study, d, cand, ui, set) {
   }
   let res, err = null;
   const rho = study.covariates?.length && !d.wholePlot ? pw.rho ?? 0 : 0;
-  try { res = designPower(study, d.X, { model, block: d.block, delta: ratio, alpha, ...(d.wholePlot ? { wholePlot: d.wholePlot, eta: pw.eta ?? 1 } : {}), ...(rho ? { rho } : {}) }); } catch (e) { err = e.message; }
+  try { res = designPower(study, d.X, { model, block: d.block, ...(d.blocking ? { blocking: d.blocking, carryover: d.carryover } : {}), delta: ratio, alpha, ...(d.wholePlot ? { wholePlot: d.wholePlot, eta: pw.eta ?? 1 } : {}), ...(rho ? { rho } : {}) }); } catch (e) { err = e.message; }
   let body;
   if (err) body = h('div', { class: 'msg error' }, err);
   else if (res.dfRes < 1 && !res.strata) body = h('div', { class: 'msg warning' }, `${res.n} runs for ${res.rank} coefficients: no residual degrees of freedom, so no test and no power for this model. Add centre points or replicates, use a smaller model, or rely on Lenth’s method.`);
@@ -337,7 +377,7 @@ function powerSection(study, d, cand, ui, set) {
         { key: 'power', label: `power at Δ/σ = ${ratio}`, cls: 'n', fmt: (v) => (Number.isNaN(v) ? h('span', { class: 'muted' }, 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
         { key: 'det', label: 'Δ/σ for 80%', cls: 'n', fmt: (v) => (Number.isFinite(v) ? num(v, 3) : '') }],
       rows.map(t => ({ ...t, det: det[t.term] })), { rowAttrs: () => ({ 'data-power': '' }) }),
-      h('p', { class: 'muted small' }, `${res.strata ? `Split-plot: whole-plot terms are tested against the whole-plot error (${res.strata[0].df} df), the others against the residual (${res.strata[1].df} df), with σ²wp = η σ². ` : `${res.dfRes} residual df. `}${res.terms.some(t => t.block) ? 'Blocks fitted. ' : ''}Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
+      h('p', { class: 'muted small' }, `${res.strata ? `Split-plot: whole-plot terms are tested against the whole-plot error (${res.strata[0].df} df), the others against the residual (${res.strata[1].df} df), with σ²wp = η σ². ` : `${res.dfRes} residual df. `}${res.terms.some(t => t.block) ? (d.blocking ? `${d.blocking.map(b => b.name).join(' and ')}${d.carryover ? ' and carry-over' : ''} fitted. ` : 'Blocks fitted. ') : ''}Power of each term’s F test (two-sided t for one df) to detect a change Δ from low to high, given σ. `,
         rho ? `With the covariate in the analysis (ρ = ${rho}), the residual σ is σ·√(1 − ρ²) = ${num(Math.sqrt(1 - rho * rho), 3)} σ and one residual df goes to it; Δ/σ is still in units of σ without it. ` : '',
         'Power below 0.8 is marked; Δ/σ for 80% is the smallest effect this design would usually find.'));
   }

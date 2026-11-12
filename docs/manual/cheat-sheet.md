@@ -86,7 +86,9 @@ before acting.
   check the slope is the same at every setting.
 - Comparing a few treatments: don't run a t test for every pair. Use Tukey for all pairs, Dunnett
   against a control, or contrasts planned before the runs
-  ([comparing treatments](analysis.md#comparing-treatments)).
+  ([comparing treatments](analysis.md#comparing-treatments)). Group the runs as they fall: complete
+  blocks, a Latin square for two groupings, incomplete blocks, or a crossover
+  ([designs](designs-comparative.md)).
 - Check the residuals: against fitted values, run order, and a normal plot.
 - State aliasing with every conclusion from a fraction.
 - Report effects with confidence intervals, not only p-values; choosing the model from the same data

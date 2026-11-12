@@ -696,7 +696,7 @@ export function fitCountMixedModel(study, formula, opts = {}) {
   const cov = withCovariates(study, formula, rows);      // covariates in the formula (issue #82)
   const parsed = parseFormula(formula, cov.factors);
   const levels = random.levels ?? [random];
-  const b = withBlockTerm({ ...study, factors: cov.factors }, parsed, cov.rows, { ...opts, ...(levels.some(l => l.id === 'block') ? { blocks: false } : {}) });
+  const b = withBlockTerm({ ...study, factors: cov.factors }, parsed, cov.rows, { ...opts, random: levels.map(l => l.id) });
   const mm = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   const data = noise.prepare(b.rows);
   const labelsOf = (id) => b.rows.map(r => String(GROUPINGS[id].label(runs.get(r.run))));

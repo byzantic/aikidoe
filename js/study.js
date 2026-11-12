@@ -40,6 +40,9 @@ export const DISTRIBUTIONS = {
 };
 const COUNTS = ['poisson', 'quasipoisson', 'negbin'], PROPORTIONS = ['binomial', 'quasibinomial'];
 const TRANSFORMS = ['none', 'log'];
+// the roles of a design's named blocking variables (issue #80): rows and columns of a Latin
+// square, subjects and periods of a crossover
+const BLOCK_ROLES = ['row', 'column', 'subject', 'period'];
 
 const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'covariates', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
@@ -47,8 +50,9 @@ const KEYS = {
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
   response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
-  design: ['kind', 'params', 'randomisation', 'runs'],
-  run: ['run', 'order', 'wholePlot', 'block', 'kind', 'settings'],
+  design: ['kind', 'params', 'randomisation', 'blocking', 'carryover', 'runs'],
+  run: ['run', 'order', 'wholePlot', 'block', 'blocks', 'kind', 'settings'],
+  blocking: ['id', 'name', 'role', 'levels'],
   observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'trials', 'exposure', 'operator', 'repeat', 'note'],
   sites: ['scheme', 'diameter', 'positions'],
   position: ['id', 'x', 'y'],
@@ -454,6 +458,31 @@ function normDesign(d, factors, errors, warnings) {
   if (typeof out.kind !== 'string') errors.push('design.kind: must be a string');
   if (!isObj(out.params)) errors.push('design.params: must be an object');
   if (!['complete', 'restricted', 'blocked', 'none'].includes(out.randomisation)) errors.push('design.randomisation: must be complete, restricted, blocked or none');
+  // named blocking variables (issue #80): two or more ways of grouping the runs (day × operator)
+  const blocking = [];
+  if (d.blocking !== undefined) {
+    if (!Array.isArray(d.blocking)) errors.push('design.blocking: must be a list');
+    else d.blocking.forEach((b, i) => {
+      const path = `design.blocking[${i}]`;
+      if (!isObj(b)) { errors.push(`${path}: must be an object`); return; }
+      checkKeys(b, KEYS.blocking, path, errors);
+      if (typeof b.id !== 'string' || !ID.test(b.id)) { errors.push(`${path}.id: must be an identifier (letters, digits, _)`); return; }
+      if (blocking.some(x => x.id === b.id)) errors.push(`${path}.id: duplicate blocking variable "${b.id}"`);
+      if (b.id === 'block' || factors.some(f => f.id === b.id)) errors.push(`${path}.id: "${b.id}" is already a factor (or the block)`);
+      if (b.role !== undefined && !BLOCK_ROLES.includes(b.role)) errors.push(`${path}.role: must be one of ${BLOCK_ROLES.join(', ')}`);
+      if (b.levels !== undefined && !(Array.isArray(b.levels) && b.levels.every(isLabel))) errors.push(`${path}.levels: must be a list of labels`);
+      blocking.push({ id: b.id, ...(b.name !== undefined ? { name: String(b.name) } : {}), ...(b.role ? { role: b.role } : {}), ...(Array.isArray(b.levels) ? { levels: b.levels } : {}) });
+    });
+    if (blocking.length) out.blocking = blocking;
+  }
+  if (d.carryover !== undefined) {
+    if (typeof d.carryover !== 'boolean') errors.push('design.carryover: must be true or false');
+    else if (d.carryover) {
+      if (!blocking.some(b => b.role === 'subject') || !blocking.some(b => b.role === 'period')) errors.push('design.carryover: needs blocking variables with the roles subject and period');
+      if (factors.length !== 1) errors.push('design.carryover: a crossover design has one factor (the treatment)');
+      out.carryover = true;
+    }
+  }
   if (!Array.isArray(d.runs)) { errors.push('design.runs: must be a list'); return out; }
   const seenRun = new Set(), seenOrder = new Set();
   d.runs.forEach((r, i) => {
@@ -469,6 +498,19 @@ function normDesign(d, factors, errors, warnings) {
     seenOrder.add(run.order);
     if (r.wholePlot !== undefined) { if (!isLabel(r.wholePlot)) errors.push(`${path}.wholePlot: must be a number or string`); run.wholePlot = r.wholePlot; }
     if (r.block !== undefined) { if (!isLabel(r.block)) errors.push(`${path}.block: must be a number or string`); run.block = r.block; }
+    if (r.blocks !== undefined) {
+      if (!isObj(r.blocks)) errors.push(`${path}.blocks: must be an object of blocking labels`);
+      else {
+        for (const [k, v] of Object.entries(r.blocks)) {
+          const b = blocking.find(x => x.id === k);
+          if (!b) errors.push(`${path}.blocks: "${k}" is not one of design.blocking`);
+          else if (!isLabel(v)) errors.push(`${path}.blocks.${k}: must be a number or string`);
+          else if (b.levels && !b.levels.map(String).includes(String(v))) errors.push(`${path}.blocks.${k}: ${JSON.stringify(v)} is not one of ${JSON.stringify(b.levels)}`);
+        }
+        run.blocks = { ...r.blocks };
+      }
+    }
+    if (blocking.length && (r.kind ?? 'factorial') !== 'confirm') for (const b of blocking) if (r.blocks?.[b.id] === undefined) errors.push(`${path}.blocks: missing "${b.id}"`);
     run.kind = r.kind ?? 'factorial';
     if (!RUN_KINDS.includes(run.kind)) errors.push(`${path}.kind: must be one of ${RUN_KINDS.join(', ')}`);
     run.settings = {};

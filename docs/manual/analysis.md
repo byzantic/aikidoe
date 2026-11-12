@@ -196,8 +196,11 @@ effect (`--random block`; [incomplete blocks](#mixed-models)) the standard error
 freedom are Kenward–Roger's.
 
 **Planning.** A comparison of a few treatments is best run as a
-[randomised complete block design](concepts.md#randomisation-and-blocking) when the runs fall into
-groups (days, plates, batches), each block holding every treatment once.
+[randomised complete block design](designs-comparative.md#randomised-complete-blocks) when the runs
+fall into groups (days, plates, batches), each block holding every treatment once. A Latin square
+handles two groupings at once, incomplete blocks handle groups too small for every treatment, and a
+crossover gives each subject every treatment: see
+[Designs for comparing treatments](designs-comparative.md).
 
 ## Covariates
 

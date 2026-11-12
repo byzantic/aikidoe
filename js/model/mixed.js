@@ -459,10 +459,13 @@ export function observationTable(study, response) {
     const r = runs.get(o.run);
     return { run: o.run, order: r.order, kind: r.kind, settings: r.settings, y: o.value, obs: o,
       ...(o.wafer !== undefined && o.site !== undefined ? { site: `${o.run}|${o.wafer}|${o.site}` } : {}),
-      ...(r.wholePlot !== undefined ? { wholePlot: String(r.wholePlot) } : {}), ...(r.block !== undefined ? { block: r.block } : {}),
+      ...(r.wholePlot !== undefined ? { wholePlot: String(r.wholePlot) } : {}), ...(r.block !== undefined ? { block: r.block } : {}), ...(r.blocks ? { blocks: r.blocks } : {}),
       ...(o.wafer !== undefined ? { wafer: `${o.run}|${o.wafer}` } : {}), ...(o.lot !== undefined ? { lot: String(o.lot) } : {}) };
   });
 }
+
+// a random effect by id: a built-in one, or a named blocking variable of the design (issue #80)
+const randomOf = (id, blocking = []) => RANDOM[id] ?? (() => { const b = blocking.find(x => x.id === id); return b && { name: b.name ?? b.id, label: (r) => (r.blocks?.[id] === undefined ? undefined : String(r.blocks[id])) }; })();
 
 const RANDOM = {
   wholePlot: { name: 'Whole plot', label: (r) => r.wholePlot },
@@ -483,23 +486,23 @@ const RANDOM = {
  * of 'wholePlot' | 'run' | 'wafer' | 'lot' (lot must be nested in the others to be a nested model).
  * Returns [{ id, name, labels }].
  */
-export function randomEffects(rows, requested = 'auto') {
+export function randomEffects(rows, requested = 'auto', blocking = []) {
   const n = rows.length;
   const nGroups = (f) => new Set(rows.map(f)).size;
   const ids = requested === 'auto' ? ['wholePlot', 'run', 'wafer', 'site'].filter(id => rows.every(r => RANDOM[id].label(r) !== undefined)) : requested;
   for (const id of ids) {
-    if (!RANDOM[id]) throw new Error(`unknown random effect "${id}" (use wholePlot, run, wafer, site, lot or block)`);
-    if (rows.some(r => RANDOM[id].label(r) === undefined)) throw new Error(`random effect ${id}: some observations have no ${id}`);
+    if (!randomOf(id, blocking)) throw new Error(`unknown random effect "${id}" (use wholePlot, run, wafer, site, lot, block${blocking.length ? `, ${blocking.map(b => b.id).join(', ')}` : ''})`);
+    if (rows.some(r => randomOf(id, blocking).label(r) === undefined)) throw new Error(`random effect ${id}: some observations have no ${id}`);
   }
   const out = [], seen = [];
   const key = (f) => { const m = new Map(); return rows.map(r => { const k = f(r); if (!m.has(k)) m.set(k, m.size); return m.get(k); }).join(); };
   for (const id of ids) {
-    const f = RANDOM[id].label, m = nGroups(f);
+    const R = randomOf(id, blocking), f = R.label, m = nGroups(f);
     if (m < 2 || m >= n) { if (requested !== 'auto') throw new Error(`random effect ${id}: ${m < 2 ? 'only one group' : 'one observation per group (that is the residual)'}`); continue; }
     const k = key(f);
     if (seen.includes(k)) { if (requested !== 'auto') throw new Error(`random effect ${id} groups the observations exactly as an earlier one`); continue; }
     seen.push(k);
-    out.push({ id, name: RANDOM[id].name, labels: rows.map(f) });
+    out.push({ id, name: R.name, labels: rows.map(f) });
   }
   return out;
 }
@@ -525,9 +528,8 @@ function buildMixed(study, formula, opts) {
   const pos = { ...pos0, factors: cov.factors, rows: cov.rows };
   const parsed = parseFormula(formula, pos.factors);
   // random blocks replace the fixed block term
-  const randomBlocks = Array.isArray(opts.random) && opts.random.includes('block');
-  const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, pos.rows, randomBlocks ? { ...opts, blocks: false } : opts);
-  const random = randomEffects(b.rows, opts.random ?? 'auto');
+  const b = withBlockTerm({ ...study, factors: pos.factors }, parsed, pos.rows, opts);
+  const random = randomEffects(b.rows, opts.random ?? 'auto', study.design?.blocking ?? []);
   const mmx = modelMatrix(b.model, b.factors, b.rows.map(r => r.settings));
   return { response, pos, b, random, mmx, y: b.rows.map(r => r.y), cov };
 }
@@ -546,7 +548,7 @@ export function fitMixedModel(study, formula, opts = {}) {
   fit.terms.forEach(t => { const a = naiveAnova.find(x => x.term === t.term); if (a) { t.naiveF = a.F; t.naiveDf = naive.dfRes; t.naiveP = a.p; } });
   // marginal fitted values Xβ̂ and residuals y − Xβ̂ (random effects not removed)
   const fitted = mmx.X.map(r => r.reduce((acc, v, j) => acc + (Number.isFinite(fit.coef[j]) ? v * fit.coef[j] : 0), 0));
-  return { kind: 'mixed', ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, naive, positionTerms: pos.used, fitted, residuals: y.map((v, i) => v - fitted[i]),
+  return { kind: 'mixed', ...fit, response, model: b.model, factors: b.factors, rows: b.rows, random, naive, ...(b.carryoverDropped ? { carryoverDropped: true } : {}), positionTerms: pos.used, fitted, residuals: y.map((v, i) => v - fitted[i]),
     ...(cov.used.length ? { covariates: cov.used, dropped: cov.dropped } : {}) };
 }
 

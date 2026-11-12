@@ -9,6 +9,7 @@ import { siteScheme } from '../js/model/sites.js';
 import { lhsDesign } from '../js/sim/surrogate.js';
 import { observeRuns } from '../js/learn/process.js';
 import { compileExpression } from '../js/sim/expression.js';
+import { latinSquare, bibd, crossover } from '../js/design/comparative.js';
 
 const reactor = () => ({
   aikidoe: FORMAT_VERSION, name: 'Reactor screening', seed: 7,
@@ -62,6 +63,40 @@ export const EXAMPLES = [
       // by run number: the levels in order, four times over
       const y = [6.12, 6.63, 7.55, 7.38, 6.96, 6.64, 6.2, 6.79, 7.95, 6, 5.9, 5.84, 7.1, 7.57, 6.53, 6.42, 4.93, 7.7, 8.29, 6.67];
       return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'biomass', value: y[r.run - 1] })) });
+    } },
+  { id: 'coating-latin', title: 'Five tablet coatings: a Latin square over days and operators', step: 'analyse',
+    blurb: 'Five coatings, tested once by each of five operators and once on each of five days. Days and operators both shift the result; the Latin square takes them out. Which coatings dissolve more slowly than C1? Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Tablet coatings', seed: 81,
+        description: 'Five coatings in a 5 × 5 Latin square: each coating once on every day and once with every operator; disintegration time. Simulated data.',
+        factors: [{ id: 'coating', name: 'Coating', type: 'categorical', levels: ['C1', 'C2', 'C3', 'C4', 'C5'] }],
+        responses: [{ id: 'time', name: 'Disintegration time', units: 'min' }] });
+      const design = toStudyDesign(s, latinSquare(5, { rows: { id: 'day', name: 'Day' }, columns: { id: 'operator', name: 'Operator' }, seed: 81 }), { seed: 81 });
+      // by run number (day by day, operators in turn)
+      const y = [11.1, 13, 13.4, 12.7, 10.7, 13.9, 12, 14.8, 13.7, 13.2, 12.3, 11.1, 11.1, 13.4, 10, 14.1, 14.8, 16.9, 14.2, 13.3, 13.5, 11.8, 13.5, 12.9, 12.5];
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'time', value: y[r.run - 1] })) });
+    } },
+  { id: 'enzyme-bibd', title: 'Six enzyme preparations, three a day: incomplete blocks', step: 'analyse',
+    blurb: 'Only three assays fit in a day, and the days differ. Ten days of three, every pair of preparations together on two days: a balanced incomplete block design. Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Enzyme preparations', seed: 82,
+        description: 'Six enzyme preparations in a balanced incomplete block design: ten assay days of three, each preparation on five days, every pair together on two. Simulated data.',
+        factors: [{ id: 'enzyme', name: 'Preparation', type: 'categorical', levels: ['E1', 'E2', 'E3', 'E4', 'E5', 'E6'] }],
+        responses: [{ id: 'activity', name: 'Activity', units: 'U/mL' }] });
+      const design = toStudyDesign(s, bibd(6, 3, { seed: 82 }), { seed: 82 });
+      const y = [106.4, 117.1, 105.9, 107.2, 108.6, 102.3, 113.5, 109.6, 108.1, 99.8, 101.4, 98, 113.1, 103.4, 110.9, 98.4, 103.2, 95.2, 100.3, 97.8, 101, 100.4, 98.4, 102.9, 92.3, 98.4, 99, 95.3, 103.1, 102.7];
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'activity', value: y[r.run - 1] })) });
+    } },
+  { id: 'diet-crossover', title: 'Three diets in a crossover: every animal has each', step: 'analyse',
+    blurb: 'Twelve animals, three periods, each animal on every diet in a Williams sequence. Animals differ a lot; comparing diets within each animal takes that out, and carry-over from the period before is allowed for. Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Diet crossover', seed: 83,
+        description: 'Three diets in a Williams crossover: twelve animals, three periods with a wash-out between them; fasting glucose. Simulated data.',
+        factors: [{ id: 'diet', name: 'Diet', type: 'categorical', levels: ['Control', 'D-1', 'D-2'] }],
+        responses: [{ id: 'glucose', name: 'Fasting glucose', units: 'mmol/L' }] });
+      const design = toStudyDesign(s, crossover(3, { subjects: 12, subject: { id: 'animal', name: 'Animal' }, period: { id: 'period', name: 'Period' }, seed: 83 }), { seed: 83 });
+      const y = [5.98, 7.37, 6, 7.18, 6.55, 6.07, 4.23, 5.45, 5.58, 7.54, 6.83, 6.43, 4.42, 4.84, 5.44, 5.66, 5.73, 6.56, 7.94, 6.62, 7.36, 5.09, 4.73, 3.71, 6.46, 6.85, 6.16, 6.32, 5.7, 7.37, 6.97, 7.27, 8.07, 6.11, 6.1, 6.99];
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'glucose', value: y[r.run - 1] })) });
     } },
   { id: 'titre-covariate', title: 'Fed-batch titre: a covariate', step: 'analyse',
     blurb: 'A replicated 2³ in temperature, pH and feed rate. The density of the seed culture at inoculation was measured, not set: add it to the model (+ vcd) and the noise falls by half, so the small pH effect shows. Simulated data.',
