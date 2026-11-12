@@ -146,6 +146,9 @@ where it changes ([random effects for counts](analysis.md#random-effects-for-cou
 **Non-inferiority** — shows that something is not worse than the reference by more than a margin;
 better is fine. One one-sided test. See [equivalence](analysis.md#equivalence-and-non-inferiority).
 
+**Operating limits** — the settings a factor can be run at at all (a solvent's boiling point, a
+machine's range), wider than the experiment's range; a path of steepest ascent stops at them.
+
 **Odds ratio** — with a logit link, e^b: the factor by which the odds of success change per coded unit.
 
 **Overdispersion** — counts or proportions varying more than the Poisson or binomial allows
@@ -172,6 +175,9 @@ limits: zᵢ = (xᵢ − Lᵢ) / (total − ΣL), from 0 to 1. See
 the confidence interval for the mean).
 
 **Pure error** — variation between replicate runs: the run-to-run noise free of model error.
+
+**Ridge analysis** — for a fitted surface with curvature, the best point at each distance from the
+centre; the path of steepest ascent of a second-order model. See [steepest ascent](designs-sequential.md#moving-to-a-better-region-steepest-ascent).
 
 **Randomisation** — doing the runs in a random order, so that unknown trends do not masquerade as
 effects.
@@ -203,6 +209,10 @@ others vary within it.
 
 **Stationary point** — where a fitted second-order surface is flat: a maximum, a minimum or a
 saddle, read from the signs of the canonical eigenvalues. See [fitted response](analysis.md#fitted-response).
+
+**Steepest ascent** — the path from the centre of a design in the direction in which the fitted
+first-order model rises fastest, for moving to a better region (Box & Wilson 1951). See
+[steepest ascent](designs-sequential.md#moving-to-a-better-region-steepest-ascent).
 
 **Stratum** — the level of a design at which a factor changes (between days, between whole plots
 within a day, within whole plots), and so the variation it is judged against.

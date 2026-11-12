@@ -350,6 +350,21 @@ try {
     check('compare: weights that do not add up to 0 are pointed out', r.code === 0 && /do not add up to 0/.test(r.out), r.out + r.err);
   }
 
+  section('the path of steepest ascent (issue #81)');
+  {
+    copyFileSync(new URL('../examples/reaction-ascent.aikidoe.json', import.meta.url), join(dir, 'ascent.aikidoe.json'));
+    r = run('path', 'ascent.aikidoe.json', '--steps', '6');
+    check('path: a straight path, the direction\'s cone, 5 °C a step, the points beyond the runs marked', r.code === 0 && /path of steepest ascent/.test(r.out) && /each step: time \+2\.534 min, temp \+5 °C/.test(r.out) && /half-angle 8\.06°/.test(r.out) && /outside the runs/.test(r.out), r.out + r.err);
+    r = run('path', 'ascent.aikidoe.json', '--steps', '10');
+    check('path: the temperature stops at its limit (190 °C), time goes on', r.code === 0 && /190 +.*temp at limit/.test(r.out), r.out + r.err);
+    r = run('path', 'ascent.aikidoe.json', '--step-size', 'time=5', '--steps', '2');
+    check('path --step-size: 5 min a step', r.code === 0 && /each step: time \+5 min/.test(r.out), r.out + r.err);
+    r = run('path', 'ascent.aikidoe.json', '--descent', '--steps', '1');
+    check('path --descent', r.code === 0 && /path of steepest descent/.test(r.out), r.out + r.err);
+    r = run('path', 'ascent.aikidoe.json', 'yield ~ quadratic');
+    check('path with a quadratic model the design cannot fit: an error', r.code !== 0, r.out + r.err);
+  }
+
   section('equivalence and non-inferiority (issue #84)');
   {
     r = run('equivalence', 'media.aikidoe.json', 'medium', '--reference', 'Standard', '--margin', '0.5');
@@ -634,6 +649,8 @@ try {
   check('compare --json: levels, comparisons, the critical value', o.method === 'dunnett' && o.family === 'control' && o.levels.length === 5 && o.comparisons.length === 4 && Math.abs(o.critical - 2.7273) < 1e-4);
   o = js('compare', 'media.aikidoe.json', 'medium');
   check('compare --json: letters with all pairs', o.levels.find(l => l.label === 'M-4').letters === 'a' && o.comparisons.length === 10);
+  o = js('path', 'ascent.aikidoe.json', '--steps', '3');
+  check('path --json: method, direction, cone, points in natural units', o.method === 'linear' && o.region.determined && o.points.length === 4 && o.points[1].settings.temp === 160);
   o = js('power', 'media.aikidoe.json', '--equivalence', '--margin', '0.5', '--sigma', '0.47');
   check('power --equivalence --json: power per comparison, the copies needed', o.comparisons.length === 4 && o.needed?.copies === 4 && o.needed.reached);
   o = js('equivalence', 'media.aikidoe.json', 'medium', '--reference', 'Standard', '--margin', '0.5');

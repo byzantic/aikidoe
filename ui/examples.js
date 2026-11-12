@@ -64,6 +64,17 @@ export const EXAMPLES = [
       const y = [6.12, 6.63, 7.55, 7.38, 6.96, 6.64, 6.2, 6.79, 7.95, 6, 5.9, 5.84, 7.1, 7.57, 6.53, 6.42, 4.93, 7.7, 8.29, 6.67];
       return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'biomass', value: y[r.run - 1] })) });
     } },
+  { id: 'reaction-ascent', title: 'Reaction yield: the optimum is outside the ranges', step: 'analyse',
+    blurb: 'A 2² factorial in time and temperature with five centre points. The yield rises steeply towards the longest time and the highest temperature, and the centre points show no curvature: the optimum is somewhere else. The path of steepest ascent says where to look. Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Reaction yield', seed: 81,
+        description: 'A first experiment around the current conditions (35 min, 155 °C): a 2² factorial with five centre points. The solvent boils at 190 °C, and the reactor can be booked for at most 2 hours. Simulated data.',
+        factors: [{ id: 'time', name: 'Reaction time', units: 'min', low: 30, high: 40, limits: { lower: 5, upper: 120 } }, { id: 'temp', name: 'Temperature', units: '°C', low: 150, high: 160, limits: { lower: 100, upper: 190 } }],
+        responses: [{ id: 'yield', name: 'Yield', units: '%', goal: 'maximize' }] });
+      const design = toStudyDesign(s, fullFactorial([2, 2], { centre: 5 }), { seed: 81 });
+      const y = [45.5, 51.3, 56.8, 62.3, 55.2, 54.9, 54.8, 55.2, 55.4];
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'yield', value: y[r.run - 1] })) });
+    } },
   { id: 'method-transfer', title: 'Method transfer: is the new assay method equivalent to the old?', step: 'analyse',
     blurb: 'Ten samples, each measured by the old and the new method. Is the new one equivalent within ±1 % of label claim? The samples differ far more than the methods, so each sample is a block (paired data). Simulated data.',
     build: () => {

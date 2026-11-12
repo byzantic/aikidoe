@@ -63,6 +63,7 @@ a non-empty string or a number.
 | `htc` | boolean | hard to change: split-plot designs |
 | `tolerance` | number (≥ 0) or object | standard deviation of the actual value about its setting (natural units), or a distribution |
 | `noise` | object | a noise factor: varied in the experiment, random in production: { sd, mean? } (natural units) |
+| `limits` | object | operating limits: the settings that can be run at all, wider than the range (low … high); a path of steepest ascent stops at them (natural units) |
 | `note` | string | free text |
 
 Give `low` and `high`, or `levels` (then the range is their extent).

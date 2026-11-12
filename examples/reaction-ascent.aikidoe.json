@@ -1,0 +1,191 @@
+{
+  "aikidoe": 1,
+  "name": "Reaction yield",
+  "description": "A first experiment around the current conditions (35 min, 155 °C): a 2² factorial with five centre points. The solvent boils at 190 °C, and the reactor can be booked for at most 2 hours. Simulated data.",
+  "seed": 81,
+  "factors": [
+    {
+      "id": "time",
+      "name": "Reaction time",
+      "type": "continuous",
+      "units": "min",
+      "htc": false,
+      "low": 30,
+      "high": 40,
+      "transform": "none",
+      "limits": {
+        "lower": 5,
+        "upper": 120
+      }
+    },
+    {
+      "id": "temp",
+      "name": "Temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": false,
+      "low": 150,
+      "high": 160,
+      "transform": "none",
+      "limits": {
+        "lower": 100,
+        "upper": 190
+      }
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "yield",
+      "name": "Yield",
+      "units": "%",
+      "goal": "maximize",
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "full-factorial",
+    "params": {
+      "levels": [
+        2,
+        2
+      ],
+      "centrePoints": 5,
+      "seed": 81
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 4,
+        "kind": "factorial",
+        "settings": {
+          "time": 30,
+          "temp": 150
+        }
+      },
+      {
+        "run": 2,
+        "order": 7,
+        "kind": "factorial",
+        "settings": {
+          "time": 40,
+          "temp": 150
+        }
+      },
+      {
+        "run": 3,
+        "order": 1,
+        "kind": "factorial",
+        "settings": {
+          "time": 30,
+          "temp": 160
+        }
+      },
+      {
+        "run": 4,
+        "order": 9,
+        "kind": "factorial",
+        "settings": {
+          "time": 40,
+          "temp": 160
+        }
+      },
+      {
+        "run": 5,
+        "order": 5,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 6,
+        "order": 8,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 7,
+        "order": 3,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 8,
+        "order": 6,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      },
+      {
+        "run": 9,
+        "order": 2,
+        "kind": "centre",
+        "settings": {
+          "time": 35,
+          "temp": 155
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "yield",
+      "value": 45.5
+    },
+    {
+      "run": 2,
+      "response": "yield",
+      "value": 51.3
+    },
+    {
+      "run": 3,
+      "response": "yield",
+      "value": 56.8
+    },
+    {
+      "run": 4,
+      "response": "yield",
+      "value": 62.3
+    },
+    {
+      "run": 5,
+      "response": "yield",
+      "value": 55.2
+    },
+    {
+      "run": 6,
+      "response": "yield",
+      "value": 54.9
+    },
+    {
+      "run": 7,
+      "response": "yield",
+      "value": 54.8
+    },
+    {
+      "run": 8,
+      "response": "yield",
+      "value": 55.2
+    },
+    {
+      "run": 9,
+      "response": "yield",
+      "value": 55.4
+    }
+  ],
+  "history": []
+}

@@ -87,7 +87,9 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    for many pairs. "Is the new one as good as the old?" is equivalence, not a non-significant
    difference: `doe equivalence STUDY A --reference old --margin M --json` (TOST; the margin
    must come from the user, set before the results; `--noninferiority` for one side, `--ratio`
-   for a ratio of means). Before the runs: `doe power STUDY --equivalence --margin M --sigma σ`
+   for a ratio of means). A strong first-order fit with no curvature and the best corner at the
+   edge: `doe path STUDY --json` (steepest ascent; check `region.determined`; the predictions
+   beyond the runs are extrapolation — run the path, stop where it stops improving). Before the runs: `doe power STUDY --equivalence --margin M --sigma σ`
    (equivalence needs more runs than finding a difference of the same size). To plan such a comparison (one factor): `doe design STUDY --complete-blocks B`
    when runs fall in days or batches; `--latin --rows Day --columns Operator` for two groupings;
    `--bibd K` when a block holds only K levels; `--crossover --subjects N` when each subject gets
