@@ -722,6 +722,25 @@
       "then": {
         "$ref": "#/$defs/plot"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "equivalence"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/equivalence"
+      }
     }
   ],
   "$defs": {
@@ -4856,6 +4875,187 @@
               },
               "upper": {
                 "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "equivalence": {
+      "type": "object",
+      "description": "doe equivalence (issue #84): two one-sided tests (TOST) or non-inferiority of a factor's levels against a reference, with the 1 − 2α interval against the margins",
+      "required": [
+        "kind",
+        "response",
+        "formula",
+        "factor",
+        "type",
+        "reference",
+        "scale",
+        "comparison",
+        "alpha",
+        "level",
+        "margins",
+        "comparisons"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "ols",
+            "glm",
+            "mixed"
+          ]
+        },
+        "response": {
+          "type": "string"
+        },
+        "formula": {
+          "type": "string"
+        },
+        "logResponse": {
+          "type": "boolean",
+          "description": "the fit is of the log of the response (a ratio of means)"
+        },
+        "factor": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "equivalence",
+            "noninferiority"
+          ]
+        },
+        "better": {
+          "enum": [
+            "higher",
+            "lower"
+          ]
+        },
+        "reference": {
+          "type": "string"
+        },
+        "scale": {
+          "enum": [
+            "difference",
+            "ratio"
+          ]
+        },
+        "comparison": {
+          "type": "string"
+        },
+        "alpha": {
+          "type": "number"
+        },
+        "level": {
+          "type": "number"
+        },
+        "margins": {
+          "type": "object",
+          "required": [
+            "lower",
+            "upper"
+          ],
+          "properties": {
+            "lower": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "upper": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "held": {
+          "type": "object"
+        },
+        "averagedOver": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "comparisons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "test",
+              "reference",
+              "estimate",
+              "se",
+              "df",
+              "lower",
+              "upper",
+              "p",
+              "verdict",
+              "difference"
+            ],
+            "properties": {
+              "test": {
+                "type": "string"
+              },
+              "reference": {
+                "type": "string"
+              },
+              "estimate": {
+                "type": "number"
+              },
+              "se": {
+                "type": "number"
+              },
+              "df": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lower": {
+                "type": "number"
+              },
+              "upper": {
+                "type": "number"
+              },
+              "pLower": {
+                "type": "number"
+              },
+              "pUpper": {
+                "type": "number"
+              },
+              "p": {
+                "type": "number"
+              },
+              "equivalent": {
+                "type": "boolean"
+              },
+              "noninferior": {
+                "type": "boolean"
+              },
+              "verdict": {
+                "type": "string"
+              },
+              "difference": {
+                "type": "object",
+                "required": [
+                  "p",
+                  "lower",
+                  "upper"
+                ],
+                "properties": {
+                  "p": {
+                    "type": "number"
+                  },
+                  "lower": {
+                    "type": "number"
+                  },
+                  "upper": {
+                    "type": "number"
+                  }
+                }
               }
             }
           }

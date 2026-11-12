@@ -202,6 +202,130 @@ handles two groupings at once, incomplete blocks handle groups too small for eve
 crossover gives each subject every treatment: see
 [Designs for comparing treatments](designs-comparative.md).
 
+## Equivalence and non-inferiority
+
+"Is the new method, supplier or site as good as the old one?" A comparison that finds *no
+significant difference* does not answer this. With few runs nothing is significant, whether or not
+the two differ. Equivalence turns the question round. You set a **margin** in advance (the largest
+difference that would not matter), and the test asks whether the data show that the difference is
+smaller than that.
+
+**Two one-sided tests (TOST).** Two things are shown equivalent when the difference is shown to be
+above −margin *and* below +margin, each at 5 %. That is the same as the **90 % interval** of the
+difference lying wholly inside the margins. (The interval is 90 % because each side is tested at
+5 %.) The p value is the larger of the two one-sided p values.
+
+The example *Method transfer* (`examples/method-transfer.aikidoe.json`) measures ten samples by
+the old and the new method, and accepts the new method if it agrees within ±1 % of label claim.
+Each sample is a block of two, so this is paired data: the samples differ far more than the
+methods, and the blocks take that out.
+
+```console
+$ doe equivalence examples/method-transfer.aikidoe.json method --margin 1
+method: least squares, assay ~ main (with the block term)
+equivalence against old: difference, margins -1 … 1; α = 0.05, so 90% intervals
+
+comparison  difference  std. error  90% CI            p (TOST)  result      p (difference)
+----------  ----------  ----------  ----------------  --------  ----------  --------------
+new − old        0.377      0.1807  0.04573 … 0.7083  0.00365   equivalent  0.0666
+
+new: equivalent: the 90 % interval 0.04573 … 0.7083 lies within the margins -1 … 1
+p (difference): the ordinary two-sided test that the difference is 0 — "no significant difference" is not evidence of equivalence
+```
+
+Without the pairing (the same results analysed as two independent groups), the interval is three
+times as wide and reaches past the margin. Pair, or block, whenever the same samples can be
+measured both ways.
+
+**No difference, but not equivalent either.** In the example *Five growth media*, M-2 and M-5 are
+not significantly different from the standard. Against a margin of ±0.5 g/L, though, neither is
+shown equivalent: their intervals reach past it. Four flasks per medium cannot tell. M-4's
+interval lies wholly above the margin, so it is *different by more than the margin*:
+
+```console
+$ doe equivalence examples/media-compare.aikidoe.json medium --reference Standard --margin 0.5
+medium: least squares, biomass ~ main
+equivalence against Standard: difference, margins -0.5 … 0.5; α = 0.05, so 90% intervals
+
+comparison      difference  std. error  90% CI            p (TOST)  result     p (difference)
+--------------  ----------  ----------  ----------------  --------  ---------  --------------
+M-2 − Standard       -0.37      0.3359  -0.9588 … 0.2188  0.352     not shown  0.288
+M-3 − Standard       1.015      0.3359  0.4262 … 1.604    0.927     not shown  0.00858
+M-4 − Standard       1.528      0.3359  0.9387 … 2.116    0.996     different  0.000385
+M-5 − Standard        0.27      0.3359  -0.3188 … 0.8588  0.252     not shown  0.434
+
+M-2: not shown to be equivalent: the 90 % interval -0.9588 … 0.2188 reaches below -0.5. No difference is detected either: there are too few runs to tell
+M-3: not shown to be equivalent: the 90 % interval 0.4262 … 1.604 reaches above 0.5
+M-4: different by more than the margin: the 90 % interval 0.9387 … 2.116 lies wholly above 0.5
+M-5: not shown to be equivalent: the 90 % interval -0.3188 … 0.8588 reaches above 0.5. No difference is detected either: there are too few runs to tell
+p (difference): the ordinary two-sided test that the difference is 0 — "no significant difference" is not evidence of equivalence
+```
+
+**Non-inferiority.** Often only one side matters: a cheaper supplier is acceptable if its yield is
+*not lower by more than the margin*, and better is fine. `--noninferiority` tests that one side. The
+response's goal sets which side, or you can give it with `--better higher|lower`. On the Analyse
+step, choose *non-inferior* in the Equivalence panel:
+
+```console
+$ doe equivalence examples/media-compare.aikidoe.json medium --reference Standard --margin 0.5 --noninferiority
+medium: least squares, biomass ~ main
+non-inferiority (higher is better) against Standard: difference, margin -0.5; α = 0.05, so 90% intervals
+
+comparison      difference  std. error  90% CI            p (one-sided)  result        p (difference)
+--------------  ----------  ----------  ----------------  -------------  ------------  --------------
+M-2 − Standard       -0.37      0.3359  -0.9588 … 0.2188  0.352          not shown     0.288
+M-3 − Standard       1.015      0.3359  0.4262 … 1.604    0.000207       non-inferior  0.00858
+M-4 − Standard       1.528      0.3359  0.9387 … 2.116    <0.0001        non-inferior  0.000385
+M-5 − Standard        0.27      0.3359  -0.3188 … 0.8588  0.0184         non-inferior  0.434
+
+M-2: not shown to be non-inferior: the lower end of the 90 % interval, -0.9588, is below the margin -0.5
+M-3: non-inferior: the lower end of the 90 % interval, 0.4262, is above the margin -0.5
+M-4: non-inferior: the lower end of the 90 % interval, 0.9387, is above the margin -0.5
+M-5: non-inferior: the lower end of the 90 % interval, -0.3188, is above the margin -0.5
+p (difference): the ordinary two-sided test that the difference is 0 — "no significant difference" is not evidence of equivalence
+```
+
+**Ratios.** When differences scale with the level (concentrations, potencies, areas under a curve),
+the margin is a ratio: 0.8 … 1.25 is the usual one for bioequivalence. `--ratio` analyses the log
+of the results and gives the ratio of means, as `TOSTER::log_TOST` does. For counts and
+proportions the model's own scale gives a rate ratio or odds ratio. `--difference` gives a
+difference of rates or proportions instead (for example, germination within ±10 percentage
+points).
+
+```console
+$ doe equivalence examples/media-compare.aikidoe.json medium --reference Standard --ratio --lower 0.9 --upper 1.111 --test M-5
+medium: least squares, log(biomass) ~ main
+equivalence against Standard: ratio of means, margins 0.9 … 1.111; α = 0.05, so 90% intervals
+
+comparison      ratio of means  std. error  90% CI          p (TOST)  result     p (difference)
+--------------  --------------  ----------  --------------  --------  ---------  --------------
+M-5 / Standard           1.043     0.05585  0.9492 … 1.145  0.127     not shown  0.448
+
+M-5: not shown to be equivalent: the 90 % interval 0.9492 … 1.145 reaches above 1.111. No difference is detected either: there are too few runs to tell
+p (difference): the ordinary two-sided test that the ratio is 1 — "no significant difference" is not evidence of equivalence
+```
+
+**Choosing the margin.** It is a judgement about the process, not a statistic, and it must be
+set before the results are seen. Good sources:
+
+- a specification or tolerance: a fraction of the spec width (often 10–20 %);
+- the smallest difference that would change a decision downstream;
+- a regulatory or pharmacopoeial convention (0.8 … 1.25 for bioequivalence);
+- what the method can tell apart (a fraction of the reproducibility).
+
+A margin chosen after looking at the data, to make the interval fit, proves nothing.
+
+**In a larger model.** The comparisons use the factor's adjusted means, as in
+[Comparing treatments](#comparing-treatments). So a method in a model with other factors is
+compared at their average, blocks and covariates are taken out, and mixed models use Kenward–Roger
+degrees of freedom (`--random block`). When several levels are each tested against the
+reference, each is its own question, so there is no multiplicity adjustment. If *all* of them
+must be equivalent, each must pass.
+
+These results are checked against R: `TOSTER` (`t_TOST` unpaired and paired, `log_TOST`) and
+`emmeans` equivalence and non-inferiority tests (blocks, a factor in a larger model, a mixed
+model, Poisson rate ratios, a difference of proportions and odds ratios).
+
 ## Covariates
 
 A **covariate** is something you measure at each run but do not set: the starting weight of an

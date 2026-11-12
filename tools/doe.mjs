@@ -11,6 +11,15 @@
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+//   equivalence STUDY ["y ~ …"] FACTOR (--margin M | --lower L --upper U) [--reference LEVEL] [--test LEVEL]
+//        [--noninferiority [--better higher|lower]] [--ratio | --difference] [--at "B=…"] [--random block|ID,…] [--alpha 0.05]
+//        is a level as good as the reference (default its first level)? Two one-sided tests (TOST):
+//        equivalent when the 90 % interval of the difference lies within the margins (±M, or L … U,
+//        set in advance: how big a difference still counts as the same); --noninferiority: not
+//        worse by more than the margin (the side from the response's goal, or --better). --ratio:
+//        a ratio of means (the log of the response; margins as ratios, e.g. --lower 0.8 --upper 1.25);
+//        counts and proportions: rate or odds ratios by default, --difference for a difference of
+//        proportions or rates. Also the ordinary test of a difference, which is not the same question
 //   compare STUDY ["y ~ …"] FACTOR [--control LEVEL] [--method tukey|dunnett|holm|bonferroni|none]
 //        [--contrast "a - ctrl" …] [--at "B=…"] [--random block|ID,…] [--alpha 0.05]
 //        which levels of a factor differ: the adjusted means of its levels (the model's means, the
@@ -203,6 +212,7 @@ import { covariateSlopes, covariateTable, droppedNote } from '../js/model/covari
 import { adjustedMeans, equalSlopes } from '../js/model/adjusted.js';
 import { allocate, applyAllocation } from '../js/design/allocate.js';
 import { compareLevels } from '../js/model/compare.js';
+import { equivalence, logResponse } from '../js/model/equivalence.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -1036,6 +1046,69 @@ function cmdCompare({ pos, opt }) {
     ...(cmp.critical !== undefined ? { critical: cmp.critical } : {}),
     levels: cmp.levels.map(l => ({ label: l.label, mean: l.mean, se: l.se, lower: l.lower, upper: l.upper, raw: Number.isFinite(l.raw) ? l.raw : null, n: l.n, ...(l.letters !== undefined ? { letters: l.letters } : {}) })),
     comparisons: cmp.comparisons.map(x => ({ label: x.label, ...(x.a !== undefined ? { a: x.a, b: x.b } : { weights: x.weights }), estimate: x.estimate, se: x.se, df: Number.isFinite(x.df) ? x.df : null, statistic: x.stat, p: x.p, pUnadjusted: x.pRaw, lower: x.lower, upper: x.upper })) });
+}
+
+/** Equivalence and non-inferiority of a factor's levels against a reference (issue #84). */
+function cmdEquivalence({ pos, opt }) {
+  const [file, a, b] = pos, study = load(file);
+  const hasFormula = a !== undefined && String(a).includes('~');
+  const factorId = hasFormula ? b : a;
+  if (!factorId) fail('equivalence: give the factor, e.g. doe equivalence STUDY supplier --reference current --margin 2');
+  const f0 = study.factors.find(f => f.id === factorId) ?? fail(`no factor "${factorId}" in ${file}`);
+  if (f0.type !== 'categorical') fail(`${factorId} is continuous: equivalence compares the levels of a categorical factor`);
+  let formula = hasFormula ? String(a) : null;
+  if (!formula) {
+    const resp = study.responses.find(r => !r.derived && study.observations.some(o => o.response === r.id)) ?? fail('no response has results yet');
+    formula = `${resp.id} ~ main`;
+  }
+  const respId = formula.slice(0, formula.indexOf('~')).trim(), resp = study.responses.find(r => r.id === respId) ?? fail(`no response "${respId}"`);
+  const num0 = (k) => { if (opt[k] === undefined) return undefined; const x = Number(opt[k]); if (opt[k] === true || !Number.isFinite(x)) fail(`--${k}: give a number`); return x; };
+  const margin = num0('margin'), lower = num0('lower'), upper = num0('upper');
+  if (margin === undefined && lower === undefined && upper === undefined) fail('equivalence: give the margin — how big a difference still counts as the same (--margin M, or --lower L --upper U)');
+  const at = Object.fromEntries(String(opt.at ?? '').split(',').filter(t => t.trim()).map(t => {
+    const [id, v] = t.split('=').map(x => x?.trim());
+    const f = study.factors.find(x => x.id === id), c = study.covariates?.find(x => x.id === id);
+    if (!f && !c) fail(`--at: no factor or covariate "${id}"`);
+    if (f?.type === 'categorical') { const i = f.levels.map(String).indexOf(v); if (i < 0) fail(`--at: ${id} has no level "${v}"`); return [id, i]; }
+    const x = Number(v); if (v === undefined || v === '' || !Number.isFinite(x)) fail(`--at: ${id}: "${v}" is not a number`);
+    return [id, x];
+  }));
+  const random = opt.random ? String(opt.random).split(',').map(x => x.trim()) : null;
+  if (resp.distribution && random) fail('equivalence: random effects with counts or proportions are not available here yet');
+  const logged = !!opt.ratio && !resp.distribution;
+  let fit;
+  try {
+    const st = logged ? logResponse(study, respId) : study;
+    fit = random ? fitMixedModel(st, formula, { random }) : (mixedFor(st, formula, opt) ?? fitModel(st, formula));
+  } catch (e) { fail(e.message); }
+  const type = opt.noninferiority ? 'noninferiority' : 'equivalence';
+  const better = opt.better ? String(opt.better) : resp.goal === 'minimize' ? 'lower' : 'higher';
+  const alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05;
+  let eq;
+  try {
+    eq = equivalence(fit, factorId, { reference: opt.reference !== undefined ? String(opt.reference) : undefined, test: opt.test !== undefined ? String(opt.test) : undefined,
+      margin, lower, upper, type, better, logged, alpha, at, ...(opt.difference ? { scale: 'difference' } : opt.ratio ? { scale: 'ratio' } : {}) });
+  } catch (e) { fail(e.message); }
+  const ratio = eq.scale === 'ratio', pct = `${num(100 * eq.level)}%`;
+  out(`${factorId}: ${fit.kind === 'mixed' ? `mixed model (${fit.random.map(r => r.name.toLowerCase()).join(', ')} random), Kenward–Roger` : fit.distribution ? `${noiseOf(fit).label}` : 'least squares'}, ${logged ? `log(${respId})` : respId}${formula.slice(formula.indexOf('~') - 1)}${nuisanceNote(fit)}`);
+  const held = [...Object.entries(eq.held).map(([id, v]) => `${id} = ${num(v, 5)}`), ...(eq.averagedOver.length ? [`averaged over ${eq.averagedOver.join(', ')}`] : [])];
+  if (held.length) out(`every level at ${held.join(', ')}`);
+  const [lo, hi] = eq.margins;
+  out(`${type === 'equivalence' ? 'equivalence' : `non-inferiority (${better} is better)`} against ${eq.reference}: ${eq.comparison}, margin${type === 'equivalence' ? 's' : ''} ${type === 'equivalence' ? `${num(lo)} … ${num(hi)}` : num(better === 'higher' ? lo : hi)}; α = ${alpha}, so ${pct} intervals`);
+  out('');
+  const sep = ratio ? ' / ' : ' − ';
+  out(table([{ key: 'label', label: 'comparison', align: 'left' }, { key: 'estimate', label: ratio ? eq.comparison : 'difference' }, { key: 'se', label: 'std. error' }, ...(fit.kind === 'mixed' ? [{ key: 'df', label: 'df' }] : []),
+    { key: 'ci', label: `${pct} CI`, align: 'left' }, { key: 'p', label: type === 'equivalence' ? 'p (TOST)' : 'p (one-sided)' }, { key: 'res', label: 'result', align: 'left' }, { key: 'pd', label: 'p (difference)' }],
+    eq.comparisons.map(x => ({ ...x, label: `${x.test}${sep}${x.reference}`, ci: `${num(x.lower)} … ${num(x.upper)}`, p: pval(x.p), df: num(x.df, 4), pd: pval(x.different.p),
+      res: type === 'equivalence' ? (x.equivalent ? 'equivalent' : /^different/.test(x.verdict) ? 'different' : 'not shown') : (x.noninferior ? 'non-inferior' : /^inferior/.test(x.verdict) ? 'inferior' : 'not shown') }))));
+  out('');
+  for (const x of eq.comparisons) out(`${x.test}: ${x.verdict}`);
+  out(`p (difference): the ordinary two-sided test that the ${ratio ? 'ratio is 1' : 'difference is 0'} — "no significant difference" is not evidence of equivalence`);
+  put({ kind: eq.kind, response: respId, formula, logResponse: logged, factor: factorId, type, ...(type === 'noninferiority' ? { better } : {}), reference: eq.reference, scale: eq.scale, comparison: eq.comparison, alpha, level: eq.level,
+    margins: { lower: lo ?? null, upper: hi ?? null }, held: eq.held, averagedOver: eq.averagedOver,
+    comparisons: eq.comparisons.map(x => ({ test: x.test, reference: x.reference, estimate: x.estimate, se: x.se, df: Number.isFinite(x.df) ? x.df : null, lower: x.lower, upper: x.upper,
+      ...(x.pLower !== undefined ? { pLower: x.pLower } : {}), ...(x.pUpper !== undefined ? { pUpper: x.pUpper } : {}), p: x.p,
+      ...(type === 'equivalence' ? { equivalent: x.equivalent } : { noninferior: x.noninferior }), verdict: x.verdict, difference: { p: x.different.p, lower: x.different.lower, upper: x.different.upper } })) });
 }
 
 /** Allocate units to runs by a covariate known in advance (issue #82, phase 3). */
@@ -2043,7 +2116,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { compare: cmdCompare, allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
+const COMMANDS = { compare: cmdCompare, equivalence: cmdEquivalence, allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

@@ -487,6 +487,28 @@ try {
     await shot('19-crossover');
   }
 
+  section('equivalence and non-inferiority (issue #84)');
+  {
+    await page.click('#btn-examples'); await page.click('[data-example="media-compare"]'); await page.waitForTimeout(300);
+    await page.click('[data-step="analyse"]'); await settle();
+    let t = await page.textContent('#equivalence');
+    check('the panel asks for the margin first', /Give the margin/.test(t) && await page.locator('#equivalence-plot').count() === 0, t.slice(0, 200));
+    await page.fill('input[aria-label="equivalence margin"]', '0.5'); await page.keyboard.press('Tab'); await settle();
+    t = await page.textContent('#equivalence');
+    check('margin ±0.5: a row per medium against Standard, verdicts, the picture', await page.locator('#equivalence [data-equivalence]').count() === 4 && /M-4: different by more than the margin/.test(t) && await page.locator('#equivalence-plot .ln').count() === 4, t.slice(0, 400));
+    await page.fill('input[aria-label="equivalence margin"]', '1.5'); await page.keyboard.press('Tab'); await settle();
+    t = await page.textContent('#equivalence-verdicts');
+    check('margin ±1.5: M-2 and M-5 equivalent to Standard', /M-2: equivalent/.test(t) && /M-5: equivalent/.test(t), t);
+    await shot('20-equivalence');
+    await page.selectOption('select[aria-label="equivalence question"]', 'noninferiority'); await settle();
+    t = await page.textContent('#equivalence-verdicts');
+    check('non-inferiority: the lower end against −1.5', /M-3: non-inferior: the lower end/.test(t), t);
+    await page.selectOption('select[aria-label="equivalence scale"]', 'ratio'); await settle();
+    await page.fill('input[aria-label="equivalence margin"]', '1.25'); await page.keyboard.press('Tab'); await settle();
+    t = await page.textContent('#equivalence');
+    check('a ratio of means (log scale), margin 1.25: ratios against 0.8', /ratio of means/.test(t) && /above the margin 0\.8/.test(t), t.slice(0, 500));
+  }
+
   section('projectivity: the active factors fitted from the same runs (issue #79)');
   {
     const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
