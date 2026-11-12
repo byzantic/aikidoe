@@ -350,6 +350,18 @@ try {
     check('compare: weights that do not add up to 0 are pointed out', r.code === 0 && /do not add up to 0/.test(r.out), r.out + r.err);
   }
 
+  section('equivalence and non-inferiority (issue #84)');
+  {
+    r = run('equivalence', 'media.aikidoe.json', 'medium', '--reference', 'Standard', '--margin', '0.5');
+    check('equivalence: TOST against ±0.5, a table and a verdict per level', r.code === 0 && /equivalence against Standard: difference, margins -0\.5 … 0\.5; α = 0\.05, so 90% intervals/.test(r.out) && /^M-4: different by more than the margin/m.test(r.out) && /no significant difference" is not evidence of equivalence/.test(r.out), r.out + r.err);
+    r = run('equivalence', 'media.aikidoe.json', 'medium', '--reference', 'Standard', '--margin', '0.5', '--noninferiority', '--test', 'M-3');
+    check('--noninferiority --test: one level, the lower end against −margin', r.code === 0 && /^M-3: non-inferior: the lower end of the 90 % interval/m.test(r.out), r.out + r.err);
+    r = run('equivalence', 'media.aikidoe.json', 'medium', '--ratio', '--lower', '0.9', '--upper', '1.11', '--test', 'M-2');
+    check('--ratio: the log of the response, a ratio of means', r.code === 0 && /log\(biomass\) ~ main/.test(r.out) && /M-2 \/ Standard/.test(r.out), r.out + r.err);
+    r = run('equivalence', 'media.aikidoe.json', 'medium');
+    check('equivalence without a margin: asks for one', r.code !== 0 && /give the margin/.test(r.err), r.err);
+  }
+
   section('designs for comparing treatments (issue #80, phase 2)');
   {
     r = run('init', 'lsq.aikidoe.json', '--factor', 'feed=A,B,C,D', '--response', 'y', '--seed', '5');
@@ -616,6 +628,8 @@ try {
   check('compare --json: levels, comparisons, the critical value', o.method === 'dunnett' && o.family === 'control' && o.levels.length === 5 && o.comparisons.length === 4 && Math.abs(o.critical - 2.7273) < 1e-4);
   o = js('compare', 'media.aikidoe.json', 'medium');
   check('compare --json: letters with all pairs', o.levels.find(l => l.label === 'M-4').letters === 'a' && o.comparisons.length === 10);
+  o = js('equivalence', 'media.aikidoe.json', 'medium', '--reference', 'Standard', '--margin', '0.5');
+  check('equivalence --json: margins, the comparisons with their verdicts', o.margins.lower === -0.5 && o.comparisons.length === 4 && o.comparisons.every(x => typeof x.equivalent === 'boolean' && x.verdict));
   o = js('design', 'lsq.aikidoe.json', '--latin', '--force');
   check('design --latin --json: the blocking variables and each run\'s labels', o.design.blocking?.length === 2 && o.design.runs.every(u => u.blocks?.row && u.blocks?.column));
   o = js('design', 'lsq.aikidoe.json', '--crossover', '--force');

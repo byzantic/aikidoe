@@ -9,7 +9,7 @@ import { siteScheme } from '../js/model/sites.js';
 import { lhsDesign } from '../js/sim/surrogate.js';
 import { observeRuns } from '../js/learn/process.js';
 import { compileExpression } from '../js/sim/expression.js';
-import { latinSquare, bibd, crossover } from '../js/design/comparative.js';
+import { latinSquare, bibd, crossover, completeBlocks } from '../js/design/comparative.js';
 
 const reactor = () => ({
   aikidoe: FORMAT_VERSION, name: 'Reactor screening', seed: 7,
@@ -63,6 +63,18 @@ export const EXAMPLES = [
       // by run number: the levels in order, four times over
       const y = [6.12, 6.63, 7.55, 7.38, 6.96, 6.64, 6.2, 6.79, 7.95, 6, 5.9, 5.84, 7.1, 7.57, 6.53, 6.42, 4.93, 7.7, 8.29, 6.67];
       return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'biomass', value: y[r.run - 1] })) });
+    } },
+  { id: 'method-transfer', title: 'Method transfer: is the new assay method equivalent to the old?', step: 'analyse',
+    blurb: 'Ten samples, each measured by the old and the new method. Is the new one equivalent within ±1 % of label claim? The samples differ far more than the methods, so each sample is a block (paired data). Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Method transfer', seed: 84,
+        description: 'An assay moves to a new method. Ten samples are each measured by both methods (in random order within the sample); the new method is accepted if it is equivalent within ±1 % of label claim. Simulated data.',
+        factors: [{ id: 'method', name: 'Method', type: 'categorical', levels: ['old', 'new'] }],
+        responses: [{ id: 'assay', name: 'Assay', units: '% of label claim' }] });
+      // each sample a block of two runs, the methods in random order within it
+      const design = toStudyDesign(s, completeBlocks(2, 10), { seed: 84 });
+      const y = [96.52, 97.57, 98.45, 99.31, 99.68, 99.71, 100.6, 100.79, 98.79, 100.13, 97.7, 97.61, 98.56, 98, 98.1, 98.62, 96.53, 96.77, 100.26, 100.45];
+      return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'assay', value: y[r.run - 1] })) });
     } },
   { id: 'coating-latin', title: 'Five tablet coatings: a Latin square over days and operators', step: 'analyse',
     blurb: 'Five coatings, tested once by each of five operators and once on each of five days. Days and operators both shift the result; the Latin square takes them out. Which coatings dissolve more slowly than C1? Simulated data.',

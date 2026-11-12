@@ -24,6 +24,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Milliken, G. A. & Johnson, D. E. (2002). *Analysis of Messy Data, Volume III: Analysis of
   Covariance*. Chapman & Hall/CRC. ([Covariates](analysis.md#covariates): one slope or several,
   adjusted means.)
+- Wellek, S. (2010). *Testing Statistical Hypotheses of Equivalence and Noninferiority*, 2nd ed.
+  CRC Press.
 - Hsu, J. C. (1996). *Multiple Comparisons: Theory and Methods*. Chapman & Hall. (Tukey's method
   for all pairwise comparisons; Dunnett's with a control.)
 - Genz, A. & Bretz, F. (2009). *Computation of Multivariate Normal and t Probabilities*. Springer.
@@ -104,6 +106,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   Firth estimates are checked against.)
 - Kramer, C. Y. (1956). Extension of multiple range tests to group means with unequal numbers of
   replications. *Biometrics* 12, 307–310. (Tukey–Kramer, for unequal numbers of runs.)
+- Lakens, D. (2017). Equivalence tests: a practical primer for t tests, correlations, and
+  meta-analyses. *Social Psychological and Personality Science* 8, 355–362. (TOST, as in TOSTER.)
 - Lenth, R. V. (1989). Quick and easy analysis of unreplicated factorials. *Technometrics* 31,
   469–473.
 - Lin, D. K. J. & Draper, N. R. (1992). Projection properties of Plackett and Burman designs.
@@ -146,6 +150,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Saltelli, A., Annoni, P., Azzini, I., Campolongo, F., Ratto, M. & Tarantola, S. (2010). Variance
   based sensitivity analysis of model output: design and estimator for the total sensitivity
   index. *Computer Physics Communications* 181, 259–270.
+- Schuirmann, D. J. (1987). A comparison of the two one-sided tests procedure and the power
+  approach for assessing the equivalence of average bioavailability. *Journal of Pharmacokinetics
+  and Biopharmaceutics* 15, 657–680.
 - Scheffé, H. (1958). Experiments with mixtures. *Journal of the Royal Statistical Society B* 20,
   344–360.
 - Scheffé, H. (1963). The simplex-centroid design for experiments with mixtures. *Journal of the
@@ -173,4 +180,4 @@ Books for learning and reference, and the papers behind specific methods in aiki
 R (`lm`, `anova`, `car::Anova`, `MASS::boxcox`, `nls`), lme4 and pbkrtest (mixed models), drc and
 numDeriv (dose–response), FrF2
 (fractions and split-plot fractions), rsm, AlgDesign, skpr (power), SixSigma (gauge R&R),
-desirability, BsMD (Lenth), emmeans, mvtnorm and multcompView (multiple comparisons), crossdes (crossover designs); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.
+desirability, BsMD (Lenth), emmeans, mvtnorm and multcompView (multiple comparisons), crossdes (crossover designs), TOSTER (equivalence); NumPy and SciPy. The fixtures they produce are in `tests/fixtures/`.

@@ -23,6 +23,8 @@ import { glmmAnalysis, cached } from './glmm.js';
 import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
 import { covariateSlopes, droppedNote } from '../js/model/covariates.js';
 import { comparePanel } from './compare.js';
+import { equivalencePanel } from './equivalence.js';
+import { logResponse } from '../js/model/equivalence.js';
 
 /** A sensible first model for the study's design. */
 
@@ -79,7 +81,14 @@ export function render(ctx) {
   const rhs = formula.includes('~') ? formula.slice(formula.indexOf('~') + 1).trim() : formula;
   // the fitted response over two factors (issue #88)
   const surface = (f) => { try { return surfacePanel(study, f, { ui, set, resp }); } catch { return null; } };
-  const adjusted = (f, fitWith) => { try { return comparePanel(study, f, { formula, fitWith, anova, ui, set, setFormula, resp }); } catch (e) { return h('div', { class: 'msg warning' }, `Compare levels: ${e.message}`); } };
+  // comparing levels (#80) and equivalence (#84); fitStudy(st): the same fit of another study (the
+  // log of the response, for a ratio of means)
+  const adjusted = (f, fitWith, fitStudy) => {
+    let cmp, eqv;
+    try { cmp = comparePanel(study, f, { formula, fitWith, anova, ui, set, setFormula, resp }); } catch (e) { cmp = h('div', { class: 'msg warning' }, `Compare levels: ${e.message}`); }
+    try { eqv = equivalencePanel(study, f, { ui, set, resp, logFit: fitStudy && !resp.distribution ? () => fitStudy(logResponse(study, resp.id)) : null }); } catch (e) { eqv = h('div', { class: 'msg warning' }, `Equivalence: ${e.message}`); }
+    return h('div', {}, cmp, eqv);
+  };
 
   const fIn = h('input', { type: 'text', class: 'formula', id: 'formula', value: formula, 'aria-label': 'model formula', spellcheck: 'false',
     onchange: (e) => setFormula(e.target.value.includes('~') ? e.target.value : `${resp.id} ~ ${e.target.value}`) });
@@ -180,7 +189,7 @@ export function render(ctx) {
     const used = new Set(formula.match(/[A-Za-z_][A-Za-z0-9_]*/g));
     const chips = avail.length ? h('div', { class: 'row small', id: 'position-terms', style: 'margin-top:6px' }, 'position terms:',
       avail.map(t => h('button', { class: 'btn small', disabled: used.has(t.id), title: t.name, onclick: () => setFormula(`${formula} + ${t.id}`) }, `+ ${t.id}`))) : null;
-    return h('div', {}, controls, blockToggle, chips, mixedPanel(m, ui, set), adjusted(m, (f) => fitMixedModel(study, f, mixOpts)), surface(m), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
+    return h('div', {}, controls, blockToggle, chips, mixedPanel(m, ui, set), adjusted(m, (f) => fitMixedModel(study, f, mixOpts), (st) => fitMixedModel(st, formula, mixOpts)), surface(m), sitesPanel(study, m, ui, set), confirmPanel(ctx, m));
   }
   const olsNote = rand.length ? h('div', { class: 'msg warning' }, 'Least squares on run means, as if the runs were completely randomised: whole-plot and nested structure ignored. ',
     h('button', { class: 'btn small', id: 'use-mixed', onclick: () => set({ ols: false }) }, 'back to the mixed model')) : null;
@@ -275,7 +284,7 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, backToDose, controls, olsNote, blockToggle, summary, projPanel, mixPanel, anovaPanel, effectsPanel, adjusted(fit, (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) })), surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  return h('div', {}, backToDose, controls, olsNote, blockToggle, summary, projPanel, mixPanel, anovaPanel, effectsPanel, adjusted(fit, (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) }), (st) => fitModel(st, formula, { ...(ui.noPosition ? { position: false } : {}) })), surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

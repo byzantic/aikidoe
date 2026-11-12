@@ -78,6 +78,10 @@ for a balanced incomplete block design.
 **Effect** — the change in a response from a factor's low to its high setting (twice the coded
 coefficient).
 
+**Equivalence test (TOST)** — shows that two things are the same within a margin set in advance:
+two one-sided tests, or the 90 % interval of the difference inside the margins. Not the same as
+finding no significant difference. See [equivalence](analysis.md#equivalence-and-non-inferiority).
+
 **Extrapolation** — predicting from a fitted model at settings beyond the runs: outside the
 region they cover (their convex hull), or where its prediction variance is larger than at any run.
 See [Beyond the runs](optimisation.md#beyond-the-runs).
@@ -125,6 +129,10 @@ effects themselves.
 so the chance of at least one grows with their number unless the p values and intervals are
 adjusted (Tukey, Dunnett, Holm). See [comparing treatments](analysis.md#comparing-treatments).
 
+**Margin (equivalence)** — the largest difference that would not matter in practice, set before
+the results are seen: from a specification, a downstream decision, or a convention (0.8 … 1.25 for
+bioequivalence).
+
 **Mixture** — factors that are shares of a whole and add up to a fixed total; they cannot be varied
 independently. See [mixture designs](designs-mixture.md).
 
@@ -134,6 +142,9 @@ wafers) for nested sources of variation.
 **Nested random effects** — groupings inside groupings, each with its own random shift: whole
 plots within days, plates within runs. Each factor is judged against the variation at the level
 where it changes ([random effects for counts](analysis.md#random-effects-for-counts-and-proportions)).
+
+**Non-inferiority** — shows that something is not worse than the reference by more than a margin;
+better is fine. One one-sided test. See [equivalence](analysis.md#equivalence-and-non-inferiority).
 
 **Odds ratio** — with a logit link, e^b: the factor by which the odds of success change per coded unit.
 

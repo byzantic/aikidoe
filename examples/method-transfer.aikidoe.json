@@ -1,0 +1,324 @@
+{
+  "aikidoe": 1,
+  "name": "Method transfer",
+  "description": "An assay moves to a new method. Ten samples are each measured by both methods (in random order within the sample); the new method is accepted if it is equivalent within ±1 % of label claim. Simulated data.",
+  "seed": 84,
+  "factors": [
+    {
+      "id": "method",
+      "name": "Method",
+      "type": "categorical",
+      "htc": false,
+      "levels": [
+        "old",
+        "new"
+      ]
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "assay",
+      "name": "Assay",
+      "units": "% of label claim",
+      "goal": "none",
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "complete-blocks",
+    "params": {
+      "treatments": 2,
+      "blocks": 10,
+      "seed": 84
+    },
+    "randomisation": "blocked",
+    "runs": [
+      {
+        "run": 1,
+        "order": 7,
+        "block": 1,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 2,
+        "order": 8,
+        "block": 1,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 3,
+        "order": 2,
+        "block": 2,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 4,
+        "order": 1,
+        "block": 2,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 5,
+        "order": 5,
+        "block": 3,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 6,
+        "order": 6,
+        "block": 3,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 7,
+        "order": 12,
+        "block": 4,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 8,
+        "order": 11,
+        "block": 4,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 9,
+        "order": 15,
+        "block": 5,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 10,
+        "order": 16,
+        "block": 5,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 11,
+        "order": 9,
+        "block": 6,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 12,
+        "order": 10,
+        "block": 6,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 13,
+        "order": 17,
+        "block": 7,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 14,
+        "order": 18,
+        "block": 7,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 15,
+        "order": 13,
+        "block": 8,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 16,
+        "order": 14,
+        "block": 8,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 17,
+        "order": 3,
+        "block": 9,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 18,
+        "order": 4,
+        "block": 9,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      },
+      {
+        "run": 19,
+        "order": 19,
+        "block": 10,
+        "kind": "factorial",
+        "settings": {
+          "method": "old"
+        }
+      },
+      {
+        "run": 20,
+        "order": 20,
+        "block": 10,
+        "kind": "factorial",
+        "settings": {
+          "method": "new"
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "assay",
+      "value": 96.52
+    },
+    {
+      "run": 2,
+      "response": "assay",
+      "value": 97.57
+    },
+    {
+      "run": 3,
+      "response": "assay",
+      "value": 98.45
+    },
+    {
+      "run": 4,
+      "response": "assay",
+      "value": 99.31
+    },
+    {
+      "run": 5,
+      "response": "assay",
+      "value": 99.68
+    },
+    {
+      "run": 6,
+      "response": "assay",
+      "value": 99.71
+    },
+    {
+      "run": 7,
+      "response": "assay",
+      "value": 100.6
+    },
+    {
+      "run": 8,
+      "response": "assay",
+      "value": 100.79
+    },
+    {
+      "run": 9,
+      "response": "assay",
+      "value": 98.79
+    },
+    {
+      "run": 10,
+      "response": "assay",
+      "value": 100.13
+    },
+    {
+      "run": 11,
+      "response": "assay",
+      "value": 97.7
+    },
+    {
+      "run": 12,
+      "response": "assay",
+      "value": 97.61
+    },
+    {
+      "run": 13,
+      "response": "assay",
+      "value": 98.56
+    },
+    {
+      "run": 14,
+      "response": "assay",
+      "value": 98
+    },
+    {
+      "run": 15,
+      "response": "assay",
+      "value": 98.1
+    },
+    {
+      "run": 16,
+      "response": "assay",
+      "value": 98.62
+    },
+    {
+      "run": 17,
+      "response": "assay",
+      "value": 96.53
+    },
+    {
+      "run": 18,
+      "response": "assay",
+      "value": 96.77
+    },
+    {
+      "run": 19,
+      "response": "assay",
+      "value": 100.26
+    },
+    {
+      "run": 20,
+      "response": "assay",
+      "value": 100.45
+    }
+  ],
+  "history": []
+}

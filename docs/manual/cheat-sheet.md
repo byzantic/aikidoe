@@ -90,6 +90,9 @@ before acting.
   ([comparing treatments](analysis.md#comparing-treatments)). Group the runs as they fall: complete
   blocks, a Latin square for two groupings, incomplete blocks, or a crossover
   ([designs](designs-comparative.md)).
+- "As good as the old one?" is an equivalence question: set a margin first, then check that the
+  90 % interval lies inside it ([equivalence](analysis.md#equivalence-and-non-inferiority)). No
+  significant difference is not evidence of equivalence.
 - Check the residuals: against fitted values, run order, and a normal plot.
 - State aliasing with every conclusion from a fraction.
 - Report effects with confidence intervals, not only p-values; choosing the model from the same data

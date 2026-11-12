@@ -84,7 +84,10 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    Comparing a few treatments: `doe compare STUDY ["y ~ …"] A --json` (Tukey, every pair, with
    letters; levels sharing a letter are not shown to differ), `--control Standard` (Dunnett),
    `--contrast "(M-2 + M-3)/2 - Standard"` (planned contrasts). Never report unadjusted t tests
-   for many pairs. To plan such a comparison (one factor): `doe design STUDY --complete-blocks B`
+   for many pairs. "Is the new one as good as the old?" is equivalence, not a non-significant
+   difference: `doe equivalence STUDY A --reference old --margin M --json` (TOST; the margin
+   must come from the user, set before the results; `--noninferiority` for one side, `--ratio`
+   for a ratio of means). To plan such a comparison (one factor): `doe design STUDY --complete-blocks B`
    when runs fall in days or batches; `--latin --rows Day --columns Operator` for two groupings;
    `--bibd K` when a block holds only K levels; `--crossover --subjects N` when each subject gets
    every level (carry-over is fitted; AB/BA cannot estimate it with fixed subjects).
