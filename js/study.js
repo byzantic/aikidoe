@@ -46,7 +46,7 @@ const BLOCK_ROLES = ['row', 'column', 'subject', 'period'];
 
 const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'covariates', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
-  continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'note'],
+  continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'limits', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
   response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
@@ -287,6 +287,16 @@ function normFactor(f, i, errors) {
     else if (isObj(t) && isNum(t.sd) && t.sd >= 0 && ['normal', 'uniform', 'truncated', undefined].includes(t.dist) && (t.at === undefined || (isNum(t.at) && t.at > 0)) && Object.keys(t).every(k => ['sd', 'dist', 'at'].includes(k)))
       out.tolerance = { sd: t.sd, dist: t.dist ?? 'normal', ...(t.at !== undefined ? { at: t.at } : {}) };
     else errors.push(`${path}.tolerance: must be a standard deviation, or { sd, dist: normal | uniform | truncated, at? }`);
+  }
+  // operating limits (issue #81): the settings the process can be run at at all, wider than the
+  // experiment's range — where a path of steepest ascent must stop (natural units)
+  if (f.limits !== undefined) {
+    const L = f.limits;
+    if (!isObj(L) || Object.keys(L).some(k => !['lower', 'upper'].includes(k)) || (L.lower !== undefined && !isNum(L.lower)) || (L.upper !== undefined && !isNum(L.upper)) || (L.lower === undefined && L.upper === undefined))
+      errors.push(`${path}.limits: must be { lower?, upper? } with at least one (natural units)`);
+    else if ((isNum(L.lower) && isNum(low) && L.lower > low) || (isNum(L.upper) && isNum(high) && L.upper < high)) errors.push(`${path}.limits: must contain the factor's range ${low} … ${high}`);
+    else if (tr === 'log' && isNum(L.lower) && !(L.lower > 0)) errors.push(`${path}.limits: a log-transformed factor needs a positive lower limit`);
+    else out.limits = { ...(isNum(L.lower) ? { lower: L.lower } : {}), ...(isNum(L.upper) ? { upper: L.upper } : {}) };
   }
   if (f.noise !== undefined) {
     if (!isObj(f.noise) || !isNum(f.noise.sd) || !(f.noise.sd > 0) || (f.noise.mean !== undefined && !isNum(f.noise.mean))) errors.push(`${path}.noise: must be { sd: positive number, mean?: number } (natural units)`);

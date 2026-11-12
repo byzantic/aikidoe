@@ -288,6 +288,20 @@
           },
           "description": "a noise factor: varied in the experiment, random in production: { sd, mean? } (natural units)"
         },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "lower": {
+              "type": "number"
+            },
+            "upper": {
+              "type": "number"
+            }
+          },
+          "description": "operating limits: the settings that can be run at all, wider than the range (low … high); a path of steepest ascent stops at them (natural units)"
+        },
         "note": {
           "type": "string",
           "description": "free text"

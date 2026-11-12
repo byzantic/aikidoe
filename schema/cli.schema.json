@@ -741,6 +741,25 @@
       "then": {
         "$ref": "#/$defs/equivalence"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "path"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/path"
+      }
     }
   ],
   "$defs": {
@@ -5199,6 +5218,146 @@
               }
             }
           }
+        }
+      }
+    },
+    "path": {
+      "type": "object",
+      "description": "doe path (issue #81): the path of steepest ascent or descent (ridge analysis with curvature) or a canonical path, in coded and natural units, with predictions",
+      "required": [
+        "response",
+        "formula",
+        "method",
+        "goal",
+        "factors",
+        "held",
+        "points",
+        "stopped"
+      ],
+      "properties": {
+        "response": {
+          "type": "string"
+        },
+        "formula": {
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "linear",
+            "ridge",
+            "canonical"
+          ]
+        },
+        "goal": {
+          "enum": [
+            "ascent",
+            "descent"
+          ]
+        },
+        "factors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "held": {
+          "type": "object"
+        },
+        "direction": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "increments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "region": {
+          "type": "object",
+          "required": [
+            "angle",
+            "fraction",
+            "determined"
+          ],
+          "properties": {
+            "angle": {
+              "type": "number"
+            },
+            "fraction": {
+              "type": "number"
+            },
+            "determined": {
+              "type": "boolean"
+            }
+          }
+        },
+        "stationary": {
+          "type": "object"
+        },
+        "axis": {
+          "type": "object"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "step",
+              "distance",
+              "coded",
+              "settings",
+              "fit",
+              "se",
+              "lower",
+              "upper",
+              "outside",
+              "limited"
+            ],
+            "properties": {
+              "step": {
+                "type": "integer"
+              },
+              "distance": {
+                "type": "number"
+              },
+              "coded": {
+                "type": "object"
+              },
+              "settings": {
+                "type": "object"
+              },
+              "fit": {
+                "type": "number"
+              },
+              "se": {
+                "type": "number"
+              },
+              "lower": {
+                "type": "number"
+              },
+              "upper": {
+                "type": "number"
+              },
+              "outside": {
+                "type": "boolean"
+              },
+              "limited": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "stopped": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     }

@@ -45,7 +45,8 @@ and ranks the designs that fit.
 | a simulator | Latin hypercube, then a surrogate | about 10 per factor |
 | is the measurement good enough? | gauge R&R | 10 parts × 3 operators × 2 |
 
-Then, as results come in ([sequential experimentation](designs-sequential.md)): a fold-over when
+Then, as results come in ([sequential experimentation](designs-sequential.md)): the path of steepest
+ascent when the optimum lies outside the ranges (a strong first-order fit, no curvature), a fold-over when
 aliased effects are ambiguous, axial points when centre points show curvature, confirmation runs
 before acting.
 

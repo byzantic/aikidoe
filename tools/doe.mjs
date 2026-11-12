@@ -11,6 +11,15 @@
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
+//   path STUDY ["y ~ …"] [--steps 5] [--step 1 | --step-size "A=5"] [--distances "0,0.5,…"] [--ascent | --descent]
+//        [--canonical [--axis k]]
+//        where to run next when the optimum lies outside the ranges studied: the path of steepest
+//        ascent (descent for a response to minimise) from the centre — straight for a first-order
+//        model, each step moving the factor with the largest effect 1 coded unit (or --step-size
+//        in natural units of one factor), with the 95 % confidence cone of its direction; by ridge
+//        analysis when the model has curvature. Categorical factors at their best level; a factor
+//        at its operating limit (factor limits) is held there. --canonical: along a canonical axis
+//        through the stationary point of a second-order fit (default the largest eigenvalue)
 //   equivalence STUDY ["y ~ …"] FACTOR (--margin M | --lower L --upper U) [--reference LEVEL] [--test LEVEL]
 //        [--noninferiority [--better higher|lower]] [--ratio | --difference] [--at "B=…"] [--random block|ID,…] [--alpha 0.05]
 //        is a level as good as the reference (default its first level)? Two one-sided tests (TOST):
@@ -190,7 +199,7 @@
 // …results, text: [the notes] }, or { ok: false, error: { message } } with a non-zero exit).
 // STUDY is a *.aikidoe.json file. Commands that change it write it back in place.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { createStudy, parseStudy, serializeStudy, StudyError, code, covariatesWithoutValues } from '../js/study.js';
+import { createStudy, parseStudy, serializeStudy, StudyError, code, decode, covariatesWithoutValues } from '../js/study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
@@ -218,6 +227,7 @@ import { adjustedMeans, equalSlopes } from '../js/model/adjusted.js';
 import { allocate, applyAllocation } from '../js/design/allocate.js';
 import { compareLevels } from '../js/model/compare.js';
 import { equivalence, logResponse, equivalencePower, equivalenceRuns } from '../js/model/equivalence.js';
+import { steepestPath, canonicalPath, directionRegion } from '../js/model/path.js';
 import { noiseOf } from '../js/model/noise.js';
 import { glmConfint } from '../js/model/glm.js';
 import { lackOfFit, boxCox, lenth, twoLevelEffects } from '../js/model/ols.js';
@@ -1082,6 +1092,54 @@ function printEquivalencePower(study, opt) {
     comparisons: p.comparisons.map(c => ({ test: c.test, reference: c.reference, se: c.se, df: c.df, power: c.power })), power: p.power, target,
     ...(need ? { needed: { copies: need.copies, runs: need.runs, power: need.power, reached: need.reached } } : {}) });
 }
+
+/** The path of steepest ascent or descent, ridge analysis, or a canonical path (issue #81). */
+function cmdPath({ pos, opt }) {
+  const [file, a] = pos, study = load(file);
+  let formula = a !== undefined && String(a).includes('~') ? String(a) : null;
+  if (!formula) {
+    const resp = study.responses.find(r => !r.derived && study.observations.some(o => o.response === r.id && o.value !== null)) ?? fail('no response has results yet');
+    formula = `${resp.id} ~ main`;
+  }
+  const respId = formula.slice(0, formula.indexOf('~')).trim(), resp = study.responses.find(r => r.id === respId) ?? fail(`no response "${respId}"`);
+  if (resp.distribution) fail('path: for a measured response (counts and proportions: not yet)');
+  let fit;
+  try { fit = fitModel(study, formula); } catch (e) { fail(e.message); }
+  const descent = opt.descent ? true : opt.ascent ? false : undefined;
+  const distances = opt.distances ? String(opt.distances).split(',').map(Number) : undefined;
+  if (distances && distances.some(x => !Number.isFinite(x))) fail('--distances: numbers, e.g. 0,0.5,1,1.5');
+  let stepFactor, stepNatural;
+  if (opt['step-size']) { const [id, v] = String(opt['step-size']).split('=').map(x => x.trim()); stepFactor = id; stepNatural = Number(v); if (!Number.isFinite(stepNatural) || !(stepNatural > 0)) fail('--step-size "A=5": a factor and a positive step in its units'); }
+  let p, region = null;
+  try {
+    p = opt.canonical ? canonicalPath(study, fit, { descent, ...(opt.axis !== undefined ? { which: int(opt.axis, 'axis') - 1 } : {}), ...(distances ? { distances } : {}) })
+      : steepestPath(study, fit, { descent, steps: opt.steps !== undefined ? int(opt.steps, 'steps') : 5, ...(opt.step !== undefined ? { step: Number(opt.step) } : {}), stepFactor, stepNatural, distances });
+    if (p.method === 'linear') region = directionRegion(study, fit);
+  } catch (e) { fail(e.message); }
+  const fs = p.factors.map(id => study.factors.find(f => f.id === id));
+  out(`${respId}: ${formula}; ${p.method === 'linear' ? `path of steepest ${p.goal}` : p.method === 'ridge' ? `path of steepest ${p.goal} by ridge analysis (the model has curvature)` : `canonical path along axis ${(p.axis && p.method) ? '' : ''}with eigenvalue ${num(p.axis.value, 4)}, through the stationary point`}`);
+  if (Object.keys(p.held).length) out(`held: ${showSettings(p.held)} (the best level)`);
+  const others = study.factors.filter(f => f.type !== 'categorical' && !p.factors.includes(f.id));
+  if (others.length) out(`at the centre: ${others.map(f => `${f.id} = ${num(decodeCentre(f), 5)}`).join(', ')} (not in the model)`);
+  if (p.method === 'linear') {
+    out(`direction (coded): ${p.factors.map((id, i) => `${id} ${num(p.direction[i], 4)}`).join(', ')}`);
+    out(`each step: ${fs.map(f => `${f.id} ${p.increments[f.id] >= 0 ? '+' : ''}${num(p.increments[f.id], 4)}${f.units ? ` ${f.units}` : ''}`).join(', ')}`);
+    if (region) out(region.k < 2 ? 'one factor: the direction is up or down'
+      : region.fraction >= 1 ? 'the direction is not determined: the data are consistent with every direction (95 %) — the effects are too small against the noise; replicate, or widen the ranges'
+      : `95 % confidence cone about the direction: half-angle ${num(region.angle, 3)}°, ${num(100 * region.fraction, 3)} % of all directions${region.determined ? '' : ' — poorly determined: the path may be off'}`);
+  }
+  out('');
+  out(table([{ key: 'step', label: p.method === 'canonical' ? 'point' : 'step' }, { key: 'distance', label: 'distance' }, ...fs.map(f => ({ key: f.id, label: f.units ? `${f.id} (${f.units})` : f.id })),
+    { key: 'fit', label: `${respId} predicted` }, { key: 'ci', label: '95% CI', align: 'left' }, { key: 'note', label: '', align: 'left' }],
+    p.points.map(q => ({ step: q.step, distance: num(q.distance, 4), ...Object.fromEntries(fs.map(f => [f.id, num(q.settings[f.id], 5)])), fit: num(q.fit, 5), ci: `${num(q.lower, 5)} … ${num(q.upper, 5)}`,
+      note: [q.outside ? 'outside the runs' : '', q.limited.length ? `${q.limited.join(', ')} at limit` : ''].filter(Boolean).join('; ') }))));
+  if (p.stopped) out(`stopped: ${p.stopped}`);
+  if (p.method !== 'canonical') out(`\nthe predictions beyond the runs are extrapolation: run points along the path (one at a time, or a few), and stop when ${resp.goal === 'minimize' ? 'the response no longer falls' : 'the response no longer rises'}; centre the next design there`);
+  put({ response: respId, formula, method: p.method, goal: p.goal, factors: p.factors, held: p.held, ...(p.direction ? { direction: Object.fromEntries(p.factors.map((id, i) => [id, p.direction[i]])), increments: p.increments } : {}),
+    ...(region ? { region: { angle: region.angle, fraction: region.fraction, determined: region.determined } } : {}), ...(p.stationary ? { stationary: Object.fromEntries(p.factors.map((id, i) => [id, p.stationary[i]])), axis: p.axis } : {}),
+    points: p.points.map(q => ({ step: q.step, distance: q.distance, coded: q.coded, settings: q.settings, fit: q.fit, se: q.se, lower: q.lower, upper: q.upper, outside: q.outside, limited: q.limited })), stopped: p.stopped });
+}
+const decodeCentre = (f) => decode(f, 0);
 
 /** Equivalence and non-inferiority of a factor's levels against a reference (issue #84). */
 function cmdEquivalence({ pos, opt }) {
@@ -2152,7 +2210,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { compare: cmdCompare, equivalence: cmdEquivalence, allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
+const COMMANDS = { compare: cmdCompare, equivalence: cmdEquivalence, path: cmdPath, allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

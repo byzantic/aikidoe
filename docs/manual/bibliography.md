@@ -49,6 +49,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
 
 - Bingham, D. & Sitter, R. R. (1999). Minimum-aberration two-level fractional factorial split-plot
   designs. *Technometrics* 41, 62–70.
+- Box, G. E. P. & Draper, N. R. (2007). *Response Surfaces, Mixtures, and Ridge Analyses*, 2nd
+  ed. Wiley. (The confidence region for the direction of steepest ascent; ridge analysis.)
 - Box, G. E. P. & Behnken, D. W. (1960). Some new three level designs for the study of quantitative
   variables. *Technometrics* 2, 455–475.
 - Bates, D., Mächler, M., Bolker, B. & Walker, S. (2015). Fitting linear mixed-effects models
@@ -57,7 +59,7 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Box, G. E. P. & Tyssedal, J. (1996). Projective properties of certain orthogonal arrays.
   *Biometrika* 83, 950–955. (Projectivity.)
 - Box, G. E. P. & Wilson, K. B. (1951). On the experimental attainment of optimum conditions.
-  *Journal of the Royal Statistical Society B* 13, 1–45.
+  *Journal of the Royal Statistical Society B* 13, 1–45. (The path of steepest ascent.)
 - Brooks, M. E., Kristensen, K., van Benthem, K. J., Magnusson, A., Berg, C. W., Nielsen, A.,
   Skaug, H. J., Mächler, M. & Bolker, B. M. (2017). glmmTMB balances speed and flexibility among
   packages for zero-inflated generalized linear mixed modeling. *The R Journal* 9(2), 378–400.
@@ -99,6 +101,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   the presence of second-order effects. *Journal of Quality Technology* 43, 1–15.
 - Jones, B. & Nachtsheim, C. J. (2013). Definitive screening designs with added two-level
   categorical factors. *Journal of Quality Technology* 45, 121–129.
+- Hoerl, A. E. (1959). Optimum solution of many variables equations. *Chemical Engineering
+  Progress* 55, 69–78. (Ridge analysis.)
 - Kenward, M. G. & Roger, J. H. (1997). Small sample inference for fixed effects from restricted
   maximum likelihood. *Biometrics* 53, 983–997.
 - Kosmidis, I. & Firth, D. (2021). Jeffreys-prior penalty, finiteness and shrinkage in
@@ -112,6 +116,8 @@ Books for learning and reference, and the papers behind specific methods in aiki
   meta-analyses. *Social Psychological and Personality Science* 8, 355–362. (TOST, as in TOSTER.)
 - Lenth, R. V. (1989). Quick and easy analysis of unreplicated factorials. *Technometrics* 31,
   469–473.
+- Lenth, R. V. (2009). Response-surface methods in R, using rsm. *Journal of Statistical
+  Software* 32(7), 1–17. (rsm::steepest and canonical.path, which aikidoe's paths are checked against.)
 - Lin, D. K. J. & Draper, N. R. (1992). Projection properties of Plackett and Burman designs.
   *Technometrics* 34, 423–428. (Projectivity 3 of the Plackett–Burman designs.)
 - Lin, D. K. J. & Tu, W. (1995). Dual response surface optimization. *Journal of Quality
