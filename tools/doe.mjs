@@ -10,6 +10,8 @@
 //        SPEC for a response: id[:units][@distribution[,trials][,link]]   counts and proportions:
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
 //                           times to failure: life:h@weibull,8 or life:h@lognormal,8 (8 units tested per run)
+//                           scores in ordered categories: look@ordinal,poor/fair/good/excellent[,5] (5 judges per
+//                           run) or look@ordinal,5 (scores 1 … 5); [,probit|cloglog] for another link
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
 //   path STUDY --results [--next NEW.aikidoe.json [--design factorial|ccd|none] [--centre 4] [--at "A=…,B=…"]]
@@ -114,6 +116,9 @@
 //        times to failure (a weibull or lognormal response, with units still working at the end of
 //        the test censored): an accelerated-life model with time ratios, likelihood-ratio tests and
 //        the life at each condition tested [--quantile 0.1] (the B10 life, and the median)
+//        ordinal scores (an ordinal response): a cumulative link model (proportional odds) with odds
+//        ratios, likelihood-ratio tests, the test of proportional odds and the chance of each score
+//        at each condition tested
 //        counts and proportions in a split-plot (or with blocks): a GLMM with a random intercept per
 //        whole plot (automatic) or block [--random wholePlot|block|none] [--nagq 25 (1: Laplace)];
 //        likelihood-ratio tests, σ of the random effect and its test; --reduce works on it too
@@ -144,7 +149,8 @@
 //        (counts and proportions: [--exposure e] [--trials n] for the new run; with a random effect
 //        [--random …]: for a typical whole plot or block, averaged over them, and a new run in a new one)
 //        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
-//        (times to failure: the B10 and median life, or another quantile with [--quantile 0.1])
+//        (times to failure: the B10 and median life, or another quantile with [--quantile 0.1];
+//        ordinal scores: the chance of each category and the mean score)
 //   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
 //   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
 //        (position terms in mixed-model formulas: radius2, edge, waferX, waferY, slot, slotZone)
@@ -197,6 +203,8 @@
 //   plot STUDY (--pairs [--factors A,B,…] | --pv A,B [--at "C=0.5,…"] | --vdg) [--model M] [--out FILE.svg]
 //   plot STUDY --life --model "life ~ …" [--out FILE.svg]
 //        times to failure: the probability plot (Weibull or log-normal scale) of each condition tested
+//   plot STUDY --scores --model "score ~ …" [--out FILE.svg]
+//        ordinal scores: the chance of each score at each condition tested, beside the scores given
 //        where the runs sit, as SVG: every pair of factors (coded units), the scaled prediction
 //        variance over two factors for a model (default: quadratic, else 2fi, else main), or the
 //        variance dispersion graph
@@ -216,8 +224,9 @@ import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
 import { codedRuns, codedRow, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
-import { pairsSVG, contourSVG, vdgSVG, probabilitySVG, standalone, viridis } from '../js/io/svg-space.js';
+import { pairsSVG, contourSVG, vdgSVG, probabilitySVG, scoresSVG, standalone, viridis } from '../js/io/svg-space.js';
 import { timeRatios, lifeAtConditions, probabilityPlot } from '../js/model/survreg.js';
+import { oddsRatios, proportionalOddsTest, scoresAtConditions } from '../js/model/ordinal.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../js/model/surface.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
@@ -327,8 +336,15 @@ function cmdInit({ pos, opt }) {
     if (dist) {
       const [distribution, trials, link] = dist.split(',').map(x => x.trim());
       r.distribution = distribution;
-      if (trials) { if (['weibull', 'lognormal'].includes(distribution)) r.unitsPerRun = int(trials, 'units per run'); else r.trials = int(trials, 'trials'); }
-      if (link) r.link = link;
+      if (distribution === 'ordinal') {
+        // ordinal: the categories, lowest first (poor/fair/good, or a number of them), then scores per run or the link
+        if (!trials) fail(`--response ${spec}: give the categories, lowest first, e.g. ${id}@ordinal,poor/fair/good/excellent (or ${id}@ordinal,5)`);
+        r.categories = /^\d+$/.test(trials) ? Array.from({ length: int(trials, 'categories') }, (_, k) => String(k + 1)) : trials.split('/').map(x => x.trim());
+        if (link) { if (/^\d+$/.test(link)) r.unitsPerRun = int(link, 'scores per run'); else r.link = link; }
+      } else {
+        if (trials) { if (['weibull', 'lognormal'].includes(distribution)) r.unitsPerRun = int(trials, 'units per run'); else r.trials = int(trials, 'trials'); }
+        if (link) r.link = link;
+      }
     }
     return r;
   });
@@ -807,6 +823,47 @@ function printLife(study, fit, opt) {
     life: life.map(c => ({ runs: c.runs, settings: c.settings, units: c.units, failures: c.failures, quantiles: c.quantiles.map(q => ({ p: q.p, estimate: q.fit, lower: q.lower, upper: q.upper })) })) });
 }
 
+/** A cumulative link model (ordinal scores): odds ratios, cut points, tests, proportional odds, scores per condition. */
+function printOrdinal(study, fit, opt) {
+  const r = study.responses.find(x => x.id === fit.response), cats = r.categories;
+  const formula = `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`;
+  out(formula);
+  out(`${noiseOf(fit).label}: ${fit.n} scores in ${cats.length} categories (${cats.map((c, k) => `${k + 1} ${c}: ${fit.counts[k]}`).join(', ')})`);
+  if (study.design.runs.some(x => x.wholePlot !== undefined)) out('warning: split-plot design — this model treats every score as independent, so the tests of whole-plot effects are too optimistic');
+  for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
+  if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  for (const w of fit.warnings) out(`warning: ${w}`);
+  covariateLines(fit);
+  out('');
+  const or = oddsRatios(fit), lg = fit.link === 'logit';
+  out(table([
+    { key: 'term', label: 'term', align: 'left' }, { key: 'estimate', label: 'estimate' }, { key: 'se', label: 'std. error' }, { key: 'z', label: 'z' }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars },
+    ...(lg ? [{ key: 'ratio', label: 'odds ratio' }, { key: 'ci', label: '95% Wald interval', align: 'left' }] : []),
+  ], or.map(x => ({ ...x, ci: `${num(x.lower, 4)} … ${num(x.upper, 4)}` }))));
+  out(lg ? 'coded units: an odds ratio is the factor of change in the odds of a higher score rather than a lower one, per coded unit (squared for low → high), the same at every split of the scale'
+    : `coded units, on the ${fit.link} scale of the hidden value behind the scores; positive: higher scores`);
+  out(`\ncut points: ${fit.thresholds.map((t, j) => `${cats[j]} | ${cats[j + 1]} ${num(t.estimate, 4)} (${num(t.se, 3)})`).join(';  ')}`);
+  out(`log-likelihood = ${num(fit.loglik)} (${fit.k} parameters)   AIC = ${num(fit.aic)}`);
+  const type = opt.anova ? int(opt.anova, 'anova') : 1, tests = anova(fit, type);
+  out(`\nlikelihood-ratio tests (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'})`);
+  out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'chi2', label: 'χ²' }, { key: 'p', label: 'p', fmt: pval }], tests.filter(x => x.term !== 'Residuals')));
+  const po = proportionalOddsTest(fit);
+  if (po.length) {
+    out('\nproportional odds: each term\'s effect allowed to differ between the cut points (a small p: one odds ratio does not describe it)');
+    out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'chi2', label: 'χ²', fmt: (v) => (Number.isFinite(v) ? num(v) : 'not fitted') }, { key: 'p', label: 'p', fmt: (v) => (Number.isFinite(v) ? pval(v) : '') }], po));
+  }
+  const sc = scoresAtConditions(fit);
+  out(`\nchance of each score at the conditions tested, % (scores given)`);
+  out(table([{ key: 'cond', label: 'settings', align: 'left' }, { key: 'n', label: 'n' }, ...cats.map((c, j) => ({ key: `c${j}`, label: c })), { key: 'mean', label: 'mean score' }],
+    sc.map(c => ({ cond: Object.entries(c.settings).map(([k, v]) => `${k}=${v}`).join(', '), n: c.n, mean: `${num(c.mean, 3)} (${num(c.observedMean, 3)})`,
+      ...Object.fromEntries(c.probs.map((p, j) => [`c${j}`, `${num(100 * p.p, 3)} (${c.observed[j]})`])) }))));
+  put({ kind: 'ordinal', response: fit.response, formula, link: fit.link, categories: cats, n: fit.n, counts: fit.counts, rank: fit.rank, aliased: fit.aliased, units: 'coded',
+    coefficients: or.map(x => ({ term: x.term, estimate: x.estimate, se: x.se, z: x.z, p: x.p, ...(lg ? { oddsRatio: { estimate: x.ratio, lower: x.lower, upper: x.upper } } : {}) })),
+    thresholds: fit.thresholds.map((t, j) => ({ between: [cats[j], cats[j + 1]], estimate: t.estimate, se: t.se })),
+    loglik: fit.loglik, aic: fit.aic, converged: fit.converged, warnings: fit.warnings, tests: { type, rows: tests }, proportionalOdds: po.map(x => ({ term: x.term, df: x.df, chi2: Number.isFinite(x.chi2) ? x.chi2 : null, p: Number.isFinite(x.p) ? x.p : null })),
+    conditions: sc.map(c => ({ runs: c.runs, settings: c.settings, n: c.n, observed: c.observed, probabilities: c.probs.map(p => p.p), mean: c.mean, observedMean: c.observedMean })) });
+}
+
 /** The random grouping(s) for a count or proportion response's fit: --random wholePlot|block|run (or a nested list, e.g. block,wholePlot)|none, or the whole plots of a split-plot. */
 function countRandomOf(study, opt, distribution) {
   const r = opt.random === undefined ? 'auto' : String(opt.random);
@@ -875,10 +932,11 @@ function cmdFit({ pos, opt }) {
   const glmResp = opt.distribution && opt.distribution !== 'normal' ? String(opt.distribution) : study.responses.find(r => r.id === respId)?.distribution;
   if (opt.firth && !glmResp) fail('--firth is for a pass/fail or binomial response (set the response\'s distribution)');
   if (glmResp && (opt.lenth || opt.boxcox)) fail(`--lenth and --boxcox assume normal noise; ${respId} is ${glmResp}`);
-  const life = ['weibull', 'lognormal'].includes(glmResp);
+  const life = ['weibull', 'lognormal'].includes(glmResp), ordinal = glmResp === 'ordinal';
   if (life && (opt.firth || opt.random || opt.ols || opt.link)) fail(`--firth, --random, --ols and --link are not for times to failure; ${respId} is ${glmResp}`);
+  if (ordinal && (opt.firth || opt.random || opt.ols)) fail(`--firth, --random and --ols are not for ordinal scores; ${respId} is ${glmResp}`);
   // counts and proportions with whole plots (or blocks, when asked): the GLMM
-  if (glmResp && !life && !opt.ols) {
+  if (glmResp && !life && !ordinal && !opt.ols) {
     const g = countRandomOf(study, opt, glmResp);
     if (g) {
       if (opt.firth) fail('--firth: Firth\'s penalised likelihood is for fixed-effect models; with separated proportions, try --random none --firth');
@@ -932,6 +990,7 @@ function cmdFit({ pos, opt }) {
     fit = r.fit;
   }
   if (life) return printLife(study, fit, opt);
+  if (ordinal) return printOrdinal(study, fit, opt);
   if (fit.distribution) return printGLM(study, fit, opt);
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
   out(`${fit.n} runs, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.rows.some(r => r.n > 1) ? '; per-run means of repeated observations' : ''}`);
@@ -1425,6 +1484,17 @@ function cmdPredict({ pos, opt }) {
     return;
   }
   const fit = fitModel(study, formula, opt.firth && resp?.distribution ? { firth: true } : {});
+  if (fit.distribution === 'ordinal') {
+    // ordinal scores: the chance of each category and the mean score
+    const cats = resp.categories, q = predict(fit, at);
+    put({ kind: 'ordinal', response: fit.response, categories: cats, predictions: at.map((s, i) => ({ settings: s, fit: q[i].fit, lower: q[i].lower, upper: q[i].upper, mostLikely: cats[q[i].mostLikely - 1],
+      probabilities: q[i].probs.map((c, j) => ({ category: cats[j], p: c.p, se: c.se, lower: c.lower, upper: c.upper })) })), level: 0.95 });
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, ...cats.map((c, j) => ({ key: `c${j}`, label: `${c} %` })), { key: 'mean', label: 'mean score' }, { key: 'ci', label: '95% CI', align: 'left' }],
+      at.map((s, i) => ({ at: showSettings(s), mean: q[i].fit, ci: `${num(q[i].lower)} … ${num(q[i].upper)}`, ...Object.fromEntries(q[i].probs.map((c, j) => [`c${j}`, `${num(100 * c.p, 3)} (${num(100 * c.lower, 2)} … ${num(100 * c.upper, 2)})`])) }))));
+    covariateMeanNote(fit, at);
+    out(`${noiseOf(fit).label}: the chance of each score with its 95% interval, and the mean score (1 = ${cats[0]} … ${cats.length} = ${cats.at(-1)})`);
+    return;
+  }
   const p = ['weibull', 'lognormal'].includes(fit.distribution) ? null : predict(fit, at);
   if (!p) {
     // times to failure: the quantiles of the life (default the B10 and the median), with intervals
@@ -1694,7 +1764,7 @@ const nm = (names, i) => (names ? names[i] : T.factorName(i));
 function cmdPlot({ pos, opt }) {
   const file = pos[0], study = load(file);
   if (!study.design) fail('the study has no design yet');
-  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : opt.contour !== undefined ? 'contour' : opt.desirability !== undefined ? 'desirability' : opt.life ? 'life' : fail('plot: give --pairs, --pv A,B, --vdg, --contour A,B, --desirability A,B or --life');
+  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : opt.contour !== undefined ? 'contour' : opt.desirability !== undefined ? 'desirability' : opt.life ? 'life' : opt.scores ? 'scores' : fail('plot: give --pairs, --pv A,B, --vdg, --contour A,B, --desirability A,B, --life or --scores');
   const sp = codedRuns(study), X = sp.runs.map(r => r.x), F = study.factors;
   const base = file.replace(/\.aikidoe\.json$|\.json$/, '');
   const outFile = opt.out ? String(opt.out) : `${base}-${which}.svg`;
@@ -1706,7 +1776,14 @@ function cmdPlot({ pos, opt }) {
   let svg, res = { kind: 'plot', plot: which, file: outFile, runs: sp.runs.length };
   const atOf = () => Object.fromEntries(list(opt.at).flatMap(x => String(x).split(',')).filter(Boolean).map(t => { const [id, v] = t.split('='); const f = F.find(x => x.id === id.trim()) ?? fail(`--at: unknown factor "${id}"`);
     return [f.id, f.type === 'categorical' ? Math.max(0, f.levels.indexOf(v.trim())) : code(f, Number(v))]; }));
-  if (which === 'life') {
+  if (which === 'scores') {
+    if (!opt.model) fail('--scores: give the model, --model "score ~ …"');
+    const fit = fitModel(study, String(opt.model));
+    if (fit.distribution !== 'ordinal') fail(`--scores: ${fit.response} is not an ordinal score (set its distribution to ordinal)`);
+    const r = study.responses.find(x => x.id === fit.response), sc = scoresAtConditions(fit);
+    svg = scoresSVG(sc, r.categories);
+    res = { ...res, categories: r.categories, conditions: sc.length };
+  } else if (which === 'life') {
     if (!opt.model) fail('--life: give the model, --model "life ~ …"');
     const fit = fitModel(study, String(opt.model));
     if (!['weibull', 'lognormal'].includes(fit.distribution)) fail(`--life: ${fit.response} is not a time to failure (set its distribution to weibull or lognormal)`);

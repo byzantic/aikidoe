@@ -20,6 +20,7 @@ import { doseAnalysis } from './dose.js';
 import { mixtureAnalysis } from './mixture.js';
 import { glmAnalysis } from './glm.js';
 import { lifeAnalysis } from './life.js';
+import { ordinalAnalysis } from './ordinal.js';
 import { LIFETIMES } from '../js/study.js';
 import { glmmAnalysis, cached } from './glmm.js';
 import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
@@ -116,7 +117,7 @@ export function render(ctx) {
       ['p', 'aicc'].map(m => h('button', { class: 'btn', id: `reduce-${m}`, title: m === 'p' ? 'backward elimination: drop the least significant term while p > 0.10, keeping the model hierarchical' : 'backward elimination by AICc, keeping the model hierarchical',
         onclick: () => {
           try {
-            const countRandom = resp.distribution && !LIFETIMES.includes(resp.distribution) && !ui.firth ? countRandomChoice(study, resp, ui).choice : 'none';
+            const countRandom = resp.distribution && !LIFETIMES.includes(resp.distribution) && resp.distribution !== 'ordinal' && !ui.firth ? countRandomChoice(study, resp, ui).choice : 'none';
             if (countRandom !== 'none') {
               // counts and proportions with a random effect: each step refits several GLMMs, so in the worker
               const g0 = randomGroupOf(study, countRandom), group = (g0.levels ?? [g0]).map(l => l.name).join(' and '), nested = !!g0.levels;
@@ -156,6 +157,11 @@ export function render(ctx) {
   if (LIFETIMES.includes(resp.distribution)) {
     if (fitErr) return h('div', {}, controls, h('div', { class: 'msg error' }, fitErr.message));
     return h('div', {}, controls, lifeAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), surface(fit));
+  }
+  // ordinal scores (issue #83): the cumulative link model
+  if (resp.distribution === 'ordinal') {
+    if (fitErr) return h('div', {}, controls, h('div', { class: 'msg error' }, fitErr.message));
+    return h('div', {}, controls, ordinalAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), surface(fit));
   }
   // counts and proportions: a generalised linear model, with a random intercept per whole plot (a
   // split-plot, automatically) or per block (when asked)

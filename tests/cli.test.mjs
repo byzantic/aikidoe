@@ -484,6 +484,21 @@ try {
   check('plot --life --json: the probability plot, a group per condition', o.plot === 'life' && o.groups.length === 4 && existsSync(join(dir, 'jl.svg')));
   r = run('fit', join(dir, 'jl.aikidoe.json'), 'life ~ T + J', '--random', 'block');
   check('fit: --random is not for times to failure', r.code === 1 && /not for times to failure/.test(r.err));
+  // ordinal scores (issue #83): categories by name, three judges per run
+  js('init', 'jo.aikidoe.json', '--factor', 'A:-1:1', '--factor', 'B:-1:1', '--response', 'look@ordinal,poor/fair/good/excellent,3', '--seed', '6');
+  const dor = js('design', 'jo.aikidoe.json', '--full', '--replicates', '2');
+  const cats = ['poor', 'fair', 'good', 'excellent'];
+  writeFileSync(join(dir, 'jo.csv'), 'run,repeat,look\n' + dor.design.runs.flatMap(x => [1, 2, 3].map(u => `${x.run},${u},${cats[Math.max(0, Math.min(3, Math.round(1.5 + 1.2 * x.settings.A + 0.4 * x.settings.B + 0.9 * Math.sin(5 * x.run + 2 * u))))]}`)).join('\n') + '\n');
+  o = js('import', 'jo.aikidoe.json', 'jo.csv');
+  check('import --json: category names read as scores', o.imported === true && o.values === 24);
+  o = js('fit', 'jo.aikidoe.json', 'look ~ A + B');
+  check('fit --json (ordinal): odds ratios, cut points, tests, proportional odds, scores per condition', o.kind === 'ordinal' && o.link === 'logit' && o.categories.length === 4 && o.coefficients[0].oddsRatio.estimate > 1 && o.thresholds.length === 3 && o.proportionalOdds.length === 3 && o.conditions.length === 4 && Math.abs(o.conditions[0].probabilities.reduce((a, b) => a + b, 0) - 1) < 1e-12);
+  o = js('predict', 'jo.aikidoe.json', 'look ~ A + B', '--at', 'A=1,B=1');
+  check('predict --json (ordinal): the chance of each category and the mean score', o.kind === 'ordinal' && o.predictions[0].probabilities.length === 4 && o.predictions[0].fit > 2 && cats.includes(o.predictions[0].mostLikely));
+  o = js('plot', 'jo.aikidoe.json', '--scores', '--model', 'look ~ A + B', '--out', join(dir, 'jo.svg'));
+  check('plot --scores --json', o.plot === 'scores' && o.conditions === 4 && existsSync(join(dir, 'jo.svg')));
+  o = js('fit', 'jo.aikidoe.json', 'look ~ A + B', '--link', 'probit');
+  check('fit --link probit: no odds ratios', o.link === 'probit' && !o.coefficients[0].oddsRatio);
   o = js('fit', 'jc.aikidoe.json', 'colonies ~ A * B', '--distribution', 'quasipoisson');
   check('fit --json --distribution quasipoisson: t tests and the dispersion', o.distribution === 'quasipoisson' && 't' in o.coefficients[0] && o.dispersion > 0 && o.aic === null);
   o = js('predict', 'jc.aikidoe.json', 'germ ~ A + B', '--at', 'A=1,B=-1');
@@ -518,7 +533,7 @@ try {
   r = run('plot', 'pl.aikidoe.json', '--desirability', 'A,A');
   check('… two different factors', r.code === 1 && /different/.test(r.err), r.out + r.err);
   r = run('plot', 'pl.aikidoe.json');
-  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B, --vdg, --contour A,B, --desirability A,B or --life/.test(r.err));
+  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B, --vdg, --contour A,B, --desirability A,B, --life or --scores/.test(r.err));
   // projectivity (issue #79): alias and recommend report it
   r = run('init', 'pj.aikidoe.json', '--factor', 'A:0:1', '--factor', 'B:0:1', '--factor', 'C:0:1', '--factor', 'D:0:1', '--factor', 'E:0:1', '--factor', 'F:0:1', '--factor', 'G:0:1', '--response', 'y', '--seed', '1');
   r = run('design', 'pj.aikidoe.json', '--pb');

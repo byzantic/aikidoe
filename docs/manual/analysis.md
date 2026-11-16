@@ -1059,6 +1059,115 @@ wrote interconnect-life.svg
 - Points that curve away from a line suggest trying the other distribution.
 - Lines that fan out suggest that the mechanism changes with the stress.
 
+## Ordinal scores
+
+Some results are **scores in ordered categories**: a panel rates appearance as poor, fair, good or
+excellent; a pathologist grades a lesion 0 to 4; a plate is scored for contamination as none,
+light or heavy. The order matters but the steps between categories need not be equal. Averaging
+the numbers 1 … 4 as if they were measurements treats "poor to fair" as the same step as "good to
+excellent". It also predicts scores between categories or beyond the scale. A **cumulative link
+model** keeps the order and nothing more. It supposes a hidden continuous value behind each score,
+and the factors move that value:
+
+  P(score ≤ category j) = F(cut point j − (b₁·A + b₂·B + …))
+
+With F logistic (the default) this is the **proportional-odds model**, as `ordinal::clm` and
+`MASS::polr` fit it. The probit and complementary log-log links are available too.
+
+Set the response's kind to *score in ordered categories* on the Define step, and list the
+categories, lowest first (`distribution: "ordinal"` and `categories` in the study file; `doe init …
+--response look@ordinal,poor/fair/good/excellent,5`). The number at the end is how many **scores
+are given per run**, for example by five judges. The run sheet then has a row for each. Type
+either the score (1 … 4) or the category's name.
+
+The example *Coating appearance* (in the app's examples, and `examples/coating-panel.aikidoe.json`)
+is a 2³ in cure temperature, cure time and primer. Five judges scored each panel.
+
+```console
+$ doe fit examples/coating-panel.aikidoe.json "look ~ temp*time + primer"
+look ~ temp + time + primer + temp:time
+ordinal scores (cumulative logit model, proportional odds): 40 scores in 4 categories (1 poor: 16, 2 fair: 7, 3 good: 9, 4 excellent: 8)
+
+term             estimate  std. error       z        p       odds ratio  95% Wald interval
+---------------  --------  ----------  ------  -------  ---  ----------  -----------------
+temp                1.122      0.4049   2.772  0.00557  **        3.072  1.389 … 6.793
+time               0.9797      0.3796   2.581  0.00986  **        2.664  1.266 … 5.605
+primer[applied]     2.207      0.5223   4.226  <0.0001  ***       9.091  3.266 … 25.31
+temp:time         -0.6527      0.3664  -1.781   0.0748  .        0.5206  0.2539 … 1.068
+coded units: an odds ratio is the factor of change in the odds of a higher score rather than a lower one, per coded unit (squared for low → high), the same at every split of the scale
+
+cut points: poor | fair -0.8387 (0.457);  fair | good 0.8242 (0.523);  good | excellent 3.155 (0.761)
+log-likelihood = -34.92 (7 parameters)   AIC = 83.84
+
+likelihood-ratio tests (type I, sequential)
+source     df     χ²        p
+---------  --  -----  -------
+temp        1  2.248    0.134
+time        1  3.354   0.0671
+primer      1  27.48  <0.0001
+temp:time   1  3.399   0.0652
+
+proportional odds: each term's effect allowed to differ between the cut points (a small p: one odds ratio does not describe it)
+term       df      χ²      p
+---------  --  ------  -----
+temp        2  0.4306  0.806
+time        2   1.039  0.595
+primer      2   2.774   0.25
+temp:time   2  0.7278  0.695
+all terms   8   10.94  0.205
+
+chance of each score at the conditions tested, % (scores given)
+settings                           n  poor      fair      good       excellent   mean score
+---------------------------------  -  --------  --------  ---------  ----------  ----------
+temp=120, time=10, primer=none     5  98.4 (5)  1.29 (0)  0.276 (0)  0.0298 (0)  1.02 (1)
+temp=160, time=10, primer=none     5  63.9 (3)  26.4 (2)  8.63 (0)   1.03 (0)    1.47 (1.4)
+temp=120, time=30, primer=none     5  70.2 (3)  22.3 (0)  6.66 (1)   0.775 (1)   1.38 (2)
+temp=160, time=30, primer=none     5  48 (3)    35 (2)    15.1 (0)   1.96 (0)    1.71 (1.4)
+temp=120, time=10, primer=applied  5  42.8 (2)  37 (2)    17.8 (1)   2.41 (0)    1.8 (1.8)
+temp=160, time=10, primer=applied  5  2.1 (0)   8.07 (0)  43.6 (3)   46.2 (2)    3.34 (3.4)
+temp=120, time=30, primer=applied  5  2.78 (0)  10.3 (1)  47.7 (3)   39.2 (1)    3.23 (3)
+temp=160, time=30, primer=applied  5  1.1 (0)   4.46 (0)  32.2 (1)   62.3 (4)    3.56 (3.8)
+```
+
+- A positive coefficient moves the scores **up**. Its **odds ratio**, exp(coefficient), is the
+  factor by which the odds of a higher score rather than a lower one change per coded unit. Square
+  it for a factor's low to high setting, and for a categorical factor's two levels, which are coded
+  −1 and +1. Here applying the primer multiplies the odds of a better score by about 9.1² ≈ 83.
+- The **cut points** are where the hidden value crosses from one category to the next, at the
+  centre of the factors.
+- The **tests** are likelihood-ratio tests. Model reduction works with them, and by AICc.
+- **Chance of each score at the conditions tested**: the model's probabilities, with the number of
+  scores given in brackets, and the mean score. `doe predict` gives them at other settings, with
+  95 % intervals. `doe plot --scores` draws them, and the Analyse step shows the same picture.
+
+```console
+$ doe plot examples/coating-panel.aikidoe.json --scores --model "look ~ temp*time + primer" --out coating-panel.svg
+wrote coating-panel.svg
+```
+
+![The chance of each score at each condition tested, and the scores given](img/coating-panel.svg)
+
+Several scores of one run are treated as independent. If the same judges score every run and some
+judges always score higher than others, the tests are a little optimistic.
+
+### Proportional odds
+
+The model assumes that each factor shifts every cut point by the same amount, so that one odds
+ratio describes it: the same for poor against the rest as for excellent against the rest. The
+**test of proportional odds** (as `ordinal::nominal_test`) lets one term's effect differ between
+the cut points, and tests the gain in likelihood on (K − 2) df per coefficient. It does this for
+each term, and for all terms together.
+
+- A large p means one odds ratio describes the term, as here.
+- A small p means it does not. For example, a factor might turn poor results into fair ones
+  without making excellent ones more likely. Judge that factor by the chance of each score, rather
+  than by its odds ratio, or merge categories.
+- "Not fitted" means the freer model could not be fitted to these data: its cut points would cross
+  at some settings. That is common with few scores per category.
+
+A category that nobody used cannot be fitted: merge it with a neighbour, or leave it out of the
+categories.
+
 ## Mixed models
 
 When readings are nested — several sites on a wafer, wafers in a run, runs in a whole plot — the
