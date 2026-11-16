@@ -160,7 +160,12 @@ better is fine. One one-sided test. See [equivalence](analysis.md#equivalence-an
 **Operating limits** — the settings a factor can be run at at all (a solvent's boiling point, a
 machine's range), wider than the experiment's range; a path of steepest ascent stops at them.
 
-**Odds ratio** — with a logit link, e^b: the factor by which the odds of success change per coded unit.
+**Odds ratio** — with a logit link, e^b: the factor by which the odds of success change per coded unit
+(for an ordinal score, the odds of a higher score rather than a lower one).
+
+**Ordinal score** — a result in ordered categories (poor < fair < good), where the steps between
+categories need not be equal; fitted by a cumulative link model. See
+[ordinal scores](analysis.md#ordinal-scores).
 
 **Overdispersion** — counts or proportions varying more than the Poisson or binomial allows
 (Pearson χ²/df well above 1); remedied by the negative binomial or a quasi-likelihood model.
@@ -174,6 +179,10 @@ for every condition. See [probability plot](analysis.md#probability-plot).
 
 **Plate layout** — which run goes in which well of a microplate; a balanced layout keeps the
 effects clear of plate, edge and row and column differences. See [layouts](plates.md#layouts).
+
+**Proportional odds** — the assumption that a factor changes the odds of a higher score by the same
+factor at every split of an ordinal scale; tested by letting its effect differ between the cut
+points. See [proportional odds](analysis.md#proportional-odds).
 
 **Projectivity** — the largest P such that any P factors of a design form a full two-level
 factorial: if only P factors matter, their interactions can be estimated from the same runs

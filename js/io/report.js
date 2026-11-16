@@ -8,13 +8,14 @@ import { fitModel, anova } from '../model/fit.js';
 import { lackOfFit } from '../model/ols.js';
 import { noiseOf } from '../model/noise.js';
 import { timeRatios, lifeAtConditions, probabilityPlot } from '../model/survreg.js';
+import { oddsRatios, proportionalOddsTest, scoresAtConditions } from '../model/ordinal.js';
 import { fitMixedModel, observationTable, randomEffects } from '../model/mixed.js';
 import { fitCountMixedModel, randomGroupOf, glmmTests } from '../model/glmm.js';
 import { defaultFormula } from '../model/defaults.js';
 import { checkConfirmation } from '../design/augment.js';
 import { serializeStudy } from '../study.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../model/surface.js';
-import { contourSVG, probabilitySVG, viridis } from './svg-space.js';
+import { contourSVG, probabilitySVG, scoresSVG, viridis } from './svg-space.js';
 import { covariateSlopes, covariateTable, droppedNote } from '../model/covariates.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -112,6 +113,21 @@ function responseSection(study, r, formula) {
       out.push(`<h3>Life at the conditions tested${esc(u)}</h3>`, tbl(['settings', 'run', 'units', 'failed', 'B10 life', '95% interval', 'median life', '95% interval'], lifeAtConditions(fit).map(c => [Object.entries(c.settings).map(([k, v]) => `${k}=${v}`).join(', '), c.runs.join(', '), c.units, c.failures,
         c.quantiles[0].fit, `${num(c.quantiles[0].lower)} … ${num(c.quantiles[0].upper)}`, c.quantiles[1].fit, `${num(c.quantiles[1].lower)} … ${num(c.quantiles[1].upper)}`])));
       out.push(`<div class="plots">${probabilitySVG(probabilityPlot(fit), { timeLabel: `${r.name}${u}` })}</div>`);
+    } else if (r.distribution === 'ordinal') {
+      // ordinal scores (issue #83): the cumulative link model, proportional odds, the scores per condition
+      const fit = fitModel(study, formula), nm = noiseOf(fit), cats = r.categories, lg = fit.link === 'logit';
+      out.push(`<p>Model: <code>${esc(formula)}</code> — ${esc(nm.label)}, ${fit.n} scores in ${cats.length} categories (${esc(cats.join(' < '))}); coefficients in coded units, positive for higher scores.${lg ? ' An odds ratio is the factor of change in the odds of a higher score rather than a lower one per coded unit.' : ''}${fit.aliased.length ? ` Aliased (not estimable): ${esc(fit.aliased.join(', '))}.` : ''}</p>`);
+      out.push(covariateHTML(fit, r));
+      out.push(tbl(['term', 'estimate', 'std. error', 'z', 'p', '', ...(lg ? ['odds ratio', '95% interval'] : [])], oddsRatios(fit).map(x => [x.term, x.estimate, x.se, x.z, pval(x.p), stars(x.p), ...(lg ? [x.ratio, `${num(x.lower)} … ${num(x.upper)}`] : [])])));
+      out.push(`<p class="stats">cut points: ${fit.thresholds.map((t, j) => `${esc(cats[j])} | ${esc(cats[j + 1])} ${esc(num(t.estimate))}`).join(' · ')} · log-likelihood = ${esc(num(fit.loglik))} · AIC = ${esc(num(fit.aic))}</p>`);
+      for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
+      out.push('<h3>Likelihood-ratio tests (type I)</h3>', tbl(['source', 'df', 'χ²', 'p'], anova(fit, 1).filter(x => x.term !== 'Residuals').map(x => [x.term, x.df, x.chi2, pval(x.p)])));
+      const po = proportionalOddsTest(fit);
+      if (po.length) out.push('<h3>Proportional odds</h3>', tbl(['term', 'df', 'χ²', 'p'], po.map(x => [x.term, x.df, Number.isFinite(x.chi2) ? x.chi2 : 'not fitted', Number.isFinite(x.p) ? pval(x.p) : ''])));
+      const sc = scoresAtConditions(fit);
+      out.push('<h3>Scores at the conditions tested</h3>', tbl(['settings', 'n', ...cats.map(c => `${c} %`), 'mean score'], sc.map(c => [Object.entries(c.settings).map(([k, v]) => `${k}=${v}`).join(', '), c.n,
+        ...c.probs.map((p, j) => `${num(100 * p.p, 3)} (${c.observed[j]})`), `${num(c.mean, 3)} (${num(c.observedMean, 3)})`])));
+      out.push(`<div class="plots">${scoresSVG(sc, cats)}</div>`);
     } else if (r.distribution) {
       // counts and proportions: the generalised linear model
       const fit = fitModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;

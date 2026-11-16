@@ -1,7 +1,7 @@
 // Run step: run sheet with results entered in place, downloads, results import (spec §12 step 3).
 import { h, messages, download, toast, help } from './dom.js';
 import { num } from '../js/format.js';
-import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults, setCovariateCell, parseFlag } from '../js/io/runsheet.js';
+import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults, setCovariateCell, parseFlag, parseScore } from '../js/io/runsheet.js';
 import { parseNumber } from '../js/io/csv.js';
 import { studyAdapter } from '../js/sim/adapters.js';
 import { runOnSimulator } from '../js/sim/adapter.js';
@@ -76,7 +76,8 @@ export function render(ctx) {
     const cv = study.covariates?.find(x => x.id === key); if (cv) return [cv.name, h('span', { class: 'muted' }, cv.units ? ` (${cv.units}, measured)` : ' (measured)')];
     const c = sheet.resultColumns.find(x => x.header === key);
     if (c?.aux) { const r = study.responses.find(x => x.id === c.response); return [r.name, h('span', { class: 'muted', ...(c.aux === 'censored' ? { title: 'still working when the test stopped? 1 (or yes): the time is how long it ran without failing; blank: it failed at that time' } : {}) }, ` (${c.aux === 'censored' ? 'still working? 1 = yes' : c.aux}${c.aux === 'exposure' ? ', blank = 1' : ''})`)]; }
-    if (c) { const r = study.responses.find(x => x.id === c.response); return [r.name, c.site !== undefined ? ` @ ${c.site}` : '', r.units ? h('span', { class: 'muted' }, ` (${r.units})`) : null]; }
+    if (c) { const r = study.responses.find(x => x.id === c.response); return [r.name, c.site !== undefined ? ` @ ${c.site}` : '', r.units ? h('span', { class: 'muted' }, ` (${r.units})`) : null,
+      r.categories ? h('span', { class: 'muted', title: r.categories.map((x, k) => `${k + 1} = ${x}`).join(', ') }, ` (1 = ${r.categories[0]} … ${r.categories.length} = ${r.categories.at(-1)})`) : null]; }
     const bv = study.design.blocking?.find(x => x.id === key); if (bv) return bv.name ?? bv.id;
     return { order: 'order', run: 'run', wholePlot: 'whole plot', block: 'block', kind: 'type', note: 'notes' }[key] ?? key;
   };
@@ -95,8 +96,9 @@ export function render(ctx) {
       d.observations.push(o);
       return;
     }
-    const v = parseNumber(text);
-    if (Number.isNaN(v)) { toast(`"${text}" is not a number`); return; }
+    const ro = d.responses.find(x => x.id === col.response);
+    const v = !col.aux && ro?.distribution === 'ordinal' ? parseScore(ro, text) : parseNumber(text);
+    if (Number.isNaN(v)) { toast(ro?.distribution === 'ordinal' && !col.aux ? `"${text}": a score 1 … ${ro.categories.length} or a category (${ro.categories.join(', ')})` : `"${text}" is not a number`); return; }
     if (col.aux) {
       // trials or exposure of the run's result (a result not entered yet is held as missing)
       if (old) { if (v === undefined) delete old[col.aux]; else old[col.aux] = v; return; }

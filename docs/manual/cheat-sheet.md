@@ -87,6 +87,9 @@ before acting.
   the units still working when the test stopped as censored rather than leaving them out
   ([times to failure](analysis.md#times-to-failure)). Check the probability plot: its lines should
   be straight and parallel.
+- Scores in ordered categories (poor … excellent, grades 0–4): set the kind to ordinal rather than
+  averaging the numbers, and check the test of proportional odds
+  ([ordinal scores](analysis.md#ordinal-scores)).
 - A covariate you recorded goes in the model by name; judge the terms by type II tests, and the
   factors' effects are then at the average covariate. Compare levels by their adjusted means, and
   check the slope is the same at every setting.

@@ -1,0 +1,394 @@
+{
+  "aikidoe": 1,
+  "name": "Coating appearance",
+  "description": "A 2³ factorial in cure temperature, cure time and primer; each panel scored by five judges for appearance (poor, fair, good, excellent). Simulated data.",
+  "seed": 853,
+  "factors": [
+    {
+      "id": "temp",
+      "name": "Cure temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": false,
+      "low": 120,
+      "high": 160,
+      "transform": "none"
+    },
+    {
+      "id": "time",
+      "name": "Cure time",
+      "type": "continuous",
+      "units": "min",
+      "htc": false,
+      "low": 10,
+      "high": 30,
+      "transform": "none"
+    },
+    {
+      "id": "primer",
+      "name": "Primer",
+      "type": "categorical",
+      "htc": false,
+      "levels": [
+        "none",
+        "applied"
+      ]
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "look",
+      "name": "Appearance",
+      "distribution": "ordinal",
+      "unitsPerRun": 5,
+      "categories": [
+        "poor",
+        "fair",
+        "good",
+        "excellent"
+      ],
+      "goal": "maximize",
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "full-factorial",
+    "params": {
+      "levels": [
+        2,
+        2,
+        2
+      ],
+      "seed": 853
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 4,
+        "kind": "factorial",
+        "settings": {
+          "temp": 120,
+          "time": 10,
+          "primer": "none"
+        }
+      },
+      {
+        "run": 2,
+        "order": 3,
+        "kind": "factorial",
+        "settings": {
+          "temp": 160,
+          "time": 10,
+          "primer": "none"
+        }
+      },
+      {
+        "run": 3,
+        "order": 7,
+        "kind": "factorial",
+        "settings": {
+          "temp": 120,
+          "time": 30,
+          "primer": "none"
+        }
+      },
+      {
+        "run": 4,
+        "order": 2,
+        "kind": "factorial",
+        "settings": {
+          "temp": 160,
+          "time": 30,
+          "primer": "none"
+        }
+      },
+      {
+        "run": 5,
+        "order": 8,
+        "kind": "factorial",
+        "settings": {
+          "temp": 120,
+          "time": 10,
+          "primer": "applied"
+        }
+      },
+      {
+        "run": 6,
+        "order": 6,
+        "kind": "factorial",
+        "settings": {
+          "temp": 160,
+          "time": 10,
+          "primer": "applied"
+        }
+      },
+      {
+        "run": 7,
+        "order": 5,
+        "kind": "factorial",
+        "settings": {
+          "temp": 120,
+          "time": 30,
+          "primer": "applied"
+        }
+      },
+      {
+        "run": 8,
+        "order": 1,
+        "kind": "factorial",
+        "settings": {
+          "temp": 160,
+          "time": 30,
+          "primer": "applied"
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "look",
+      "value": 1,
+      "repeat": 1
+    },
+    {
+      "run": 1,
+      "response": "look",
+      "value": 1,
+      "repeat": 2
+    },
+    {
+      "run": 1,
+      "response": "look",
+      "value": 1,
+      "repeat": 3
+    },
+    {
+      "run": 1,
+      "response": "look",
+      "value": 1,
+      "repeat": 4
+    },
+    {
+      "run": 1,
+      "response": "look",
+      "value": 1,
+      "repeat": 5
+    },
+    {
+      "run": 2,
+      "response": "look",
+      "value": 2,
+      "repeat": 1
+    },
+    {
+      "run": 2,
+      "response": "look",
+      "value": 1,
+      "repeat": 2
+    },
+    {
+      "run": 2,
+      "response": "look",
+      "value": 2,
+      "repeat": 3
+    },
+    {
+      "run": 2,
+      "response": "look",
+      "value": 1,
+      "repeat": 4
+    },
+    {
+      "run": 2,
+      "response": "look",
+      "value": 1,
+      "repeat": 5
+    },
+    {
+      "run": 3,
+      "response": "look",
+      "value": 4,
+      "repeat": 1
+    },
+    {
+      "run": 3,
+      "response": "look",
+      "value": 3,
+      "repeat": 2
+    },
+    {
+      "run": 3,
+      "response": "look",
+      "value": 1,
+      "repeat": 3
+    },
+    {
+      "run": 3,
+      "response": "look",
+      "value": 1,
+      "repeat": 4
+    },
+    {
+      "run": 3,
+      "response": "look",
+      "value": 1,
+      "repeat": 5
+    },
+    {
+      "run": 4,
+      "response": "look",
+      "value": 1,
+      "repeat": 1
+    },
+    {
+      "run": 4,
+      "response": "look",
+      "value": 2,
+      "repeat": 2
+    },
+    {
+      "run": 4,
+      "response": "look",
+      "value": 2,
+      "repeat": 3
+    },
+    {
+      "run": 4,
+      "response": "look",
+      "value": 1,
+      "repeat": 4
+    },
+    {
+      "run": 4,
+      "response": "look",
+      "value": 1,
+      "repeat": 5
+    },
+    {
+      "run": 5,
+      "response": "look",
+      "value": 3,
+      "repeat": 1
+    },
+    {
+      "run": 5,
+      "response": "look",
+      "value": 1,
+      "repeat": 2
+    },
+    {
+      "run": 5,
+      "response": "look",
+      "value": 1,
+      "repeat": 3
+    },
+    {
+      "run": 5,
+      "response": "look",
+      "value": 2,
+      "repeat": 4
+    },
+    {
+      "run": 5,
+      "response": "look",
+      "value": 2,
+      "repeat": 5
+    },
+    {
+      "run": 6,
+      "response": "look",
+      "value": 3,
+      "repeat": 1
+    },
+    {
+      "run": 6,
+      "response": "look",
+      "value": 3,
+      "repeat": 2
+    },
+    {
+      "run": 6,
+      "response": "look",
+      "value": 3,
+      "repeat": 3
+    },
+    {
+      "run": 6,
+      "response": "look",
+      "value": 4,
+      "repeat": 4
+    },
+    {
+      "run": 6,
+      "response": "look",
+      "value": 4,
+      "repeat": 5
+    },
+    {
+      "run": 7,
+      "response": "look",
+      "value": 3,
+      "repeat": 1
+    },
+    {
+      "run": 7,
+      "response": "look",
+      "value": 4,
+      "repeat": 2
+    },
+    {
+      "run": 7,
+      "response": "look",
+      "value": 3,
+      "repeat": 3
+    },
+    {
+      "run": 7,
+      "response": "look",
+      "value": 2,
+      "repeat": 4
+    },
+    {
+      "run": 7,
+      "response": "look",
+      "value": 3,
+      "repeat": 5
+    },
+    {
+      "run": 8,
+      "response": "look",
+      "value": 4,
+      "repeat": 1
+    },
+    {
+      "run": 8,
+      "response": "look",
+      "value": 4,
+      "repeat": 2
+    },
+    {
+      "run": 8,
+      "response": "look",
+      "value": 3,
+      "repeat": 3
+    },
+    {
+      "run": 8,
+      "response": "look",
+      "value": 4,
+      "repeat": 4
+    },
+    {
+      "run": 8,
+      "response": "look",
+      "value": 4,
+      "repeat": 5
+    }
+  ],
+  "history": []
+}

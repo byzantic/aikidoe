@@ -13,6 +13,12 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Cornell, J. A. (2002). *Experiments with Mixtures: Designs, Models, and the Analysis of Mixture
   Data*, 3rd ed. Wiley. (The yarn data of the [mixture analysis](designs-mixture.md#analysis).)
 - Agresti, A. (2013). *Categorical Data Analysis*, 3rd ed. Wiley.
+- Agresti, A. (2010). *Analysis of Ordinal Categorical Data*, 2nd ed. Wiley. (Cumulative link
+  models and the proportional-odds assumption: [ordinal scores](analysis.md#ordinal-scores).)
+- Christensen, R. H. B. (2023). *ordinal: Regression Models for Ordinal Data*. R package.
+  (`clm` and `nominal_test`, against which the fits and the test of proportional odds are checked.)
+- McCullagh, P. (1980). Regression models for ordinal data. *Journal of the Royal Statistical
+  Society B* 42, 109–142. (The proportional-odds model.)
 - Finney, D. J. (1978). *Statistical Method in Biological Assay*, 3rd ed. Griffin. (Relative
   potency and parallel-line assays; see [dose–response](dose-response.md#relative-potency).)
 - McCullagh, P. & Nelder, J. A. (1989). *Generalized Linear Models*, 2nd ed. Chapman & Hall.

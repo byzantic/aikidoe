@@ -39,6 +39,8 @@ export const DISTRIBUTIONS = {
   binomial: ['logit', 'probit', 'cloglog'], quasibinomial: ['logit', 'probit', 'cloglog'], bernoulli: ['logit', 'probit', 'cloglog'],
   // times to an event (issue #83): accelerated-life models, linear in the log of the time
   weibull: ['log'], lognormal: ['log'],
+  // ordered scores in named categories (issue #83): a cumulative link model
+  ordinal: ['logit', 'probit', 'cloglog'],
 };
 const COUNTS = ['poisson', 'quasipoisson', 'negbin'], PROPORTIONS = ['binomial', 'quasibinomial'];
 export const LIFETIMES = ['weibull', 'lognormal'];
@@ -51,7 +53,7 @@ const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'covariates', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'limits', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
-  response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'unitsPerRun', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
+  response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'categories', 'unitsPerRun', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
   design: ['kind', 'params', 'randomisation', 'blocking', 'carryover', 'runs'],
   run: ['run', 'order', 'wholePlot', 'block', 'blocks', 'kind', 'settings'],
@@ -330,16 +332,23 @@ function normResponse(r, i, errors) {
         else out.trials = r.trials;
       }
       if (r.unitsPerRun !== undefined) {
-        if (!LIFETIMES.includes(r.distribution)) errors.push(`${path}.unitsPerRun: only for a time-to-event response (weibull or lognormal)`);
+        if (!LIFETIMES.includes(r.distribution) && r.distribution !== 'ordinal') errors.push(`${path}.unitsPerRun: only for a time-to-event (weibull or lognormal) or ordinal response`);
         else if (!(Number.isInteger(r.unitsPerRun) && r.unitsPerRun >= 1)) errors.push(`${path}.unitsPerRun: must be a whole number ≥ 1`);
         else out.unitsPerRun = r.unitsPerRun;
       }
-      if (r.derived !== undefined || (r.levels !== undefined && (r.levels.length !== 1 || r.levels[0] !== 'run'))) errors.push(LIFETIMES.includes(r.distribution) ? `${path}: a ${r.distribution} response is a time per unit tested (no derived values or levels within runs; give each unit its own observation)` : `${path}: a ${r.distribution} response is one count or proportion per run (no derived values or readings within runs)`);
+      // the categories of an ordinal score, lowest first; scores are 1 … K
+      if (r.distribution === 'ordinal') {
+        const c = r.categories;
+        if (!Array.isArray(c) || c.length < 3 || c.some(x => typeof x !== 'string' || !x.trim()) || new Set(c).size !== c.length) errors.push(`${path}.categories: an ordinal response needs its categories, lowest first: three or more different names (for two, use bernoulli)`);
+        else out.categories = c.slice();
+      } else if (r.categories !== undefined) errors.push(`${path}.categories: only for an ordinal response`);
+      if (r.derived !== undefined || (r.levels !== undefined && (r.levels.length !== 1 || r.levels[0] !== 'run'))) errors.push(r.distribution === 'ordinal' ? `${path}: an ordinal response is one score per observation (no derived values or levels within runs; give each judge or sample its own observation)` : LIFETIMES.includes(r.distribution) ? `${path}: a ${r.distribution} response is a time per unit tested (no derived values or levels within runs; give each unit its own observation)` : `${path}: a ${r.distribution} response is one count or proportion per run (no derived values or readings within runs)`);
     }
   } else {
     if (r.link !== undefined && r.link !== 'identity') errors.push(`${path}.link: a normal response has the identity link; set a distribution for another`);
     if (r.trials !== undefined) errors.push(`${path}.trials: only for a binomial response (set distribution: "binomial")`);
-    if (r.unitsPerRun !== undefined) errors.push(`${path}.unitsPerRun: only for a time-to-event response (set distribution: "weibull" or "lognormal")`);
+    if (r.unitsPerRun !== undefined) errors.push(`${path}.unitsPerRun: only for a time-to-event or ordinal response (set distribution: "weibull", "lognormal" or "ordinal")`);
+    if (r.categories !== undefined) errors.push(`${path}.categories: only for an ordinal response (set distribution: "ordinal")`);
   }
   out.goal = r.goal ?? 'none';
   if (!GOALS.includes(out.goal)) errors.push(`${path}.goal: must be one of ${GOALS.join(', ')}`);
@@ -590,6 +599,7 @@ function normObservations(obs, design, responses, errors) {
     if (isNum(o.value) && dist !== 'normal') {
       const n = o.trials ?? r.trials;
       if (LIFETIMES.includes(dist)) { if (!(o.value > 0)) errors.push(`${path}.value: a time to an event must be greater than 0`); }
+      else if (dist === 'ordinal') { const K = r.categories?.length ?? 0; if (!(Number.isInteger(o.value) && o.value >= 1 && o.value <= K)) errors.push(`${path}.value: an ordinal score is a whole number from 1 (${r.categories?.[0] ?? 'the lowest'}) to ${K} (${r.categories?.[K - 1] ?? 'the highest'})`); }
       else if (dist === 'poisson' || dist === 'negbin') { if (!(Number.isInteger(o.value) && o.value >= 0)) errors.push(`${path}.value: a ${dist} response is a count (a whole number ≥ 0)`); }
       else if (dist === 'quasipoisson') { if (!(o.value >= 0)) errors.push(`${path}.value: must be ≥ 0`); }
       else if (dist === 'bernoulli') { if (o.value !== 0 && o.value !== 1) errors.push(`${path}.value: a pass/fail (bernoulli) response is 0 or 1`); }

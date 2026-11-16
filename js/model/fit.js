@@ -61,7 +61,9 @@ export function fitModel(study, formula, opts = {}) {
   const lhs = String(formula).includes('~') ? String(formula).slice(0, String(formula).indexOf('~')).trim() || null : null;
   const response = opts.response ?? lhs;
   if (!response) { parseFormula(formula, study.factors); throw new Error('name the response: "y ~ …" or { response }'); }
-  const noise = opts.noise ? noiseModel(opts.noise, { link: opts.link }) : noiseModelOf(study, response);
+  // a link on its own applies to the response's own distribution
+  const r0 = study.responses.find(r => r.id === response);
+  const noise = opts.noise || (opts.link && r0?.distribution) ? noiseModel(opts.noise ?? r0.distribution, { link: opts.link, K: r0?.categories?.length }) : noiseModelOf(study, response);
   let rows = opts.rows ?? responseTable(study, response, { ...opts, perObservation: noise.id !== 'normal' });
   // confirmation runs and runs along a path of steepest ascent (#81: another region) are not fitted
   if (!opts.includeConfirm) rows = rows.filter(r => r.kind !== 'confirm' && r.kind !== 'path');

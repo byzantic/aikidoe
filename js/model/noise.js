@@ -27,11 +27,13 @@
 // A response's distribution selects the model: normal (least squares, ols.js), or a generalised
 // linear model (glm.js) for counts (poisson, quasipoisson, negbin) and proportions (binomial,
 // quasibinomial, bernoulli), with the response's link; or an accelerated-life model (survreg.js)
-// for times to an event (weibull, lognormal), with right censoring.
+// for times to an event (weibull, lognormal), with right censoring; or a cumulative link model
+// (ordinal.js) for scores in ordered categories (ordinal).
 import { fitOLS, olsPredict, olsAnova } from './ols.js';
 import { fitGLM, glmPredict, glmTests, glmCompare, glmWeights, LINKS, canonicalLink, DISTRIBUTIONS } from './glm.js';
 import { fDist } from '../dist.js';
 import { fitSurvreg, survPredict, survTests, survCompare, SURV_DISTRIBUTIONS } from './survreg.js';
+import { fitOrdinal, ordinalPredict, ordinalTests, ordinalCompare } from './ordinal.js';
 
 const identity = { name: 'identity', fun: (m) => m, inv: (e) => e, deriv: () => 1 };
 
@@ -113,11 +115,31 @@ function lifeNoise(id) {
   });
 }
 
+/**
+ * Scores in K ordered categories (issue #83): a cumulative link model (ordinal.js). Predictions are
+ * of the mean score, with the probability of each category.
+ */
+function ordinalNoise(link = 'logit', K) {
+  const lk = { logit: LINKS.logit, probit: LINKS.probit, cloglog: LINKS.cloglog }[link];
+  return Object.freeze({
+    id: 'ordinal', label: `ordinal scores (cumulative ${link === 'logit' ? 'logit' : link} model${link === 'logit' ? ', proportional odds' : ''})`, link: { ...lk }, distribution: 'ordinal', K,
+    prepare: (rows) => ({ y: rows.map(r => r.y) }),
+    fit: (mm, y, opts = {}) => fitOrdinal(mm, y, { K: K ?? opts.K, link }),
+    predict: (fit, X, opts) => ordinalPredict(fit, X, opts),
+    tests: (fit, type = 1) => ordinalTests(fit, type),
+    residuals: (fit) => ({ response: fit.residuals, standardised: fit.residuals, studentised: fit.residuals }),
+    compare: (big, small) => ordinalCompare(big, small),
+    loglik: (fit) => ({ loglik: fit.loglik, k: fit.k }),
+    weights: () => null,
+    capabilities: Object.freeze({ lackOfFit: false, boxCox: false, lenth: false, mixed: false }),
+  });
+}
 export const NOISE_MODELS = Object.freeze({ normal, ...Object.fromEntries(['poisson', 'quasipoisson', 'negbin', 'binomial', 'quasibinomial', 'bernoulli'].map(id => [id, glmNoise(id)])),
-  weibull: lifeNoise('weibull'), lognormal: lifeNoise('lognormal') });
+  weibull: lifeNoise('weibull'), lognormal: lifeNoise('lognormal'), ordinal: ordinalNoise('logit') });
 
 /** The noise model with this id (default normal), with a link other than the canonical one. */
-export function noiseModel(id = 'normal', { link } = {}) {
+export function noiseModel(id = 'normal', { link, K } = {}) {
+  if (id === 'ordinal') return ordinalNoise(link ?? 'logit', K);
   const m = NOISE_MODELS[id];
   if (!m) throw new Error(`unknown noise model "${id}" (known: ${Object.keys(NOISE_MODELS).join(', ')})`);
   return id === 'normal' || !link || link === m.link.name ? m : m.distribution in SURV_DISTRIBUTIONS ? m : glmNoise(id, link);
@@ -126,8 +148,8 @@ export function noiseModel(id = 'normal', { link } = {}) {
 /** The noise model of a study's response: its distribution and link, normal unless it says otherwise. */
 export function noiseModelOf(study, responseId) {
   const r = study.responses.find(x => x.id === responseId);
-  return noiseModel(r?.distribution ?? 'normal', { link: r?.link });
+  return noiseModel(r?.distribution ?? 'normal', { link: r?.link, K: r?.categories?.length });
 }
 
 /** The noise model a fit was made with (fits made before the interface are normal). */
-export const noiseOf = (fit) => noiseModel(fit?.noise ?? 'normal', { link: fit?.link });
+export const noiseOf = (fit) => noiseModel(fit?.noise ?? 'normal', { link: fit?.link, K: fit?.K });

@@ -23,6 +23,8 @@
 // (or yes) when the unit was still working when the test stopped, so the time is how long it ran
 // without failing; blank (or 0) when it failed. With unitsPerRun, each run has a row per unit
 // tested (repeat 1 … n). In long format: a column censored.
+// Ordinal scores (issue #83): a cell holds the score 1 … K or its category's name; with
+// unitsPerRun, a row for each judge or sample (repeat 1 … n).
 //
 // Covariates (issue #82): one column per covariate, before the results, filled in like a result
 // (a row of a wafer holds that wafer's value). In long format a covariate's id in the response
@@ -55,7 +57,19 @@ export function parseFlag(text) {
   return NaN;
 }
 // the units tested in each run (times to an event): the most any response asks for
-const unitsPerRun = (study) => Math.max(0, ...study.responses.filter(r => LIFE.includes(r.distribution) && !r.derived).map(r => r.unitsPerRun ?? 0));
+const unitsPerRun = (study) => Math.max(0, ...study.responses.filter(r => (LIFE.includes(r.distribution) || r.distribution === 'ordinal') && !r.derived).map(r => r.unitsPerRun ?? 0));
+/**
+ * A cell of an ordinal response (issue #83): the score 1 … K, or the name of its category (any
+ * case); undefined when blank, NaN when neither.
+ */
+export function parseScore(resp, text, parse = parseNumber) {
+  const t = String(text ?? '').trim();
+  if (t === '') return undefined;
+  const k = resp.categories.findIndex(c => c.toLowerCase() === t.toLowerCase());
+  if (k >= 0) return k + 1;
+  const v = parse(t);
+  return Number.isInteger(v) && v >= 1 && v <= resp.categories.length ? v : NaN;
+}
 
 /** Result columns: [{ header, response, site, aux? }] (aux: 'trials' or 'exposure' of the response). */
 function resultColumns(study) {
@@ -169,7 +183,7 @@ export function runSheetHTML(study, { title, date } = {}) {
     const bv = (study.design.blocking ?? []).find(x => x.id === h);
     if (bv) return esc(bv.name ?? bv.id);
     const r = study.responses.find(x => x.id === h.split('@')[0]);
-    if (r) { const site = h.includes('@') ? ` @ ${esc(h.split('@')[1])}` : ''; return `${esc(r.name)}${site}${r.units ? ` <span class="u">(${esc(r.units)})</span>` : ''}`; }
+    if (r) { const site = h.includes('@') ? ` @ ${esc(h.split('@')[1])}` : ''; return `${esc(r.name)}${site}${r.units ? ` <span class="u">(${esc(r.units)})</span>` : ''}${r.categories ? ` <span class="u">(${r.categories.map((c, k) => `${k + 1} ${esc(c)}`).join(', ')})</span>` : ''}`; }
     return esc({ order: 'Order', run: 'Run', plate: 'Plate', well: 'Well', wholePlot: 'Whole plot', block: 'Block', kind: 'Type', note: 'Notes',
       lot: 'Lot', wafer: 'Wafer', slot: 'Slot', operator: 'Operator', repeat: 'Repeat' }[h] ?? h);
   };
@@ -337,9 +351,10 @@ export function importResults(study, text, opts = {}) {
     if (base.repeat !== undefined && !Number.isInteger(base.repeat)) { err(line, 'repeat', `repeat must be an integer`); delete base.repeat; }
     const iNote = col('note'), note = iNote >= 0 ? r[iNote].trim() : '';
     const add = (o, j) => {
-      const v = num(r[j], j);
+      const ro = study.responses.find(x => x.id === o.response);
+      const v = ro?.distribution === 'ordinal' ? parseScore(ro, r[j], (t) => num(t, j)) : num(r[j], j);
       if (v === undefined) return;
-      if (Number.isNaN(v)) { err(line, header[j], `"${r[j]}" is not a number`); return; }
+      if (Number.isNaN(v)) { err(line, header[j], ro?.distribution === 'ordinal' ? `"${r[j]}" is not a score of ${ro.id}: write 1 … ${ro.categories.length} or a category (${ro.categories.join(', ')})` : `"${r[j]}" is not a number`); return; }
       const out = { ...base, response: o.response, value: v };
       if (o.site !== undefined) {
         if (sites.length && !sites.includes(String(o.site))) { err(line, header[j], `site ${o.site} is not in the site scheme (${sites.join(', ')})`); return; }

@@ -71,6 +71,12 @@ ratios, likelihood-ratio tests, the B10 and median life at each condition and at
 and the probability plot ([manual](docs/manual/analysis.md#times-to-failure);
 `doe init --response life:h@weibull,8`, `doe plot --life`).
 
+Ordinal scores — poor … excellent from a panel, grades from a pathologist: cumulative link
+(proportional-odds) models, checked against `ordinal::clm`, with odds ratios, likelihood-ratio
+tests, the test of proportional odds, and the chance of each score at any settings
+([manual](docs/manual/analysis.md#ordinal-scores);
+`doe init --response look@ordinal,poor/fair/good/excellent,5`, `doe plot --scores`).
+
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,
 hard-to-change ones, groups of runs, curvature, constraints, the effect that matters, budget — one
 question at a time with why it matters, then suggests a staged plan, ranks the designs that fit,

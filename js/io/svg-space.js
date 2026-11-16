@@ -284,3 +284,31 @@ export function probabilitySVG(pp, { width = 460, timeLabel = 'time', title } = 
   return out.join('');
 }
 
+
+/**
+ * Ordinal scores at each condition tested (issue #83; data from ordinal.js scoresAtConditions):
+ * for each condition a bar of the model's category probabilities, and beneath it a thin bar of the
+ * scores observed, stacked from the lowest category (left) to the highest, with a legend.
+ */
+export function scoresSVG(rows, categories, { width = 520, title } = {}) {
+  const K = categories.length;
+  // light to dark, one hue: the order of the categories reads at a glance
+  const PAL = Array.from({ length: K }, (_, j) => { const t = K > 1 ? j / (K - 1) : 1; return `hsl(205 ${Math.round(45 + 25 * t)}% ${Math.round(82 - 52 * t)}%)`; });
+  const label = (r) => Object.entries(r.settings).map(([k, v]) => `${k}=${v}`).join(', ');
+  const lw = Math.min(200, 12 + 6 * Math.max(...rows.map(r => label(r).length))), m = { l: lw, r: 12, t: 26, b: 30 };
+  const rowH = 30, W = width, H = m.t + rows.length * rowH + m.b, X = (v) => m.l + v * (W - m.l - m.r);
+  const out = [`<svg class="plot scores" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:${W}px;max-width:100%;height:auto" role="img" aria-label="${esc(title ?? 'the chance of each score at each condition tested, and the scores given')}">`,
+    `<desc>${esc(rows.map(r => `${label(r)}: model ${r.probs.map(p => `${num(100 * p.p, 2)}%`).join(' / ')}; observed ${r.observed.join(' / ')}`).join('; '))}</desc>`];
+  categories.forEach((c, j) => { const x = m.l + j * (W - m.l - m.r) / K; out.push(`<rect x="${f1(x)}" y="6" width="10" height="10" fill="${PAL[j]}"/><text x="${f1(x + 14)}" y="15" font-size="10">${esc(c)}</text>`); });
+  rows.forEach((r, i) => {
+    const y = m.t + i * rowH;
+    out.push(`<text x="${m.l - 6}" y="${y + 13}" text-anchor="end" font-size="10">${esc(label(r))}</text>`);
+    let acc = 0;
+    r.probs.forEach((p, j) => { out.push(`<rect x="${f1(X(acc))}" y="${y + 3}" width="${f1(Math.max(0, X(acc + p.p) - X(acc)))}" height="14" fill="${PAL[j]}"><title>${esc(`${label(r)}: ${categories[j]} ${num(100 * p.p, 3)}% (model)`)}</title></rect>`); acc += p.p; });
+    acc = 0;
+    r.observed.forEach((o, j) => { const f = o / r.n; if (f > 0) out.push(`<rect x="${f1(X(acc))}" y="${y + 19}" width="${f1(X(acc + f) - X(acc))}" height="5" fill="${PAL[j]}"><title>${esc(`${label(r)}: ${o} of ${r.n} scored ${categories[j]}`)}</title></rect>`); acc += f; });
+  });
+  for (const v of [0, 0.25, 0.5, 0.75, 1]) out.push(`<line x1="${f1(X(v))}" x2="${f1(X(v))}" y1="${m.t}" y2="${H - m.b + 2}" stroke="currentColor" stroke-opacity="0.15"/><text x="${f1(X(v))}" y="${H - m.b + 13}" text-anchor="middle" font-size="9.5">${100 * v}%</text>`);
+  out.push(`<text x="${(m.l + W - m.r) / 2}" y="${H - 4}" text-anchor="middle" font-size="10">model (thick) and the scores given (thin)</text>`, '</svg>');
+  return out.join('');
+}

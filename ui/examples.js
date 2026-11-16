@@ -219,6 +219,20 @@ export const EXAMPLES = [
         '200,2': [359, 63, 204, 478, 217, 263, 418, 23], '175,1.5': [1000, 733, 1000, 859, 1000, 562, 1000, 389] };
       return createStudy({ ...s, design, observations: design.runs.flatMap(r => times[`${r.settings.temp},${r.settings.J}`].map((t, i) => ({ run: r.run, response: 'life', value: t, repeat: i + 1, ...(t >= 1000 ? { censored: true } : {}) }))) });
     } },
+  { id: 'coating-panel', title: 'Coating appearance: scores from a panel', step: 'analyse',
+    blurb: 'Cure temperature, cure time and a primer in a 2³; five judges score each panel poor, fair, good or excellent. An ordinal (proportional-odds) model: odds ratios, the chance of each score at each setting, and the test of proportional odds. Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Coating appearance', seed: 853,
+        description: 'A 2³ factorial in cure temperature, cure time and primer; each panel scored by five judges for appearance (poor, fair, good, excellent). Simulated data.',
+        factors: [{ id: 'temp', name: 'Cure temperature', units: '°C', low: 120, high: 160 }, { id: 'time', name: 'Cure time', units: 'min', low: 10, high: 30 },
+          { id: 'primer', name: 'Primer', type: 'categorical', levels: ['none', 'applied'] }],
+        responses: [{ id: 'look', name: 'Appearance', distribution: 'ordinal', categories: ['poor', 'fair', 'good', 'excellent'], unitsPerRun: 5, goal: 'maximize' }] });
+      const design = toStudyDesign(s, fullFactorial([2, 2, 2]), { seed: 853 });
+      // the five judges' scores (1 poor … 4 excellent) at each combination of temperature, time and primer
+      const scores = { '120,10,none': [1, 1, 1, 1, 1], '160,10,none': [2, 1, 2, 1, 1], '120,30,none': [4, 3, 1, 1, 1], '160,30,none': [1, 2, 2, 1, 1],
+        '120,10,applied': [3, 1, 1, 2, 2], '160,10,applied': [3, 3, 3, 4, 4], '120,30,applied': [3, 4, 3, 2, 3], '160,30,applied': [4, 4, 3, 4, 4] };
+      return createStudy({ ...s, design, observations: design.runs.flatMap(r => scores[`${r.settings.temp},${r.settings.time},${r.settings.primer}`].map((v, i) => ({ run: r.run, response: 'look', value: v, repeat: i + 1 }))) });
+    } },
   { id: 'coupler', title: 'Coupler yield: comb-over', step: 'optimise', url: 'examples/coupler-10dB-ro4350b.aikidoe.json',
     blurb: 'A 10 dB coupled-line coupler on RO4350B, simulated by comb-over: yield of coupling 10 ± 0.5 dB and directivity ≥ 12 dB against etch bias and εr. Try adding I(etch^3) to the surrogate.' },
   { id: 'gate-oxide', title: 'Gate oxide anneal (split-plot)', step: 'run', url: 'examples/gate-oxide-anneal.aikidoe.json',

@@ -154,14 +154,23 @@ const KINDS = [
   { value: 'bernoulli', label: 'pass / fail (0 or 1)' },
   { value: 'weibull', label: 'time to failure (Weibull)' },
   { value: 'lognormal', label: 'time to failure (log-normal)' },
+  { value: 'ordinal', label: 'score in ordered categories (poor … excellent)' },
 ];
 function kindCell(r, set) {
   const dist = r.distribution ?? 'normal', links = DISTRIBUTIONS[dist];
   return [
-    select(KINDS, dist, (v) => set(o => { if (v === 'normal') delete o.distribution; else o.distribution = v; delete o.link; if (!v.includes('binomial') || v === 'bernoulli') delete o.trials; }), { 'aria-label': 'response kind' }),
+    select(KINDS, dist, (v) => set(o => { if (v === 'normal') delete o.distribution; else o.distribution = v; delete o.link; if (!v.includes('binomial') || v === 'bernoulli') delete o.trials;
+      if (v === 'ordinal') o.categories ??= ['poor', 'fair', 'good', 'excellent']; else delete o.categories;
+      if (!['ordinal', 'weibull', 'lognormal'].includes(v)) delete o.unitsPerRun; }), { 'aria-label': 'response kind' }),
     links.length > 1 ? select(links.map((l, k) => ({ value: l, label: k ? `${l} link` : `${l} link (default)` })), r.link ?? links[0], (v) => set(o => { if (v === links[0]) delete o.link; else o.link = v; }), { 'aria-label': 'link' }) : null,
     dist === 'binomial' || dist === 'quasibinomial' ? h('label', { class: 'inline small', title: 'trials per run; leave blank to enter them per run on the Run step' }, 'n =',
       h('input', { class: 'num short', value: r.trials ?? '', placeholder: 'per run', 'aria-label': 'trials', onchange: (e) => set(o => { const v = Number(e.target.value); if (e.target.value.trim() && Number.isInteger(v) && v >= 1) o.trials = v; else delete o.trials; }) })) : null,
+    // ordinal scores (issue #83): the categories, lowest first
+    dist === 'ordinal' ? h('label', { class: 'inline small', title: 'the categories, lowest first, separated by commas; a score of 1 is the first' }, 'categories',
+      h('input', { value: (r.categories ?? []).join(', '), 'aria-label': 'categories', size: 28, onchange: (e) => set(o => { const c = e.target.value.split(',').map(x => x.trim()).filter(Boolean); if (c.length >= 3 && new Set(c).size === c.length) o.categories = c; }) })) : null,
+    // units tested or scores given per run: a row each on the run sheet
+    ['ordinal', 'weibull', 'lognormal'].includes(dist) ? h('label', { class: 'inline small', title: dist === 'ordinal' ? 'judges or samples scored at each run: the run sheet gets a row for each' : 'units tested at each run: the run sheet gets a row for each' }, dist === 'ordinal' ? 'scores per run' : 'units per run',
+      h('input', { class: 'num short', value: r.unitsPerRun ?? '', placeholder: '1', 'aria-label': 'units per run', onchange: (e) => set(o => { const v = Number(e.target.value); if (e.target.value.trim() && Number.isInteger(v) && v >= 1) o.unitsPerRun = v; else delete o.unitsPerRun; }) })) : null,
   ];
 }
 

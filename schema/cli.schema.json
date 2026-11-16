@@ -3117,6 +3117,385 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "description": "ordinal scores (issue #83): a cumulative link model (proportional odds with the logit link)",
+          "required": [
+            "kind",
+            "response",
+            "formula",
+            "link",
+            "categories",
+            "n",
+            "counts",
+            "coefficients",
+            "thresholds",
+            "loglik",
+            "tests",
+            "proportionalOdds",
+            "conditions"
+          ],
+          "properties": {
+            "kind": {
+              "const": "ordinal"
+            },
+            "response": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "link": {
+              "enum": [
+                "logit",
+                "probit",
+                "cloglog"
+              ]
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "n": {
+              "type": "integer"
+            },
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "rank": {
+              "type": "integer"
+            },
+            "aliased": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "units": {
+              "const": "coded"
+            },
+            "coefficients": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "estimate",
+                  "se",
+                  "z",
+                  "p"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "type": "number"
+                  },
+                  "se": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "oddsRatio": {
+                    "type": "object",
+                    "required": [
+                      "estimate",
+                      "lower",
+                      "upper"
+                    ],
+                    "properties": {
+                      "estimate": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "lower": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "upper": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "thresholds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "between",
+                  "estimate",
+                  "se"
+                ],
+                "properties": {
+                  "between": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "estimate": {
+                    "type": "number"
+                  },
+                  "se": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "loglik": {
+              "type": "number"
+            },
+            "aic": {
+              "type": "number"
+            },
+            "converged": {
+              "type": "boolean"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tests": {
+              "type": "object",
+              "required": [
+                "type",
+                "rows"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "term",
+                      "df"
+                    ],
+                    "properties": {
+                      "term": {
+                        "type": "string"
+                      },
+                      "df": {
+                        "type": "integer"
+                      },
+                      "chi2": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "p": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "loglik": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "proportionalOdds": {
+              "type": "array",
+              "description": "each term's likelihood-ratio test of letting its effect differ between the cut points, and all terms together; null: the freer model could not be fitted",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "df",
+                  "chi2",
+                  "p"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "df": {
+                    "type": "integer"
+                  },
+                  "chi2": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "runs",
+                  "settings",
+                  "n",
+                  "observed",
+                  "probabilities",
+                  "mean"
+                ],
+                "properties": {
+                  "runs": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "settings": {
+                    "type": "object"
+                  },
+                  "n": {
+                    "type": "integer"
+                  },
+                  "observed": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "probabilities": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "mean": {
+                    "type": "number"
+                  },
+                  "observedMean": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "covariates": {
+              "type": "array",
+              "description": "the covariates in the model (issue #82): each centred at its mean over the rows used and scaled by half its range; slope = coefficient / halfRange, per unit of the covariate (on the link scale for counts and proportions)",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "n",
+                  "mean",
+                  "min",
+                  "max",
+                  "halfRange",
+                  "slope"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "units": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "integer"
+                  },
+                  "mean": {
+                    "type": "number"
+                  },
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  },
+                  "halfRange": {
+                    "type": "number"
+                  },
+                  "slope": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "slopeSe": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "interacts": {
+                    "type": "boolean",
+                    "description": "the covariate is in an interaction: the slope is the one at the centre of the factors"
+                  }
+                }
+              }
+            },
+            "dropped": {
+              "type": "array",
+              "description": "rows left out because a covariate in the model has no value for them",
+              "items": {
+                "type": "object",
+                "required": [
+                  "run",
+                  "covariate"
+                ],
+                "properties": {
+                  "run": {
+                    "type": "integer"
+                  },
+                  "covariate": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -3183,7 +3562,8 @@
             "mixed",
             "glm",
             "glmm",
-            "survreg"
+            "survreg",
+            "ordinal"
           ]
         },
         "response": {
@@ -3288,6 +3668,49 @@
                     }
                   }
                 }
+              },
+              "probabilities": {
+                "type": "array",
+                "description": "ordinal: the chance of each category with its 95% interval; fit, lower and upper are the mean score's",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "category",
+                    "p",
+                    "lower",
+                    "upper"
+                  ],
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "p": {
+                      "type": "number"
+                    },
+                    "se": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "lower": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "upper": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "mostLikely": {
+                "type": "string",
+                "description": "ordinal: the most likely category"
               }
             },
             "description": "predLower and predUpper (the interval for one new run) are given for least-squares and mixed models, not for counts and proportions (kind glm)."
@@ -3302,6 +3725,13 @@
             "lognormal"
           ],
           "description": "survreg: the life model's distribution"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "ordinal: the categories, lowest first"
         }
       }
     },
@@ -4845,7 +5275,8 @@
             "vdg",
             "contour",
             "desirability",
-            "life"
+            "life",
+            "scores"
           ]
         },
         "file": {
@@ -4959,6 +5390,17 @@
               }
             }
           }
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--scores: the categories"
+        },
+        "conditions": {
+          "type": "integer",
+          "description": "--scores: the conditions tested"
         }
       }
     },
