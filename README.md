@@ -68,12 +68,14 @@ ratio
 Times to failure — life tests with units still working when the test stopped (right censoring):
 Weibull and log-normal accelerated-life models, checked against `survival::survreg`, with time
 ratios, likelihood-ratio tests, the B10 and median life at each condition and at use conditions,
-and the probability plot ([manual](docs/manual/analysis.md#times-to-failure);
+the probability plot, and power for a time ratio with the censoring the test end implies
+([manual](docs/manual/analysis.md#times-to-failure);
 `doe init --response life:h@weibull,8`, `doe plot --life`).
 
 Ordinal scores — poor … excellent from a panel, grades from a pathologist: cumulative link
 (proportional-odds) models, checked against `ordinal::clm`, with odds ratios, likelihood-ratio
-tests, the test of proportional odds, and the chance of each score at any settings
+tests, the test of proportional odds, the chance of each score at any settings, and power for an
+odds ratio
 ([manual](docs/manual/analysis.md#ordinal-scores);
 `doe init --response look@ordinal,poor/fair/good/excellent,5`, `doe plot --scores`).
 

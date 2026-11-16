@@ -1059,6 +1059,44 @@ wrote interconnect-life.svg
 - Points that curve away from a line suggest trying the other distribution.
 - Lines that fan out suggest that the mechanism changes with the stress.
 
+### Power and censoring
+
+How many units a life test needs depends on four things:
+- the **time ratio** that matters;
+- how spread out the lives are (the Weibull shape: about 1 for random failures, 2–4 for wear-out);
+- how many units are tested;
+- how many of them **fail before the test stops**.
+
+A unit still working at the end carries much less information than a failure. Stopping the test
+when only a few units have failed can cost more power than testing half as many units. Give the
+median life you expect at the centre of the design and the time the test stops. On the Design step
+choose the response in the power section; on the command line use `doe power`:
+
+```console
+$ doe power examples/interconnect-life.aikidoe.json --response life --median 800 --ratio 0.6 --test-end 1000
+power for main, Weibull, shape β = 2: 5 runs × 8 units = 40 units; α = 0.05; median life at the centre 800 h; test stopped at 1000 h
+at the centre, 66.1 % of units are expected to fail before the test stops
+term  df  time ratio  power  run to failure  % failing (runs)  ratio for 80%
+----  --  ----------  -----  --------------  ----------------  -------------
+temp   1         0.6  0.652  0.824           48 … 84           0.544
+J      1         0.6  0.652  0.824           48 … 84           0.544
+time ratio: the life (every quantile) at a factor's high setting over its low setting; below 1 the factor shortens it. Power from the expected information (likelihood-ratio test, information at the null); "run to failure": the same test with no censoring.
+```
+
+- **% failing** is the range, over the runs, of the fraction of units expected to fail before the
+  test stops.
+- **Run to failure** is the power had every unit been run until it failed: the gap is the cost of
+  stopping at 1000 h.
+- The power comes from the expected information with that censoring (Escobar & Meeker 1994). It is
+  computed at the centre's life, as the likelihood-ratio test's large-sample power. When fewer than
+  one unit in five fails at some runs it is optimistic there.
+- `--simulate N` (the *check by simulation* button) runs N life tests from the model, censors them
+  at the test end, and counts how often the analysis's test finds each term. The check against R
+  simulates the same tests with `survival::survreg`.
+
+To gain power: test more units, run the test longer, or raise the stress so that more units fail,
+provided they still fail in the same way.
+
 ## Ordinal scores
 
 Some results are **scores in ordered categories**: a panel rates appearance as poor, fair, good or
@@ -1167,6 +1205,28 @@ each term, and for all terms together.
 
 A category that nobody used cannot be fitted: merge it with a neighbour, or leave it out of the
 categories.
+
+### Power for scores
+
+Give the odds ratio that matters, how often each category would be scored at the centre of the
+design (equal by default), and the scores per run:
+
+```console
+$ doe power examples/coating-panel.aikidoe.json --response look --model "temp*time + primer" --ratio 3 --baseline "40,30,20,10"
+power for temp*time + primer, ordinal scores (proportional odds): 8 runs × 5 scores = 40 scores; α = 0.05; at the centre poor 40 %, fair 30 %, good 20 %, excellent 10 %
+term       df  odds ratio  power  odds ratio for 80%
+---------  --  ----------  -----  ------------------
+temp        1           3  0.477  5.04
+time        1           3  0.477  5.04
+primer      1           3  0.477  5.04
+temp:time   1           3  0.477  5.04
+odds ratio: the odds of a higher score rather than a lower one at a factor's high setting over its low setting. Power from the expected information of the scores (likelihood-ratio test, information at the null).
+```
+
+The power comes from the expected information of the scores. For two groups this is Whitehead's
+(1993) formula: var(log OR) = 12 / (N (1 − Σp³)). Scores spread over the categories carry more
+information than scores bunched in one. `--simulate N` checks the power by simulating the
+experiment and running the likelihood-ratio test the analysis uses.
 
 ## Mixed models
 

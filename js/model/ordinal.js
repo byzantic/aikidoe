@@ -111,20 +111,30 @@ export function fitOrdinal(mm, y, { K, link = 'logit', nominal = [], weights, ma
   for (let j = 0; j < m; j++) { cum += counts[j]; par.push(L.Finv(Math.min(1 - 1e-6, Math.max(1e-6, cum / n)))); }
   par.push(...new Array(p + m * q).fill(0));
   let cur = lik(par, Xk, Z, y, K, L, weights), iter = 0, converged = false, theta = par.slice();
+  // Newton's method, damped (Levenberg–Marquardt) whenever the full step does not raise the
+  // likelihood (or leaves a category with no probability); a step is never taken unless the
+  // likelihood rises, and convergence needs a small gradient
+  let mu = 0;
+  const gradSmall = (g) => Math.max(...g.map(Math.abs)) < 1e-8 * Math.max(1, Math.abs(cur.ll));
   for (iter = 1; iter <= maxit; iter++) {
-    let step;
-    try { step = inv(cur.H.map(r => r.map(v => -v))).map(r => r.reduce((a, v, k) => a + v * cur.g[k], 0)); } catch { step = cur.g.map(v => 1e-3 * v); }
-    let lam = 1, next, cand;
-    for (let hh = 0; hh < 50; hh++) {
-      cand = theta.map((v, k) => v + lam * step[k]);
-      next = lik(cand, Xk, Z, y, K, L, weights);
-      if (next.ok && next.ll >= cur.ll - 1e-12 * Math.abs(cur.ll)) break;
-      lam /= 2;
+    if (gradSmall(cur.g)) { converged = true; break; }
+    let moved = false;
+    for (let tries = 0; tries < 60 && !moved; tries++) {
+      let step;
+      try { step = inv(cur.H.map((r, i) => r.map((v, j) => -v + (i === j ? mu * (1 + Math.abs(cur.H[i][i])) : 0)))).map(r => r.reduce((a, v, k) => a + v * cur.g[k], 0)); } catch { step = null; }
+      if (step && step.every(Number.isFinite)) {
+        const cand = theta.map((v, k) => v + step[k]), next = lik(cand, Xk, Z, y, K, L, weights);
+        if (next.ok && next.ll > cur.ll) {
+          const gain = next.ll - cur.ll;
+          theta = cand; cur = next; moved = true;
+          mu = mu > 1e-10 ? mu / 10 : 0;
+          if (gain < tol * (1 + Math.abs(cur.ll)) && gradSmall(cur.g)) converged = true;
+          break;
+        }
+      }
+      mu = mu > 0 ? mu * 10 : 1e-4;
     }
-    if (!next.ok) break;
-    const gain = next.ll - cur.ll;
-    theta = cand; cur = next;
-    if (Math.max(...cur.g.map(Math.abs)) < 1e-9 && Math.abs(gain) < tol * (1 + Math.abs(cur.ll))) { converged = true; break; }
+    if (converged || !moved) { if (!moved && gradSmall(cur.g)) converged = true; break; }
   }
   if (!converged) warnings.push('the fit did not converge: a factor setting may give only the top or only the bottom score, so its effect runs off to infinity');
   let V;

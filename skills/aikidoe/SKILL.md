@@ -40,11 +40,13 @@ times to failure with right censoring (Weibull and log-normal accelerated-life m
 --response life:h@weibull,8` for 8 units per run, a `life.censored` column of 1 for units still
 working at the end; `doe fit` gives time ratios, likelihood-ratio tests and the B10 and median
 life per condition [--quantile 0.01]; `doe predict` at use conditions; `doe plot --life` the
-probability plot);
+probability plot; `doe power --response life --median t --ratio 0.5 --test-end T [--simulate N]`: power with
+the censoring the test end implies);
 ordinal scores (poor … excellent: `doe init --response look@ordinal,poor/fair/good/excellent,5`
 for 5 judges per run, scores typed as 1 … K or the category names; `doe fit` gives odds ratios,
 likelihood-ratio tests, the test of proportional odds and the chance of each score per condition;
-`doe predict` the probabilities at other settings; `doe plot --scores`; `--link probit|cloglog`);
+`doe predict` the probabilities at other settings; `doe plot --scores`; `--link probit|cloglog`;
+`doe power --response look --ratio 2 [--baseline "40,30,20,10"] [--simulate N]`);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.
 

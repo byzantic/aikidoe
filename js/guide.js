@@ -14,6 +14,7 @@ import { ccd, boxBehnken } from './design/rsm.js';
 import { definitiveScreening } from './design/dsd.js';
 import { studentT } from './dist.js';
 import { tostPower } from './model/equivalence.js';
+import { unitInformation } from './model/power-life.js';
 
 const PHYSICAL = (a) => a.aim && a.aim !== 'measure' && a.aim !== 'simulate';
 const FACTORIAL = (a) => PHYSICAL(a) && a.aim !== 'dose' && a.aim !== 'compare';   // the questions about factors and models
@@ -152,23 +153,41 @@ export const QUESTIONS = [
       { value: 'combos', label: 'Some combinations are impossible (e.g. high temperature with long time)' },
     ] },
   { id: 'result', type: 'choice', when: (a) => FACTORIAL(a) || COMPARE(a), text: 'What will each run give you?',
-    why: 'A measurement (a yield, a strength, a time) varies by about the same amount wherever it is. A count (colonies, cells, defects) varies more the larger it is, and a percentage (germinated, viable, positive) is squeezed near 0 % and 100 %: these need their own analysis and their own sums for the number of runs. A single pass or fail per run carries little information, so it needs many more runs.',
+    why: 'A measurement (a yield, a strength) varies by about the same amount wherever it is. A count (colonies, cells, defects) varies more the larger it is, and a percentage (germinated, viable, positive) is squeezed near 0 % and 100 %: these need their own analysis and their own sums for the number of runs. A single pass or fail per run carries little information, so it needs many more runs. A time until something fails varies more the longer it is, and some units may still be working when the test has to stop. A score in ordered categories (poor, fair, good) has an order but no fixed steps. Both have their own analysis too.',
     help: ['analysis', 'counts-and-proportions'],
     options: [
       { value: 'measurement', label: 'A measurement on a continuous scale' },
       { value: 'count', label: 'A count (colonies, cells, events, defects …)' },
       { value: 'percent', label: 'A percentage of things counted (germinated seeds out of those sown …)' },
       { value: 'passfail', label: 'Pass or fail (it works or it doesn’t)' },
+      { value: 'time', label: 'A time until something fails or happens (some may not have by the end of the test)' },
+      { value: 'score', label: 'A score in ordered categories (poor, fair, good …; a grade 0–4)' },
     ] },
-  { id: 'ratio', type: 'choice', when: (a) => FACTORIAL(a) && ['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change matters, from a factor’s low to its high setting?',
-    why: 'For counts and percentages the effect is a ratio: the mean count going up by half (a rate ratio of 1.5), or the odds of success doubling (an odds ratio of 2). How many runs that takes depends on how big the counts are, or how many trials each run has: more counted per run means fewer runs.',
+  { id: 'lifeRatio', type: 'choice', when: (a) => FACTORIAL(a) && a.result === 'time', text: 'How big a change in life matters, from a factor’s low to its high setting?',
+    why: 'For times to failure the effect is a ratio: the life at the high setting over the life at the low setting (a time ratio). Halving or doubling the life is a time ratio of 2. How many units that takes depends on how much lives vary at one setting, and on how many units fail before the test stops.',
+    help: ['analysis', 'times-to-failure'],
+    options: [
+      { value: 'large', label: 'Large — the life changes three-fold' },
+      { value: 'medium', label: 'Medium — the life halves or doubles' },
+      { value: 'small', label: 'Small — the life changes by half again (×1.5)' },
+    ] },
+  { id: 'censoring', type: 'choice', when: (a) => (FACTORIAL(a) || COMPARE(a)) && a.result === 'time', text: 'By the time the test has to stop, how many units do you expect to have failed?',
+    why: 'A unit still working when the test stops tells you only that its life is longer than the test. The analysis uses that, but it carries much less information than a failure, so a test in which few units fail needs many more of them, or harsher conditions.',
+    help: ['analysis', 'times-to-failure'],
+    options: [
+      { value: 'all', label: 'Nearly all of them' },
+      { value: 'half', label: 'About half' },
+      { value: 'few', label: 'Only a few (under one in five)' },
+    ] },
+  { id: 'ratio', type: 'choice', when: (a) => FACTORIAL(a) && ['count', 'percent', 'passfail', 'score'].includes(a.result), text: 'How big a change matters, from a factor’s low to its high setting?',
+    why: 'For counts, percentages and scores the effect is a ratio: the mean count going up by half (a rate ratio of 1.5), or the odds of success, or of a better score, doubling (an odds ratio of 2). How many runs that takes depends on how big the counts are, or how many trials or scores each run has: more per run means fewer runs.',
     help: ['concepts', 'power'],
     options: [
       { value: 'large', label: 'Large — the count doubles, the odds of success triple' },
       { value: 'medium', label: 'Medium — the count up by half, the odds doubled' },
       { value: 'small', label: 'Small — the count up by a quarter, the odds up by half' },
     ] },
-  { id: 'effect', type: 'choice', when: (a) => (FACTORIAL(a) || (COMPARE(a) && (a.show ?? 'differ') === 'differ')) && !['count', 'percent', 'passfail'].includes(a.result), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
+  { id: 'effect', type: 'choice', when: (a) => (FACTORIAL(a) || (COMPARE(a) && (a.show ?? 'differ') === 'differ')) && !['count', 'percent', 'passfail', 'time', 'score'].includes(a.result), text: 'How big a change in the result matters, compared with its run-to-run scatter?',
     why: 'This is what decides the number of runs. The scatter (σ) is the standard deviation of repeated runs at the same settings, measurement included. To have an 80 % chance of detecting an effect Δ in a two-level design takes roughly N ≈ 32 / (Δ/σ)² runs, plus a few for the error estimate: about 8 runs for 2σ, 32 for 1σ, 128 for σ/2.',
     help: ['concepts', 'power'],
     options: [
@@ -390,6 +409,9 @@ export function advise(a) {
 
   // counts and proportions (issue #64)
   if (['count', 'percent', 'passfail'].includes(a.result)) { countsAdvice(a, out, { notes, warnings, read }); lesson('counts'); }
+  // times to failure and ordinal scores (issue #83)
+  if (a.result === 'time') lifeAdvice(a, out, { notes, warnings, read });
+  if (a.result === 'score') scoreAdvice(a, out, { notes, read });
 
   // effect size → runs
   const need = Math.ceil(32 / out.delta ** 2) + 6;
@@ -405,7 +427,39 @@ export function advise(a) {
 }
 
 // the ratio that matters, by answer: rate ratios for counts, odds ratios for proportions
-export const GUIDE_RATIOS = { count: { large: 2, medium: 1.5, small: 1.25 }, percent: { large: 3, medium: 2, small: 1.5 }, passfail: { large: 3, medium: 2, small: 1.5 } };
+export const GUIDE_RATIOS = { count: { large: 2, medium: 1.5, small: 1.25 }, percent: { large: 3, medium: 2, small: 1.5 }, passfail: { large: 3, medium: 2, small: 1.5 }, score: { large: 3, medium: 2, small: 1.5 }, time: { large: 3, medium: 2, small: 1.5 } };
+// the fraction of units failing before the test stops, by answer
+const FAILING = { all: 0.95, half: 0.5, few: 0.15 };
+
+/**
+ * Times to failure: the analysis, censoring, and roughly how many units the time ratio needs for
+ * 80 % power on one coefficient (N ≈ 7.85 / (b² · information per unit), b = ln r / 2, with a
+ * Weibull shape of 2 and the information per unit at the fraction failing — js/model/power-life.js).
+ */
+function lifeAdvice(a, out, { notes, warnings, read }) {
+  const r = GUIDE_RATIOS.time[a.lifeRatio ?? 'medium'], b = Math.log(r) / 2, sigma = 0.5;
+  const F = FAILING[a.censoring ?? 'half'];
+  const zc = Math.log(-Math.log(1 - F));                     // the standardised test end at which F fail
+  const info = unitInformation('weibull', zc).A / (sigma * sigma);
+  const units = Math.ceil(7.85 / (b * b * info));
+  out.life = { ratio: r, failing: F, units };
+  notes.push(`Times to failure: the analysis is a Weibull (or log-normal) life model, with effects as time ratios. Test several units at each run and record the time each one fails; a unit still working when the test stops is recorded with the time it had run and marked as still working (censored), not left out. With lives about as variable as wear-out failures usually are (Weibull shape 2) and ${a.censoring === 'all' ? 'nearly every unit failing' : a.censoring === 'few' ? 'only about 15 % failing' : 'about half the units failing'}, a time ratio of ${r} needs about ${units} units in all for 80 % power — for example ${Math.max(2, Math.ceil(units / 8))} per run in an 8-run design. Set the response's kind to “time to failure” on the Define step, with the units per run, and check the power on the Design step with the test's end time.`);
+  if (a.censoring === 'few') warnings.push(`Few units fail before the test stops: each one still working carries little information, so about ${units} units are needed — several times as many as if most failed. Run the test longer, or raise the stress (temperature, load, current) so that more fail, if the failures stay the same kind.`);
+  read(M('analysis', 'times-to-failure', 'times to failure'), M('analysis', 'probability-plot', 'the probability plot'));
+}
+
+/**
+ * Ordinal scores: the analysis, and roughly how many scores the odds ratio needs for 80 % power on
+ * one coefficient (Whitehead 1993: var(b) = 3 / (N (1 − Σp³)) for b = ln OR / 2 on a ±1 column,
+ * with four equally likely categories).
+ */
+function scoreAdvice(a, out, { notes, read }) {
+  const r = GUIDE_RATIOS.score[a.ratio ?? 'medium'], b = Math.log(r) / 2;
+  const n = Math.ceil(7.85 * 3 / (b * b * (1 - 4 / 64)));
+  out.scores = { ratio: r, n };
+  notes.push(`Scores in ordered categories: the analysis is an ordinal (proportional-odds) model, with effects as odds ratios for a better score; it uses the order of the categories without pretending the steps between them are equal. With four categories used about equally, an odds ratio of ${r} needs about ${n} scores in all for 80 % power — several judges or samples per run help, and so do more categories. Set the response's kind to “score in ordered categories” on the Define step, with the categories lowest first and the scores per run, and check the power on the Design step.`);
+  read(M('analysis', 'ordinal-scores', 'ordinal scores'), M('analysis', 'proportional-odds', 'proportional odds'));
+}
 
 /**
  * Counts and proportions: the analysis, and roughly how many runs the ratio needs for 80 % power on
@@ -484,7 +538,7 @@ export function equivalenceReplicates(t, m, { type = 'equivalence', extraDf = ()
 
 function compareAdvice(a, out) {
   const { plan, notes, warnings } = out;
-  const t = Math.max(2, a.treatments ?? 2), control = a.control !== 'no', counted = ['count', 'percent', 'passfail'].includes(a.result);
+  const t = Math.max(2, a.treatments ?? 2), control = a.control !== 'no', counted = ['count', 'percent', 'passfail', 'time', 'score'].includes(a.result);
   const lesson = (id) => { if (!out.lessons.includes(id)) out.lessons.push(id); };
   const read = (...ms) => { for (const m of ms) if (!out.manual.some(x => x.page === m.page && x.anchor === m.anchor)) out.manual.push(m); };
   const delta = out.delta;
@@ -538,7 +592,9 @@ function compareAdvice(a, out) {
     if (a.equivMargin === 'unknown') warnings.push('Without a margin there is no equivalence test: decide it before the runs. The plan assumes about one run-to-run scatter.');
     out.lessons.splice(0); read(M('analysis', 'equivalence-and-non-inferiority', 'equivalence and non-inferiority'));
   } else plan.push({ title: 'Analyse', text: `Compare ${what} (Analyse → Compare levels)${control ? '' : '; a planned contrast (e.g. the new ones against the old) if one was the question'}. Not a t test for each comparison: with ${control ? t - 1 : t * (t - 1) / 2} of them, a false alarm somewhere is likely.` });
-  if (counted) notes.push('Counts and percentages: the comparisons are ratios (rate or odds ratios); the number of runs depends on the size of the counts — check the power on the Design step.');
+  if (counted) notes.push(a.result === 'time' ? 'Times to failure: the comparisons are time ratios from a life model, with the units still working at the end of the test as censored; the number of units depends on how many fail — check the power on the Design step.'
+    : a.result === 'score' ? 'Scores in ordered categories: the comparisons are odds ratios from an ordinal model; the number of scores depends on how the categories are used — check the power on the Design step.'
+    : 'Counts and percentages: the comparisons are ratios (rate or odds ratios); the number of runs depends on the size of the counts — check the power on the Design step.');
   if (a.plates === 'yes') notes.push('On plates: lay the runs out with the balanced layout, so no treatment sits only on the edge or in one row.');
   if (t > 10) warnings.push(`${t} treatments: most are probably alike. Consider screening them first, or comparing them in a few groups.`);
   if (out.budget !== null && out.runs > out.budget) warnings.push(`The budget (${out.budget} runs) is below the ${out.runs} this plan uses for a difference of ${delta}× the scatter: fewer treatments, or accept a larger difference.`);
@@ -613,4 +669,5 @@ export function guideStudy(a, { name = 'Study from the guide' } = {}) {
 }
 
 /** The response, with the kind of result the guide was told (issue #64). */
-const guideResponse = (a) => ({ id: 'y', name: 'Response', ...({ count: { distribution: 'poisson' }, percent: { distribution: 'binomial' }, passfail: { distribution: 'bernoulli' } }[a.result] ?? {}) });
+const guideResponse = (a) => ({ id: 'y', name: 'Response', ...({ count: { distribution: 'poisson' }, percent: { distribution: 'binomial' }, passfail: { distribution: 'bernoulli' },
+  time: { distribution: 'weibull', unitsPerRun: 8 }, score: { distribution: 'ordinal', categories: ['poor', 'fair', 'good', 'excellent'], unitsPerRun: 5 } }[a.result] ?? {}) });

@@ -139,6 +139,13 @@
 //        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
 //        [--sigma-wp σ]  in a split-plot: σ of the whole-plot shift on the link scale (the analysis's random effect)
 //        [--sigma-block σ]  with blocks: σ of the block shift (random blocks; with --sigma-wp, blocks ⊃ whole plots)
+//   power STUDY --response R (time to failure) --median t [--ratio 0.5 | --ratio "A=0.5,default=0.7"] [--shape β | --sigma σ]
+//        [--units n] [--test-end T] [--simulate N [--seed S]]
+//        power to detect a time ratio (the life at the high setting over the low) in a life test stopped at T:
+//        the fraction of units expected to fail at each run, and the power had every unit run to failure
+//   power STUDY --response R (ordinal score) [--baseline "0.4,0.3,0.2,0.1"] [--ratio r] [--scores n] [--simulate N [--seed S]]
+//        power to detect an odds ratio for a higher score, given the chance of each category at the centre
+//        (default equal)
 //   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
 //   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
 //                 | --optimal --runs n [--model …] [--criterion D|I|A]
@@ -227,6 +234,8 @@ import { codedRuns, codedRow, spvSlice, spvFunction, vdg, feasibleSlice, beyondR
 import { pairsSVG, contourSVG, vdgSVG, probabilitySVG, scoresSVG, standalone, viridis } from '../js/io/svg-space.js';
 import { timeRatios, lifeAtConditions, probabilityPlot } from '../js/model/survreg.js';
 import { oddsRatios, proportionalOddsTest, scoresAtConditions } from '../js/model/ordinal.js';
+import { studyLifePower, simulateLifePower, detectableTimeRatio, studyMatrix } from '../js/model/power-life.js';
+import { studyOrdinalPower, simulateOrdinalPower, detectableOddsRatio } from '../js/model/power-ordinal.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../js/model/surface.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
@@ -1544,6 +1553,11 @@ function cmdPower({ pos, opt }) {
     delta = d.includes('=') ? Object.fromEntries(d.split(',').map(x => { const [k, v] = x.split('='); return [k.trim(), Number(v)]; })) : Number(d);
   }
   const model = opt.model ? String(opt.model).replace(/^.*~/, '').trim() : 'main';
+  // times to failure and ordinal scores (issue #83)
+  const rr = opt.response ? study.responses.find(x => x.id === String(opt.response)) : null;
+  const dist0 = opt.distribution ? String(opt.distribution) : rr?.distribution;
+  if (['weibull', 'lognormal'].includes(dist0)) return printLifePower(study, model, dist0, rr, opt);
+  if (dist0 === 'ordinal') return printOrdinalPower(study, model, rr, opt);
   const counts = countsPower(study, opt);
   if (counts) return printCountsPower(study, model, counts, { alpha: opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target: opt.target !== undefined ? Number(opt.target) : 0.8, opt });
   let sigma = opt.sigma !== undefined ? Number(opt.sigma) : 1;
@@ -1570,6 +1584,59 @@ function cmdPower({ pos, opt }) {
     p.terms.filter(t => !t.block).map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 4), det: det[t.term].delta, ratio: det[t.term].ratio }))));
   if (p.terms.some(t => t.block)) out('(blocks fitted as fixed effects)');
   out('Δ: change in the response from the low to the high setting of a factor (for a quadratic term, 2 × its coefficient)');
+}
+
+const ratioOpt = (v, dflt) => { if (v === undefined) return dflt; const d = String(v); return d.includes('=') ? Object.fromEntries(d.split(',').map(x => { const [k, w] = x.split('='); return [k.trim(), Number(w)]; })) : Number(d); };
+const showRatio = (r) => (typeof r === 'number' ? String(r) : Object.entries(r).map(([k, v]) => `${k} ${v}`).join(', '));
+
+/** Power for times to failure: from the expected information with the test end's censoring, and by simulation. */
+function printLifePower(study, model, distribution, r, opt) {
+  const alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target = opt.target !== undefined ? Number(opt.target) : 0.8;
+  if (opt.median === undefined) fail('power for times to failure: give the median life you expect at the centre of the design (--median t)');
+  const o = { distribution, median: Number(opt.median), ratio: ratioOpt(opt.ratio, 0.5), alpha,
+    ...(opt.shape !== undefined ? { shape: Number(opt.shape) } : {}), ...(opt.sigma !== undefined ? { sigma: Number(opt.sigma) } : {}),
+    unitsPerRun: opt.units !== undefined ? int(opt.units, 'units') : r?.unitsPerRun ?? 1, testEnd: opt['test-end'] !== undefined ? Number(opt['test-end']) : Infinity };
+  const res = studyLifePower(study, { model, ...o });
+  const u = r?.units ? ` ${r.units}` : '';
+  out(`power for ${model}, ${distribution === 'weibull' ? `Weibull, shape β = ${num(res.shape, 4)}` : `log-normal, σ = ${num(res.sigma, 4)}`}: ${res.n} runs × ${o.unitsPerRun} units = ${res.units} units; α = ${alpha}; median life at the centre ${num(o.median)}${u}; ${Number.isFinite(o.testEnd) ? `test stopped at ${num(o.testEnd)}${u}` : 'every unit run until it fails'}`);
+  if (Number.isFinite(o.testEnd)) out(`at the centre, ${num(100 * res.failedAtCentre, 3)} % of units are expected to fail before the test stops`);
+  const det = Object.fromEntries(detectableTimeRatio(res, { power: target }).map(x => [x.term, x.ratio]));
+  const nsim = opt.simulate !== undefined ? int(opt.simulate, 'simulate') : 0;
+  const sim = nsim ? Object.fromEntries(simulateLifePower(studyMatrix(study, model), { ...o, nsim, seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed }).map(x => [x.term, x])) : null;
+  const rows = res.terms.filter(t => !t.block);
+  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ratio', label: 'time ratio' }, { key: 'power', label: 'power' },
+    ...(Number.isFinite(o.testEnd) ? [{ key: 'pu', label: 'run to failure' }, { key: 'failed', label: '% failing (runs)', align: 'left' }] : []),
+    ...(sim ? [{ key: 'sim', label: `simulated (${nsim})`, align: 'left' }] : []), { key: 'det', label: `ratio for ${target * 100}%` }],
+  rows.map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 3), pu: num(t.powerUncensored, 3), failed: `${num(100 * t.failed[0], 2)} … ${num(100 * t.failed[1], 2)}`,
+    sim: sim?.[t.term] ? `${num(sim[t.term].power, 2)} ± ${num(sim[t.term].se, 1)}` : '', det: Number.isFinite(det[t.term]) ? num(det[t.term], 3) : 'beyond 1000×' }))));
+  out('time ratio: the life (every quantile) at a factor\'s high setting over its low setting; below 1 the factor shortens it. Power from the expected information (likelihood-ratio test, information at the null); "run to failure": the same test with no censoring.');
+  if (Number.isFinite(o.testEnd) && rows.some(t => t.failed[0] < 0.2)) out('note: at some runs fewer than one unit in five is expected to fail: the power above is optimistic there; check it with --simulate, run the test longer, or use harsher settings');
+  put({ kind: 'life', model, distribution, n: res.n, units: res.units, alpha, median: o.median, ...(res.shape ? { shape: res.shape } : {}), sigma: res.sigma, testEnd: Number.isFinite(o.testEnd) ? o.testEnd : null, failedAtCentre: res.failedAtCentre,
+    terms: rows.map(t => ({ term: t.term, df: t.df, ratio: t.ratio, power: t.power, powerUncensored: t.powerUncensored, failed: t.failed, detectable: Number.isFinite(det[t.term]) ? det[t.term] : null, ...(sim?.[t.term] ? { simulated: { power: sim[t.term].power, se: sim[t.term].se, nsim: sim[t.term].nsim } } : {}) })) });
+}
+
+/** Power for ordinal scores: from the expected information, and by simulation. */
+function printOrdinalPower(study, model, r, opt) {
+  const alpha = opt.alpha !== undefined ? Number(opt.alpha) : 0.05, target = opt.target !== undefined ? Number(opt.target) : 0.8;
+  const cats = r?.categories;
+  let baseline;
+  if (opt.baseline !== undefined) { baseline = String(opt.baseline).split(',').map(Number); const t = baseline.reduce((a, b) => a + b, 0); baseline = baseline.map(v => v / t); }
+  else baseline = Array.from({ length: cats?.length ?? 4 }, (_, _k, a) => 1 / (cats?.length ?? 4));
+  if (cats && baseline.length !== cats.length) fail(`--baseline: give ${cats.length} chances, one per category (${cats.join(', ')})`);
+  const o = { baseline, ratio: ratioOpt(opt.ratio, 2), alpha, scoresPerRun: opt.scores !== undefined ? int(opt.scores, 'scores') : r?.unitsPerRun ?? 1 };
+  const res = studyOrdinalPower(study, { model, ...o });
+  const names = cats ?? baseline.map((_, k) => String(k + 1));
+  out(`power for ${model}, ordinal scores (proportional odds): ${res.n} runs × ${o.scoresPerRun} scores = ${res.scores} scores; α = ${alpha}; at the centre ${names.map((c, k) => `${c} ${num(100 * baseline[k], 3)} %`).join(', ')}`);
+  const det = Object.fromEntries(detectableOddsRatio(res, { power: target }).map(x => [x.term, x.ratio]));
+  const nsim = opt.simulate !== undefined ? int(opt.simulate, 'simulate') : 0;
+  const sim = nsim ? Object.fromEntries(simulateOrdinalPower(studyMatrix(study, model), { ...o, nsim, seed: opt.seed !== undefined ? int(opt.seed, 'seed') : study.seed }).map(x => [x.term, x])) : null;
+  const rows = res.terms.filter(t => !t.block);
+  out(table([{ key: 'term', label: 'term', align: 'left' }, { key: 'df', label: 'df' }, { key: 'ratio', label: 'odds ratio' }, { key: 'power', label: 'power' },
+    ...(sim ? [{ key: 'sim', label: `simulated (${nsim})`, align: 'left' }] : []), { key: 'det', label: `odds ratio for ${target * 100}%` }],
+  rows.map(t => ({ ...t, power: Number.isNaN(t.power) ? 'aliased' : num(t.power, 3), sim: sim?.[t.term] ? `${num(sim[t.term].power, 2)} ± ${num(sim[t.term].se, 1)}` : '', det: Number.isFinite(det[t.term]) ? num(det[t.term], 3) : '> 1000' }))));
+  out('odds ratio: the odds of a higher score rather than a lower one at a factor\'s high setting over its low setting. Power from the expected information of the scores (likelihood-ratio test, information at the null).');
+  put({ kind: 'ordinal', model, n: res.n, scores: res.scores, alpha, baseline, categories: names,
+    terms: rows.map(t => ({ term: t.term, df: t.df, ratio: t.ratio, power: t.power, detectable: Number.isFinite(det[t.term]) ? det[t.term] : null, ...(sim?.[t.term] ? { simulated: { power: sim[t.term].power, se: sim[t.term].se, nsim: sim[t.term].nsim } } : {}) })) });
 }
 
 /**

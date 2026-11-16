@@ -482,6 +482,10 @@ try {
   check('predict --json (Weibull): the B10 and median life, extrapolated to 125 °C', o.kind === 'survreg' && o.predictions[0].quantiles.length === 2 && o.predictions[0].fit === o.predictions[0].quantiles[1].fit && o.predictions[0].lower < o.predictions[0].fit);
   o = js('plot', 'jl.aikidoe.json', '--life', '--model', 'life ~ T + J', '--out', join(dir, 'jl.svg'));
   check('plot --life --json: the probability plot, a group per condition', o.plot === 'life' && o.groups.length === 4 && existsSync(join(dir, 'jl.svg')));
+  o = js('power', 'jl.aikidoe.json', '--response', 'life', '--median', '600', '--ratio', '0.5', '--test-end', '900', '--simulate', '50');
+  check('power --json (times to failure): censoring costs power; the fraction failing; a simulation', o.kind === 'life' && o.units === 16 && o.testEnd === 900 && o.terms.every(t => t.power < t.powerUncensored && t.failed[0] < t.failed[1] && t.simulated.nsim === 50 && t.detectable < 1));
+  r = run('power', join(dir, 'jl.aikidoe.json'), '--response', 'life');
+  check('power: a life test needs the median life', r.code === 1 && /--median/.test(r.err));
   r = run('fit', join(dir, 'jl.aikidoe.json'), 'life ~ T + J', '--random', 'block');
   check('fit: --random is not for times to failure', r.code === 1 && /not for times to failure/.test(r.err));
   // ordinal scores (issue #83): categories by name, three judges per run
@@ -497,6 +501,8 @@ try {
   check('predict --json (ordinal): the chance of each category and the mean score', o.kind === 'ordinal' && o.predictions[0].probabilities.length === 4 && o.predictions[0].fit > 2 && cats.includes(o.predictions[0].mostLikely));
   o = js('plot', 'jo.aikidoe.json', '--scores', '--model', 'look ~ A + B', '--out', join(dir, 'jo.svg'));
   check('plot --scores --json', o.plot === 'scores' && o.conditions === 4 && existsSync(join(dir, 'jo.svg')));
+  o = js('power', 'jo.aikidoe.json', '--response', 'look', '--ratio', '3', '--baseline', '40,30,20,10');
+  check('power --json (ordinal): the chances at the centre, scores per run from the response', o.kind === 'ordinal' && o.scores === 24 && Math.abs(o.baseline[0] - 0.4) < 1e-12 && o.categories[3] === 'excellent' && o.terms.length === 2 && o.terms[0].detectable > 1);
   o = js('fit', 'jo.aikidoe.json', 'look ~ A + B', '--link', 'probit');
   check('fit --link probit: no odds ratios', o.link === 'probit' && !o.coefficients[0].oddsRatio);
   o = js('fit', 'jc.aikidoe.json', 'colonies ~ A * B', '--distribution', 'quasipoisson');

@@ -17,6 +17,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
   models and the proportional-odds assumption: [ordinal scores](analysis.md#ordinal-scores).)
 - Christensen, R. H. B. (2023). *ordinal: Regression Models for Ordinal Data*. R package.
   (`clm` and `nominal_test`, against which the fits and the test of proportional odds are checked.)
+- Whitehead, J. (1993). Sample size calculations for ordered categorical data. *Statistics in
+  Medicine* 12, 2257–2271. (The power for an odds ratio with ordinal scores:
+  [power for scores](analysis.md#power-for-scores).)
 - McCullagh, P. (1980). Regression models for ordinal data. *Journal of the Royal Statistical
   Society B* 42, 109–142. (The proportional-odds model.)
 - Finney, D. J. (1978). *Statistical Method in Biological Assay*, 3rd ed. Griffin. (Relative
@@ -45,6 +48,9 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Goos, P. & Jones, B. (2011). *Optimal Design of Experiments: A Case Study Approach*. Wiley.
 - Venables, W. N. & Ripley, B. D. (2002). *Modern Applied Statistics with S*, 4th ed. Springer.
   (The negative binomial fit of `MASS::glm.nb`, and profile intervals.)
+- Escobar, L. A. & Meeker, W. Q. (1994). Fisher information matrix for the extreme value, normal
+  and logistic distributions and censored data. *Applied Statistics* 43, 180–182. (The expected
+  information behind the power of a life test with censoring.)
 - Meeker, W. Q. & Escobar, L. A. (1998). *Statistical Methods for Reliability Data*. Wiley.
   (Accelerated-life models with censoring, B10 lives and probability plots:
   [times to failure](analysis.md#times-to-failure).)

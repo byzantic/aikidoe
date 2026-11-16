@@ -1,5 +1,7 @@
 // Design step: compare candidate designs, set options, inspect diagnostics, create the design
 // (spec §12 step 2).
+import { lifePower, simulateLifePower, detectableTimeRatio } from '../js/model/power-life.js';
+import { ordinalPower, simulateOrdinalPower, detectableOddsRatio } from '../js/model/power-ordinal.js';
 import { h, select, messages, dataTable, help } from './dom.js';
 import { plot } from './plot.js';
 import { num } from '../js/format.js';
@@ -264,9 +266,10 @@ function diagnostics(study, d, modelFor) {
 // counts and proportions (issue #64): power for a rate or odds ratio, for a response chosen in the
 // power section; the recommender ranks by it too
 const isProp = (d) => String(d).includes('binomial') || d === 'bernoulli';
-const ratioWord = (d) => (isProp(d) ? 'odds ratio' : 'rate ratio');
+const LIFE = ['weibull', 'lognormal'];
+const ratioWord = (d) => (LIFE.includes(d) ? 'time ratio' : isProp(d) || d === 'ordinal' ? 'odds ratio' : 'rate ratio');
 function countsSpec(study, pw = {}) {
-  const r = study.responses.find(x => x.id === pw.response && x.distribution);
+  const r = study.responses.find(x => x.id === pw.response && x.distribution && !LIFE.includes(x.distribution) && x.distribution !== 'ordinal');
   if (!r) return null;
   const c = pw.counts?.[r.id] ?? {}, d = r.distribution;
   return { distribution: d, ...(r.link ? { link: r.link } : {}), baseline: c.baseline ?? (isProp(d) ? 0.5 : 10), ratio: c.ratio ?? 2,
@@ -319,6 +322,56 @@ function countsPowerSection(study, d, cand, ui, set, model, alpha, controlsHead)
       h('span', { class: 'muted' }, `${prop ? `Odds ratio: the odds of success at a factor’s high setting over its low setting (${spec.trials} trials per run).` : 'Rate ratio: the mean count at a factor’s high setting over its low setting.'} Each term is assessed alone with the others at the baseline: Wald tests with the information at the expected ${prop ? 'proportions' : 'counts'}${spec.dispersion ? ', F with the dispersion' : ''}; the simulation runs the likelihood-ratio test the analysis uses.`)));
 }
 
+// times to failure and ordinal scores (issue #83): power for a time ratio or an odds ratio, from the
+// expected information, with a check by simulation
+function lifeScorePowerSection(study, d, cand, ui, set, model, alpha, head, r) {
+  const pw = ui.power ?? {}, c = pw.counts?.[r.id] ?? {}, life = LIFE.includes(r.distribution), u = r.units ? ` (${r.units})` : '';
+  const setC = (patch) => set({ power: { ...pw, counts: { ...(pw.counts ?? {}), [r.id]: { ...c, ...patch } }, sim: null } });
+  const numIn = (key, label, title, value, attrs = {}) => h('label', { class: 'inline', title }, label,
+    h('input', { class: 'num', type: 'number', step: 'any', value: value ?? '', 'aria-label': `power ${key}`, onchange: (e) => setC({ [key]: e.target.value === '' ? undefined : Number(e.target.value) }), ...attrs }));
+  const K = r.categories?.length ?? 4;
+  const spec = life
+    ? { distribution: r.distribution, median: c.median ?? 1000, ratio: c.ratio ?? 0.5, ...(r.distribution === 'weibull' ? { shape: c.shape ?? 2 } : { sigma: c.sigma ?? 0.5 }), unitsPerRun: c.units ?? r.unitsPerRun ?? 1, testEnd: c.testEnd ?? Infinity }
+    : { baseline: c.baseline ?? Array.from({ length: K }, () => 1 / K), ratio: c.ratio ?? 2, scoresPerRun: c.units ?? r.unitsPerRun ?? 1 };
+  const controls = h('div', { class: 'row' }, head,
+    ...(life ? [
+      numIn('median', `median life${u}`, 'the median life you expect at the centre of the design', spec.median, { min: 0 }),
+      numIn('ratio', 'time ratio', 'the life at a factor’s high setting over its low setting that matters; below 1 the factor shortens the life', spec.ratio, { min: 0, step: 0.1 }),
+      r.distribution === 'weibull' ? numIn('shape', 'Weibull shape β', 'how spread out the lives are: about 1 for random failures, 2–4 for wear-out (larger: less spread)', spec.shape, { min: 0, step: 0.5 })
+        : numIn('sigma', 'σ of log life', 'how spread out the lives are on the log scale', spec.sigma, { min: 0, step: 0.1 }),
+      numIn('units', 'units per run', 'units tested at each run', spec.unitsPerRun, { min: 1, step: 1 }),
+      numIn('testEnd', `test stops at${u}`, 'when the test stops: units still working then are censored (blank: every unit runs until it fails)', Number.isFinite(spec.testEnd) ? spec.testEnd : undefined, { min: 0, placeholder: 'never' }),
+    ] : [
+      h('label', { class: 'inline', title: 'the chance of each score at the centre of the design, lowest first, in % (default: equal)' }, 'at the centre, %',
+        h('input', { value: spec.baseline.map(v => +(100 * v).toFixed(1)).join(', '), size: 18, 'aria-label': 'power baseline', onchange: (e) => { const v = e.target.value.split(',').map(Number); const t = v.reduce((a, b) => a + b, 0); if (v.length === K && v.every(x => x > 0)) setC({ baseline: v.map(x => x / t) }); } })),
+      numIn('ratio', 'odds ratio', 'the odds of a higher score at a factor’s high setting over its low setting that matters', spec.ratio, { min: 1, step: 0.1 }),
+      numIn('units', 'scores per run', 'judges or samples scored at each run', spec.scoresPerRun, { min: 1, step: 1 }),
+    ]));
+  let res, err = null;
+  const mm = () => designMatrix(study, d, model);
+  try { res = life ? lifePower(mm(), { ...spec, alpha }) : ordinalPower(mm(), { ...spec, alpha }); } catch (e) { err = e.message; }
+  if (err) return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls, h('div', { class: 'msg error' }, err));
+  const det = Object.fromEntries((life ? detectableTimeRatio(res, { power: 0.8 }) : detectableOddsRatio(res, { power: 0.8 })).map(x => [x.term, x.ratio]));
+  const nsim = 200, simKey = JSON.stringify([cand.id, model, spec, alpha]);
+  const sim = pw.sim?.key === simKey ? Object.fromEntries(pw.sim.result.map(x => [x.term, x])) : null;
+  const runSim = () => set({ power: { ...pw, sim: { key: simKey, result: life ? simulateLifePower(mm(), { ...spec, alpha, nsim, seed: study.seed }) : simulateOrdinalPower(mm(), { ...spec, alpha, nsim, seed: study.seed }) } } });
+  const rows = res.terms.filter(t => !t.block), censored = life && Number.isFinite(spec.testEnd);
+  const few = censored && rows.some(t => t.failed[0] < 0.2);
+  return h('div', { id: 'power' }, h('h3', {}, 'Power'), controls,
+    censored ? h('p', { class: 'small', id: 'power-censoring' }, `At the centre, ${num(100 * res.failedAtCentre, 3)} % of units are expected to fail before the test stops. Each unit still working then counts for much less than a failure: compare the power with the test run until every unit fails.`) : null,
+    few ? h('div', { class: 'msg warning' }, 'At some runs fewer than one unit in five is expected to fail: the power there is optimistic. Check it by simulation, run the test longer, or use harsher settings.') : null,
+    dataTable([{ key: 'term', label: 'term' }, { key: 'df', label: 'df', cls: 'n' },
+      { key: 'power', label: `power at ${life ? 'time' : 'odds'} ratio ${spec.ratio}`, cls: 'n', fmt: (v) => (Number.isNaN(v) ? h('span', { class: 'muted' }, 'aliased') : h('span', { class: v < 0.8 ? 'low-power' : '' }, num(v, 3))) },
+      ...(censored ? [{ key: 'powerUncensored', label: 'run to failure', cls: 'n', fmt: (v) => num(v, 3) }, { key: 'failed', label: '% failing', cls: 'n', fmt: (v) => `${num(100 * v[0], 2)} … ${num(100 * v[1], 2)}` }] : []),
+      ...(sim ? [{ key: 'sim', label: 'simulated', cls: 'n', fmt: (v) => (v ? `${num(v.power, 2)} ± ${num(v.se, 1)}` : '') }] : []),
+      { key: 'det', label: `${life ? 'time' : 'odds'} ratio for 80%`, cls: 'n', fmt: (v) => (Number.isFinite(v) ? num(v, 3) : 'beyond 1000×') }],
+    rows.map(t => ({ ...t, det: det[t.term], sim: sim?.[t.term] })), { rowAttrs: () => ({ 'data-power': '' }) }),
+    h('div', { class: 'row small' }, h('button', { class: 'btn small', id: 'power-simulate', onclick: runSim }, `check by simulation (${nsim} experiments)`),
+      h('span', { class: 'muted' }, life
+        ? `Time ratio: the life at a factor’s high setting over its low setting (${res.units} units in all). Power from the expected information, with the censoring the test end implies; the simulation runs the life tests and the likelihood-ratio test the analysis uses.`
+        : `Odds ratio: the odds of a higher score at a factor’s high setting over its low setting (${res.scores} scores in all). Power from the expected information of the scores; the simulation runs the likelihood-ratio test the analysis uses.`)));
+}
+
 /** The design's model matrix for a model (as designPower builds it, without blocks). */
 function designMatrix(study, d, model) {
   const settings = d.X.map(r => Object.fromEntries(study.factors.map((f, j) => [f.id, f.type === 'categorical' ? (f.levels.length === 2 && (r[j] === -1 || r[j] === 1) ? f.levels[r[j] < 0 ? 0 : 1] : f.levels[r[j]]) : decode(f, r[j])])));
@@ -332,12 +385,14 @@ function powerSection(study, d, cand, ui, set) {
   // which response the power is for: a measurement (Δ/σ) or a count or proportion (a ratio)
   const glmResps = study.responses.filter(r => r.distribution);
   const forSel = glmResps.length ? h('label', { class: 'inline' }, 'for', select([{ value: '', label: 'a measurement (Δ/σ)' }, ...glmResps.map(r => ({ value: r.id, label: `${r.name} (${ratioWord(r.distribution)})` }))],
-    countsSpec(study, pw) ? pw.response : '', (v) => setP({ response: v || undefined, sim: null }), { 'aria-label': 'power for' })) : null;
-  if (countsSpec(study, pw)) {
+    countsSpec(study, pw) || study.responses.some(x => x.id === pw.response && x.distribution) ? pw.response : '', (v) => setP({ response: v || undefined, sim: null }), { 'aria-label': 'power for' })) : null;
+  const lifeOrScore = study.responses.find(x => x.id === pw.response && (LIFE.includes(x.distribution) || x.distribution === 'ordinal'));
+  if (countsSpec(study, pw) || lifeOrScore) {
     const head = [forSel,
       h('label', { class: 'inline' }, 'model', h('input', { type: 'text', class: 'formula', style: 'width:16em', value: model, 'aria-label': 'power model',
         onchange: (e) => setP({ models: { ...(pw.models ?? {}), [cand.id]: e.target.value.replace(/^.*~/, '').trim() || 'main' } }) })),
       h('label', { class: 'inline' }, 'α', select([0.01, 0.05, 0.1], alpha, (v) => setP({ alpha: Number(v) }), { 'aria-label': 'power alpha' }))];
+    if (lifeOrScore) return lifeScorePowerSection(study, d, cand, ui, set, model, alpha, head, lifeOrScore);
     return countsPowerSection(study, d, cand, ui, set, model, alpha, head);
   }
   const controls = h('div', { class: 'row' }, forSel,
