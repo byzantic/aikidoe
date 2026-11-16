@@ -2766,6 +2766,357 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "description": "times to an event (issue #83): an accelerated-life model (Weibull or log-normal) with right censoring",
+          "required": [
+            "kind",
+            "response",
+            "formula",
+            "distribution",
+            "n",
+            "events",
+            "censored",
+            "scale",
+            "coefficients",
+            "loglik",
+            "tests",
+            "life"
+          ],
+          "properties": {
+            "kind": {
+              "const": "survreg"
+            },
+            "response": {
+              "type": "string"
+            },
+            "formula": {
+              "type": "string"
+            },
+            "distribution": {
+              "enum": [
+                "weibull",
+                "lognormal"
+              ]
+            },
+            "n": {
+              "type": "integer",
+              "description": "units tested"
+            },
+            "events": {
+              "type": "integer",
+              "description": "units that failed"
+            },
+            "censored": {
+              "type": "integer",
+              "description": "units still working at the end of the test"
+            },
+            "rank": {
+              "type": "integer"
+            },
+            "aliased": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "units": {
+              "const": "coded"
+            },
+            "scale": {
+              "type": "number",
+              "description": "σ of log time"
+            },
+            "logScale": {
+              "type": "number"
+            },
+            "logScaleSe": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "shape": {
+              "type": "number",
+              "description": "Weibull shape β = 1/σ"
+            },
+            "coefficients": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "estimate",
+                  "se",
+                  "z",
+                  "p",
+                  "timeRatio"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "type": "number"
+                  },
+                  "se": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "p": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "timeRatio": {
+                    "type": "object",
+                    "required": [
+                      "estimate",
+                      "lower",
+                      "upper"
+                    ],
+                    "properties": {
+                      "estimate": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "lower": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "upper": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "loglik": {
+              "type": "number"
+            },
+            "aic": {
+              "type": "number"
+            },
+            "converged": {
+              "type": "boolean"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tests": {
+              "type": "object",
+              "required": [
+                "type",
+                "rows"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    1,
+                    2,
+                    3
+                  ]
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "term",
+                      "df"
+                    ],
+                    "properties": {
+                      "term": {
+                        "type": "string"
+                      },
+                      "df": {
+                        "type": "integer"
+                      },
+                      "chi2": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "p": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "loglik": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "life": {
+              "type": "array",
+              "description": "the life at each condition tested: the requested quantile (default the B10) and the median, with 95% intervals",
+              "items": {
+                "type": "object",
+                "required": [
+                  "runs",
+                  "settings",
+                  "units",
+                  "failures",
+                  "quantiles"
+                ],
+                "properties": {
+                  "runs": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "settings": {
+                    "type": "object"
+                  },
+                  "units": {
+                    "type": "integer"
+                  },
+                  "failures": {
+                    "type": "integer"
+                  },
+                  "quantiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "p",
+                        "estimate",
+                        "lower",
+                        "upper"
+                      ],
+                      "properties": {
+                        "p": {
+                          "type": "number"
+                        },
+                        "estimate": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "lower": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "upper": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "covariates": {
+              "type": "array",
+              "description": "the covariates in the model (issue #82): each centred at its mean over the rows used and scaled by half its range; slope = coefficient / halfRange, per unit of the covariate (on the link scale for counts and proportions)",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "n",
+                  "mean",
+                  "min",
+                  "max",
+                  "halfRange",
+                  "slope"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "units": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "integer"
+                  },
+                  "mean": {
+                    "type": "number"
+                  },
+                  "min": {
+                    "type": "number"
+                  },
+                  "max": {
+                    "type": "number"
+                  },
+                  "halfRange": {
+                    "type": "number"
+                  },
+                  "slope": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "slopeSe": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "interacts": {
+                    "type": "boolean",
+                    "description": "the covariate is in an interaction: the slope is the one at the centre of the factors"
+                  }
+                }
+              }
+            },
+            "dropped": {
+              "type": "array",
+              "description": "rows left out because a covariate in the model has no value for them",
+              "items": {
+                "type": "object",
+                "required": [
+                  "run",
+                  "covariate"
+                ],
+                "properties": {
+                  "run": {
+                    "type": "integer"
+                  },
+                  "covariate": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -2831,7 +3182,8 @@
             "ols",
             "mixed",
             "glm",
-            "glmm"
+            "glmm",
+            "survreg"
           ]
         },
         "response": {
@@ -2900,6 +3252,42 @@
               "seLink": {
                 "type": "number",
                 "description": "glm: its standard error"
+              },
+              "quantiles": {
+                "type": "array",
+                "description": "survreg: quantiles of the life (the B10 or --quantile, and the median); fit, lower and upper are the median's",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "p",
+                    "fit",
+                    "lower",
+                    "upper"
+                  ],
+                  "properties": {
+                    "p": {
+                      "type": "number"
+                    },
+                    "fit": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "lower": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "upper": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  }
+                }
               }
             },
             "description": "predLower and predUpper (the interval for one new run) are given for least-squares and mixed models, not for counts and proportions (kind glm)."
@@ -2907,6 +3295,13 @@
         },
         "level": {
           "type": "number"
+        },
+        "distribution": {
+          "enum": [
+            "weibull",
+            "lognormal"
+          ],
+          "description": "survreg: the life model's distribution"
         }
       }
     },
@@ -4432,7 +4827,7 @@
     },
     "plot": {
       "type": "object",
-      "description": "doe plot (issues #88, #97): where the runs sit, the fitted response or the overall desirability, written as an SVG file",
+      "description": "doe plot (issues #88, #97): where the runs sit, the fitted response the overall desirability, or the probability plot of times to failure (#83), written as an SVG file",
       "required": [
         "kind",
         "plot",
@@ -4449,7 +4844,8 @@
             "pv",
             "vdg",
             "contour",
-            "desirability"
+            "desirability",
+            "life"
           ]
         },
         "file": {
@@ -4527,6 +4923,42 @@
             "object",
             "null"
           ]
+        },
+        "distribution": {
+          "enum": [
+            "weibull",
+            "lognormal"
+          ],
+          "description": "--life: the model's distribution"
+        },
+        "groups": {
+          "type": "array",
+          "description": "--life: the conditions tested",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "units",
+              "failures"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "runs": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "units": {
+                "type": "integer"
+              },
+              "failures": {
+                "type": "integer"
+              }
+            }
+          }
         }
       }
     },

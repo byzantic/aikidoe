@@ -152,6 +152,8 @@ const KINDS = [
   { value: 'binomial', label: 'successes out of n trials (binomial)' },
   { value: 'quasibinomial', label: 'successes out of n, overdispersed (quasi-binomial)' },
   { value: 'bernoulli', label: 'pass / fail (0 or 1)' },
+  { value: 'weibull', label: 'time to failure (Weibull)' },
+  { value: 'lognormal', label: 'time to failure (log-normal)' },
 ];
 function kindCell(r, set) {
   const dist = r.distribution ?? 'normal', links = DISTRIBUTIONS[dist];

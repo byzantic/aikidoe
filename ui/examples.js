@@ -206,6 +206,19 @@ export const EXAMPLES = [
       const fns = Object.fromEntries(Object.entries(sim.responses).map(([k, e]) => [k, compileExpression(e)]));
       return createStudy({ ...s, design, observations: design.runs.flatMap(r => Object.entries(fns).map(([id, f]) => ({ run: r.run, response: id, value: f(r.settings) }))) });
     } },
+  { id: 'interconnect-life', title: 'Interconnect life: an accelerated life test', step: 'analyse',
+    blurb: 'Eight test structures at each corner of temperature and current density, and at the centre, run until they fail or the test stops at 1000 h. A Weibull model with the units still working at 1000 h as censored: time ratios, the B10 life, and the probability plot. Simulated data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Electromigration life test', seed: 83,
+        description: 'Accelerated life test of a metal interconnect: temperature and current density in a 2² factorial with a centre point, eight test structures per condition, the test stopped at 1000 h. Structures still working at 1000 h are censored. Simulated data.',
+        factors: [{ id: 'temp', name: 'Temperature', units: '°C', low: 150, high: 200 }, { id: 'J', name: 'Current density', units: 'MA/cm²', low: 1, high: 2 }],
+        responses: [{ id: 'life', name: 'Time to failure', units: 'h', distribution: 'weibull', unitsPerRun: 8, goal: 'maximize' }] });
+      const design = toStudyDesign(s, fullFactorial([2, 2], { centre: 1 }), { seed: 83 });
+      // hours to failure of the eight structures at each condition; 1000: still working when the test stopped
+      const times = { '150,1': [1000, 1000, 1000, 1000, 1000, 1000, 1000, 605], '200,1': [198, 761, 1000, 422, 588, 394, 341, 518], '150,2': [395, 1000, 1000, 578, 1000, 1000, 743, 336],
+        '200,2': [359, 63, 204, 478, 217, 263, 418, 23], '175,1.5': [1000, 733, 1000, 859, 1000, 562, 1000, 389] };
+      return createStudy({ ...s, design, observations: design.runs.flatMap(r => times[`${r.settings.temp},${r.settings.J}`].map((t, i) => ({ run: r.run, response: 'life', value: t, repeat: i + 1, ...(t >= 1000 ? { censored: true } : {}) }))) });
+    } },
   { id: 'coupler', title: 'Coupler yield: comb-over', step: 'optimise', url: 'examples/coupler-10dB-ro4350b.aikidoe.json',
     blurb: 'A 10 dB coupled-line coupler on RO4350B, simulated by comb-over: yield of coupling 10 ± 0.5 dB and directivity ≥ 12 dB against etch bias and εr. Try adding I(etch^3) to the surrogate.' },
   { id: 'gate-oxide', title: 'Gate oxide anneal (split-plot)', step: 'run', url: 'examples/gate-oxide-anneal.aikidoe.json',

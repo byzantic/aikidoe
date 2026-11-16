@@ -1,7 +1,7 @@
 // Run step: run sheet with results entered in place, downloads, results import (spec §12 step 3).
 import { h, messages, download, toast, help } from './dom.js';
 import { num } from '../js/format.js';
-import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults, setCovariateCell } from '../js/io/runsheet.js';
+import { runSheet, runSheetCSV, runSheetHTML, importResults, applyResults, setCovariateCell, parseFlag } from '../js/io/runsheet.js';
 import { parseNumber } from '../js/io/csv.js';
 import { studyAdapter } from '../js/sim/adapters.js';
 import { runOnSimulator } from '../js/sim/adapter.js';
@@ -75,7 +75,7 @@ export function render(ctx) {
     const cu = study.covariates?.find(x => `${x.id}.unit` === key); if (cu) return [cu.name, h('span', { class: 'muted' }, ': unit')];
     const cv = study.covariates?.find(x => x.id === key); if (cv) return [cv.name, h('span', { class: 'muted' }, cv.units ? ` (${cv.units}, measured)` : ' (measured)')];
     const c = sheet.resultColumns.find(x => x.header === key);
-    if (c?.aux) { const r = study.responses.find(x => x.id === c.response); return [r.name, h('span', { class: 'muted' }, ` (${c.aux}${c.aux === 'exposure' ? ', blank = 1' : ''})`)]; }
+    if (c?.aux) { const r = study.responses.find(x => x.id === c.response); return [r.name, h('span', { class: 'muted', ...(c.aux === 'censored' ? { title: 'still working when the test stopped? 1 (or yes): the time is how long it ran without failing; blank: it failed at that time' } : {}) }, ` (${c.aux === 'censored' ? 'still working? 1 = yes' : c.aux}${c.aux === 'exposure' ? ', blank = 1' : ''})`)]; }
     if (c) { const r = study.responses.find(x => x.id === c.response); return [r.name, c.site !== undefined ? ` @ ${c.site}` : '', r.units ? h('span', { class: 'muted' }, ` (${r.units})`) : null]; }
     const bv = study.design.blocking?.find(x => x.id === key); if (bv) return bv.name ?? bv.id;
     return { order: 'order', run: 'run', wholePlot: 'whole plot', block: 'block', kind: 'type', note: 'notes' }[key] ?? key;
@@ -84,6 +84,17 @@ export function render(ctx) {
     const run = row[iRun], meta = Object.fromEntries(sheet.metaColumns.map((m, j) => [m, row[metaIdx[j]] === '' ? undefined : row[metaIdx[j]]]));
     const same = (o) => o.run === run && o.response === col.response && String(o.site ?? '') === String(col.site ?? '') && sheet.metaColumns.every(m => String(o[m] ?? '') === String(meta[m] ?? ''));
     const old = (d.observations ?? []).find(same);
+    if (col.aux === 'censored') {
+      // still working at the end of the test (times to an event): a flag, held with the time
+      const c = parseFlag(text);
+      if (Number.isNaN(c)) { toast(`"${text}": 1 (or yes) if the unit was still working at the end, blank if it failed`); return; }
+      if (old) { if (c) old.censored = true; else delete old.censored; return; }
+      if (!c) return;
+      const o = { run, response: col.response, value: null, censored: true };
+      for (const m of sheet.metaColumns) if (meta[m] !== undefined) o[m] = meta[m];
+      d.observations.push(o);
+      return;
+    }
     const v = parseNumber(text);
     if (Number.isNaN(v)) { toast(`"${text}" is not a number`); return; }
     if (col.aux) {
@@ -96,7 +107,7 @@ export function render(ctx) {
       return;
     }
     d.observations = (d.observations ?? []).filter(o => !same(o));
-    const keep = Object.fromEntries(['trials', 'exposure'].filter(k => old?.[k] !== undefined).map(k => [k, old[k]]));
+    const keep = Object.fromEntries(['trials', 'exposure', 'censored'].filter(k => old?.[k] !== undefined).map(k => [k, old[k]]));
     if (v === undefined) { if (Object.keys(keep).length) d.observations.push({ run, response: col.response, value: null, ...keep }); return; }
     const o = { run, response: col.response, value: v, ...keep };
     if (col.site !== undefined) o.site = col.site;

@@ -19,6 +19,8 @@ import { plateAnalysisPanel } from './plates.js';
 import { doseAnalysis } from './dose.js';
 import { mixtureAnalysis } from './mixture.js';
 import { glmAnalysis } from './glm.js';
+import { lifeAnalysis } from './life.js';
+import { LIFETIMES } from '../js/study.js';
 import { glmmAnalysis, cached } from './glmm.js';
 import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
 import { covariateSlopes, droppedNote } from '../js/model/covariates.js';
@@ -114,7 +116,7 @@ export function render(ctx) {
       ['p', 'aicc'].map(m => h('button', { class: 'btn', id: `reduce-${m}`, title: m === 'p' ? 'backward elimination: drop the least significant term while p > 0.10, keeping the model hierarchical' : 'backward elimination by AICc, keeping the model hierarchical',
         onclick: () => {
           try {
-            const countRandom = resp.distribution && !ui.firth ? countRandomChoice(study, resp, ui).choice : 'none';
+            const countRandom = resp.distribution && !LIFETIMES.includes(resp.distribution) && !ui.firth ? countRandomChoice(study, resp, ui).choice : 'none';
             if (countRandom !== 'none') {
               // counts and proportions with a random effect: each step refits several GLMMs, so in the worker
               const g0 = randomGroupOf(study, countRandom), group = (g0.levels ?? [g0]).map(l => l.name).join(' and '), nested = !!g0.levels;
@@ -150,6 +152,11 @@ export function render(ctx) {
   let fit = null, fitErr = null;
   try { fit = fitModel(study, formula, { ...(ui.noPosition ? { position: false } : {}), ...(ui.firth && resp.distribution ? { firth: true } : {}) }); } catch (e) { fitErr = e; }
   if (fit) showCov(fit);
+  // times to an event (issue #83): the accelerated-life model
+  if (LIFETIMES.includes(resp.distribution)) {
+    if (fitErr) return h('div', {}, controls, h('div', { class: 'msg error' }, fitErr.message));
+    return h('div', {}, controls, lifeAnalysis(ctx, fit, { ui, set, setFormula, rhs, resp }), surface(fit));
+  }
   // counts and proportions: a generalised linear model, with a random intercept per whole plot (a
   // split-plot, automatically) or per block (when asked)
   if (resp.distribution) {

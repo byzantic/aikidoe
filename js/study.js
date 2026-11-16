@@ -37,8 +37,11 @@ const LEVELS = ['lot', 'run', 'wholePlot', 'wafer', 'site'];
 export const DISTRIBUTIONS = {
   normal: ['identity'], poisson: ['log', 'identity', 'sqrt'], quasipoisson: ['log', 'identity', 'sqrt'], negbin: ['log', 'identity', 'sqrt'],
   binomial: ['logit', 'probit', 'cloglog'], quasibinomial: ['logit', 'probit', 'cloglog'], bernoulli: ['logit', 'probit', 'cloglog'],
+  // times to an event (issue #83): accelerated-life models, linear in the log of the time
+  weibull: ['log'], lognormal: ['log'],
 };
 const COUNTS = ['poisson', 'quasipoisson', 'negbin'], PROPORTIONS = ['binomial', 'quasibinomial'];
+export const LIFETIMES = ['weibull', 'lognormal'];
 const TRANSFORMS = ['none', 'log'];
 // the roles of a design's named blocking variables (issue #80): rows and columns of a Latin
 // square, subjects and periods of a crossover
@@ -48,12 +51,12 @@ const KEYS = {
   study: ['aikidoe', 'name', 'description', 'seed', 'factors', 'mixture', 'constraints', 'responses', 'covariates', 'design', 'observations', 'sites', 'plates', 'simulator', 'exercise', 'history'],
   continuous: ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'transform', 'htc', 'tolerance', 'noise', 'limits', 'note'],
   categorical: ['id', 'name', 'units', 'type', 'levels', 'htc', 'note'],
-  response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
+  response: ['id', 'name', 'units', 'distribution', 'link', 'trials', 'unitsPerRun', 'goal', 'target', 'lower', 'upper', 'weight', 'importance', 'levels', 'derived', 'measurement', 'spec', 'note'],
   measurement: ['sigma', 'method', 'design', 'parts', 'operators', 'repeats', 'tolerance', 'pctGRR', 'ndc', 'date', 'data', 'note'],
   design: ['kind', 'params', 'randomisation', 'blocking', 'carryover', 'runs'],
   run: ['run', 'order', 'wholePlot', 'block', 'blocks', 'kind', 'settings'],
   blocking: ['id', 'name', 'role', 'levels'],
-  observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'trials', 'exposure', 'operator', 'repeat', 'note'],
+  observation: ['run', 'lot', 'wafer', 'site', 'slot', 'response', 'value', 'trials', 'exposure', 'censored', 'operator', 'repeat', 'note'],
   sites: ['scheme', 'diameter', 'positions'],
   position: ['id', 'x', 'y'],
   stage: ['stage', 'runs', 'date', 'note', 'params'],
@@ -326,11 +329,17 @@ function normResponse(r, i, errors) {
         else if (!(Number.isInteger(r.trials) && r.trials >= 1)) errors.push(`${path}.trials: must be a whole number ≥ 1`);
         else out.trials = r.trials;
       }
-      if (r.derived !== undefined || (r.levels !== undefined && (r.levels.length !== 1 || r.levels[0] !== 'run'))) errors.push(`${path}: a ${r.distribution} response is one count or proportion per run (no derived values or readings within runs)`);
+      if (r.unitsPerRun !== undefined) {
+        if (!LIFETIMES.includes(r.distribution)) errors.push(`${path}.unitsPerRun: only for a time-to-event response (weibull or lognormal)`);
+        else if (!(Number.isInteger(r.unitsPerRun) && r.unitsPerRun >= 1)) errors.push(`${path}.unitsPerRun: must be a whole number ≥ 1`);
+        else out.unitsPerRun = r.unitsPerRun;
+      }
+      if (r.derived !== undefined || (r.levels !== undefined && (r.levels.length !== 1 || r.levels[0] !== 'run'))) errors.push(LIFETIMES.includes(r.distribution) ? `${path}: a ${r.distribution} response is a time per unit tested (no derived values or levels within runs; give each unit its own observation)` : `${path}: a ${r.distribution} response is one count or proportion per run (no derived values or readings within runs)`);
     }
   } else {
     if (r.link !== undefined && r.link !== 'identity') errors.push(`${path}.link: a normal response has the identity link; set a distribution for another`);
     if (r.trials !== undefined) errors.push(`${path}.trials: only for a binomial response (set distribution: "binomial")`);
+    if (r.unitsPerRun !== undefined) errors.push(`${path}.unitsPerRun: only for a time-to-event response (set distribution: "weibull" or "lognormal")`);
   }
   out.goal = r.goal ?? 'none';
   if (!GOALS.includes(out.goal)) errors.push(`${path}.goal: must be one of ${GOALS.join(', ')}`);
@@ -576,9 +585,12 @@ function normObservations(obs, design, responses, errors) {
     const r = responses.find(x => x.id === o.response), dist = r?.distribution ?? 'normal';
     if (o.trials !== undefined && !(PROPORTIONS.includes(dist) && Number.isInteger(o.trials) && o.trials >= 1)) errors.push(`${path}.trials: a whole number ≥ 1, for a binomial response only`);
     if (o.exposure !== undefined && !(COUNTS.includes(dist) && isNum(o.exposure) && o.exposure > 0 && (r.link ?? 'log') === 'log')) errors.push(`${path}.exposure: a positive number, for a count response with the log link only`);
+    // times to an event (issue #83): censored marks a unit still working when the test stopped
+    if (o.censored !== undefined && !(LIFETIMES.includes(dist) && typeof o.censored === 'boolean')) errors.push(`${path}.censored: true or false, for a time-to-event (weibull or lognormal) response only`);
     if (isNum(o.value) && dist !== 'normal') {
       const n = o.trials ?? r.trials;
-      if (dist === 'poisson' || dist === 'negbin') { if (!(Number.isInteger(o.value) && o.value >= 0)) errors.push(`${path}.value: a ${dist} response is a count (a whole number ≥ 0)`); }
+      if (LIFETIMES.includes(dist)) { if (!(o.value > 0)) errors.push(`${path}.value: a time to an event must be greater than 0`); }
+      else if (dist === 'poisson' || dist === 'negbin') { if (!(Number.isInteger(o.value) && o.value >= 0)) errors.push(`${path}.value: a ${dist} response is a count (a whole number ≥ 0)`); }
       else if (dist === 'quasipoisson') { if (!(o.value >= 0)) errors.push(`${path}.value: must be ≥ 0`); }
       else if (dist === 'bernoulli') { if (o.value !== 0 && o.value !== 1) errors.push(`${path}.value: a pass/fail (bernoulli) response is 0 or 1`); }
       else if (n === undefined) errors.push(`${path}: a binomial response needs the number of trials (the response's trials, or the observation's)`);

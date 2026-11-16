@@ -65,6 +65,12 @@ reducible by its likelihood-ratio tests), and power for a rate or odds
 ratio
 ([manual](docs/manual/analysis.md#counts-and-proportions); `doe init --response count@poisson`).
 
+Times to failure — life tests with units still working when the test stopped (right censoring):
+Weibull and log-normal accelerated-life models, checked against `survival::survreg`, with time
+ratios, likelihood-ratio tests, the B10 and median life at each condition and at use conditions,
+and the probability plot ([manual](docs/manual/analysis.md#times-to-failure);
+`doe init --response life:h@weibull,8`, `doe plot --life`).
+
 New to designed experiments? **Guide** asks what you want to find out and what you can do — factors,
 hard-to-change ones, groups of runs, curvature, constraints, the effect that matters, budget — one
 question at a time with why it matters, then suggests a staged plan, ranks the designs that fit,

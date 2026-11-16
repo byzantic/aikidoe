@@ -36,6 +36,11 @@ overdispersion and separation checks, Firth: `doe init --response count@poisson`
 whole-plot or block intercept (Poisson, negative binomial with θ, binomial; nested levels with
 `--random block,wholePlot` or `run` for plates per run) (`--reduce` by its likelihood-ratio tests); power for a rate or odds ratio: `doe power --response R --baseline b
 --ratio r [--simulate N]`, in a split-plot with `--sigma-wp σ` for the whole-plot shift);
+times to failure with right censoring (Weibull and log-normal accelerated-life models: `doe init
+--response life:h@weibull,8` for 8 units per run, a `life.censored` column of 1 for units still
+working at the end; `doe fit` gives time ratios, likelihood-ratio tests and the B10 and median
+life per condition [--quantile 0.01]; `doe predict` at use conditions; `doe plot --life` the
+probability plot);
 power; desirability optimisation, propagation of error and dual response; gauge R&R; surrogate
 models, Sobol sensitivity and Monte Carlo yield for simulators.
 

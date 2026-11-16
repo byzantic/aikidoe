@@ -39,6 +39,13 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Goos, P. & Jones, B. (2011). *Optimal Design of Experiments: A Case Study Approach*. Wiley.
 - Venables, W. N. & Ripley, B. D. (2002). *Modern Applied Statistics with S*, 4th ed. Springer.
   (The negative binomial fit of `MASS::glm.nb`, and profile intervals.)
+- Meeker, W. Q. & Escobar, L. A. (1998). *Statistical Methods for Reliability Data*. Wiley.
+  (Accelerated-life models with censoring, B10 lives and probability plots:
+  [times to failure](analysis.md#times-to-failure).)
+- Nelson, W. B. (2004). *Accelerated Testing: Statistical Models, Test Plans, and Data Analyses*.
+  Wiley. (Accelerated life tests, and the inference from them to use conditions.)
+- Therneau, T. M. (2024). *A Package for Survival Analysis in R*. R package `survival`.
+  (`survreg` and `survfit`, against which the fits are checked.)
 - Santner, T. J., Williams, B. J. & Notz, W. I. (2018). *The Design and Analysis of Computer
   Experiments*, 2nd ed. Springer.
 - Cano, E. L., Moguerza, J. M. & Redchuk, A. (2012). *Six Sigma with R*. Springer. (The R package

@@ -1,6 +1,6 @@
 // Command line (issue #8): a 2^(5−1) screening study planned, filled in, imported and analysed
 // end to end through tools/doe.mjs, in a temporary directory.
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -466,6 +466,24 @@ try {
   check('fit --json (Poisson GLM): rate ratios with profile intervals, analysis of deviance', o.kind === 'glm' && o.distribution === 'poisson' && o.coefficients[1].ratio.estimate > 1 && o.coefficients[1].lower < o.coefficients[1].estimate && o.tests.rows.at(-1).term === 'Residuals');
   o = js('fit', 'jc.aikidoe.json', 'germ ~ A + B', '--anova', '2');
   check('fit --json (binomial): odds ratios, type II likelihood-ratio tests', o.kind === 'glm' && o.link === 'logit' && o.tests.type === 2 && Number.isFinite(o.tests.rows[0].chi2));
+  // times to failure (issue #83): units per run, a censored column, the accelerated-life model
+  js('init', 'jl.aikidoe.json', '--factor', 'T:150:200:°C', '--factor', 'J:1:2', '--response', 'life:h@weibull,4', '--seed', '5');
+  const dl = js('design', 'jl.aikidoe.json', '--full');
+  o = js('sheet', 'jl.aikidoe.json');
+  const lt = (x, u) => Math.round(Math.exp(6.5 - 0.7 * (x.settings.T - 175) / 25 - 0.3 * (x.settings.J - 1.5) / 0.5 + 0.5 * Math.sin(7 * x.run + 3 * u)));
+  writeFileSync(join(dir, 'jl.csv'), 'run,repeat,life,life.censored\n' + dl.design.runs.flatMap(x => [1, 2, 3, 4].map(u => { const t = lt(x, u); return `${x.run},${u},${Math.min(t, 900)},${t >= 900 ? 'yes' : ''}`; })).join('\n') + '\n');
+  o = js('import', 'jl.aikidoe.json', 'jl.csv');
+  check('import --json: times with a censored column', o.imported === true && o.values === 16);
+  o = js('fit', 'jl.aikidoe.json', 'life ~ T + J');
+  check('fit --json (Weibull): time ratios, likelihood-ratio tests, the B10 and median life per condition', o.kind === 'survreg' && o.distribution === 'weibull' && o.n === 16 && o.events + o.censored === 16 && o.coefficients[1].timeRatio.estimate < 1 && o.tests.rows[0].chi2 > 0 && o.life.length === 4 && o.life[0].quantiles[0].p === 0.1 && o.shape > 0);
+  o = js('fit', 'jl.aikidoe.json', 'life ~ T + J', '--quantile', '0.01');
+  check('… --quantile 0.01: the B1 life', o.life[0].quantiles[0].p === 0.01 && o.life[0].quantiles[0].estimate < o.life[0].quantiles[1].estimate);
+  o = js('predict', 'jl.aikidoe.json', 'life ~ T + J', '--at', 'T=125,J=1');
+  check('predict --json (Weibull): the B10 and median life, extrapolated to 125 °C', o.kind === 'survreg' && o.predictions[0].quantiles.length === 2 && o.predictions[0].fit === o.predictions[0].quantiles[1].fit && o.predictions[0].lower < o.predictions[0].fit);
+  o = js('plot', 'jl.aikidoe.json', '--life', '--model', 'life ~ T + J', '--out', join(dir, 'jl.svg'));
+  check('plot --life --json: the probability plot, a group per condition', o.plot === 'life' && o.groups.length === 4 && existsSync(join(dir, 'jl.svg')));
+  r = run('fit', join(dir, 'jl.aikidoe.json'), 'life ~ T + J', '--random', 'block');
+  check('fit: --random is not for times to failure', r.code === 1 && /not for times to failure/.test(r.err));
   o = js('fit', 'jc.aikidoe.json', 'colonies ~ A * B', '--distribution', 'quasipoisson');
   check('fit --json --distribution quasipoisson: t tests and the dispersion', o.distribution === 'quasipoisson' && 't' in o.coefficients[0] && o.dispersion > 0 && o.aic === null);
   o = js('predict', 'jc.aikidoe.json', 'germ ~ A + B', '--at', 'A=1,B=-1');
@@ -500,7 +518,7 @@ try {
   r = run('plot', 'pl.aikidoe.json', '--desirability', 'A,A');
   check('… two different factors', r.code === 1 && /different/.test(r.err), r.out + r.err);
   r = run('plot', 'pl.aikidoe.json');
-  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B, --vdg, --contour A,B or --desirability A,B/.test(r.err));
+  check('plot without a picture asked for', r.code === 1 && /--pairs, --pv A,B, --vdg, --contour A,B, --desirability A,B or --life/.test(r.err));
   // projectivity (issue #79): alias and recommend report it
   r = run('init', 'pj.aikidoe.json', '--factor', 'A:0:1', '--factor', 'B:0:1', '--factor', 'C:0:1', '--factor', 'D:0:1', '--factor', 'E:0:1', '--factor', 'F:0:1', '--factor', 'G:0:1', '--response', 'y', '--seed', '1');
   r = run('design', 'pj.aikidoe.json', '--pb');

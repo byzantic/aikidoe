@@ -9,6 +9,7 @@
 //                           append ! to mark it hard to change, e.g. T:900:1000:°C!
 //        SPEC for a response: id[:units][@distribution[,trials][,link]]   counts and proportions:
 //                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
+//                           times to failure: life:h@weibull,8 or life:h@lognormal,8 (8 units tested per run)
 //        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
 //        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
 //   path STUDY --results [--next NEW.aikidoe.json [--design factorial|ccd|none] [--centre 4] [--at "A=…,B=…"]]
@@ -110,6 +111,9 @@
 //        odds ratios and profile intervals [--wald], analysis of deviance, overdispersion and
 //        separation checks [--firth]; [--distribution poisson|negbin|quasipoisson|binomial|… --link L]
 //        to try another than the response's
+//        times to failure (a weibull or lognormal response, with units still working at the end of
+//        the test censored): an accelerated-life model with time ratios, likelihood-ratio tests and
+//        the life at each condition tested [--quantile 0.1] (the B10 life, and the median)
 //        counts and proportions in a split-plot (or with blocks): a GLMM with a random intercept per
 //        whole plot (automatic) or block [--random wholePlot|block|none] [--nagq 25 (1: Laplace)];
 //        likelihood-ratio tests, σ of the random effect and its test; --reduce works on it too
@@ -140,6 +144,7 @@
 //        (counts and proportions: [--exposure e] [--trials n] for the new run; with a random effect
 //        [--random …]: for a typical whole plot or block, averaged over them, and a new run in a new one)
 //        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
+//        (times to failure: the B10 and median life, or another quantile with [--quantile 0.1])
 //   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
 //   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
 //        (position terms in mixed-model formulas: radius2, edge, waferX, waferY, slot, slotZone)
@@ -190,6 +195,8 @@
 //   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
 //   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
 //   plot STUDY (--pairs [--factors A,B,…] | --pv A,B [--at "C=0.5,…"] | --vdg) [--model M] [--out FILE.svg]
+//   plot STUDY --life --model "life ~ …" [--out FILE.svg]
+//        times to failure: the probability plot (Weibull or log-normal scale) of each condition tested
 //        where the runs sit, as SVG: every pair of factors (coded units), the scaled prediction
 //        variance over two factors for a model (default: quadratic, else 2fi, else main), or the
 //        variance dispersion graph
@@ -209,7 +216,8 @@ import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
 import { codedRuns, codedRow, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
-import { pairsSVG, contourSVG, vdgSVG, standalone, viridis } from '../js/io/svg-space.js';
+import { pairsSVG, contourSVG, vdgSVG, probabilitySVG, standalone, viridis } from '../js/io/svg-space.js';
+import { timeRatios, lifeAtConditions, probabilityPlot } from '../js/model/survreg.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../js/model/surface.js';
 import { ccd, boxBehnken, varianceProfile } from '../js/design/rsm.js';
 import { definitiveScreening } from '../js/design/dsd.js';
@@ -319,7 +327,7 @@ function cmdInit({ pos, opt }) {
     if (dist) {
       const [distribution, trials, link] = dist.split(',').map(x => x.trim());
       r.distribution = distribution;
-      if (trials) r.trials = int(trials, 'trials');
+      if (trials) { if (['weibull', 'lognormal'].includes(distribution)) r.unitsPerRun = int(trials, 'units per run'); else r.trials = int(trials, 'trials'); }
       if (link) r.link = link;
     }
     return r;
@@ -759,6 +767,46 @@ function printGLM(study, fit, opt) {
     overdispersion: fit.overdispersion, separation: fit.separation, warnings: fit.warnings, tests: { type: fit.firth ? 'wald' : type, rows: tests } });
 }
 
+/** An accelerated-life model (times to failure): time ratios, likelihood-ratio tests, life at each condition. */
+function printLife(study, fit, opt) {
+  const r = study.responses.find(x => x.id === fit.response), u = r?.units ? ` ${r.units}` : '';
+  const p = opt.quantile !== undefined ? Number(opt.quantile) : 0.1;
+  if (!(p > 0 && p < 1)) fail('--quantile: a fraction failed between 0 and 1, e.g. 0.1 for the B10 life');
+  const formula = `${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}`;
+  out(formula);
+  out(`${noiseOf(fit).label}: ${fit.n} units, ${fit.events} failed, ${fit.censored} still working at the end (censored)`);
+  out(fit.distribution === 'weibull' ? `scale on log time σ = ${num(fit.scale, 4)}: Weibull shape β = 1/σ = ${num(1 / fit.scale, 4)} (${1 / fit.scale > 1 ? 'wear-out: the failure rate rises with age' : 'the failure rate falls with age'})` : `σ of log time = ${num(fit.scale, 4)}`);
+  if (study.design.runs.some(x => x.wholePlot !== undefined)) out('warning: split-plot design — this model treats every unit as independent, so the tests of whole-plot effects are too optimistic');
+  for (const v of hierarchyViolations(fit.model)) out(`note: ${v.term} without ${v.missing.join(', ')} (model not hierarchical)`);
+  if (fit.aliased.length) out(`aliased (not estimable): ${fit.aliased.join(', ')}`);
+  for (const w of fit.warnings) out(`warning: ${w}`);
+  covariateLines(fit);
+  out('');
+  const tr = timeRatios(fit), pOf = (t) => fit.p[fit.columns.indexOf(t)];
+  out(table([
+    { key: 'term', label: 'term', align: 'left' }, { key: 'estimate', label: 'estimate' }, { key: 'se', label: 'std. error' }, { key: 'z', label: 'z' }, { key: 'p', label: 'p', fmt: pval }, { key: 'p', label: '', align: 'left', fmt: stars },
+    { key: 'ratio', label: 'time ratio' }, { key: 'ci', label: '95% Wald interval', align: 'left' },
+  ], tr.map(x => ({ ...x, z: x.estimate / x.se, p: pOf(x.term), ...(x.assign >= 0 ? { ci: `${num(x.lower, 4)} … ${num(x.upper, 4)}` } : { ratio: '', ci: '' }) }))));
+  out(`log-time scale, coded units (−1 low, +1 high): a time ratio multiplies every quantile of the life per coded unit (squared for low → high)`);
+  out(`\nlog-likelihood = ${num(fit.loglik)} (${fit.k} parameters, σ included)   AIC = ${num(fit.aic)}`);
+  const type = opt.anova ? int(opt.anova, 'anova') : 1, tests = anova(fit, type);
+  out(`\nlikelihood-ratio tests (type ${type === 1 ? 'I, sequential' : type === 2 ? 'II' : 'III'})`);
+  out(table([{ key: 'term', label: 'source', align: 'left' }, { key: 'df', label: 'df' }, { key: 'chi2', label: 'χ²' }, { key: 'p', label: 'p', fmt: pval }], tests.filter(x => x.term !== 'Residuals')));
+  const qs = [...new Set([p, 0.5])], name = (q) => (q === 0.5 ? 'median' : `B${num(100 * q, 3)}`);
+  const life = lifeAtConditions(fit, { p: qs });
+  out(`\nlife at the conditions tested (${qs.map(name).join(' and ')}${u ? `, ${u.trim()}` : ''}; 95% intervals for the model's estimate)`);
+  out(table([{ key: 'cond', label: 'settings', align: 'left' }, { key: 'runs', label: 'run' }, { key: 'units', label: 'units' }, { key: 'failures', label: 'failed' },
+    ...qs.flatMap((q, k) => [{ key: `q${k}`, label: name(q) }, { key: `i${k}`, label: '95% interval', align: 'left' }])],
+  life.map(c => ({ cond: Object.entries(c.settings).map(([k, v]) => `${k}=${v}`).join(', '), runs: c.runs.join(','), units: c.units, failures: c.failures,
+    ...Object.fromEntries(c.quantiles.flatMap((q, k) => [[`q${k}`, num(q.fit, 4)], [`i${k}`, `${num(q.lower, 4)} … ${num(q.upper, 4)}`]])) }))));
+  if (life.some(c => c.failures === 0)) out('note: no failures at some conditions: their life comes from the model alone (the censored units say only that it is longer than the test)');
+  put({ kind: 'survreg', response: fit.response, formula, distribution: fit.distribution, n: fit.n, events: fit.events, censored: fit.censored, rank: fit.rank, aliased: fit.aliased, units: 'coded',
+    scale: fit.scale, logScale: fit.logScale, logScaleSe: fit.logScaleSe, ...(fit.distribution === 'weibull' ? { shape: 1 / fit.scale } : {}),
+    coefficients: tr.map(x => ({ term: x.term, estimate: x.estimate, se: x.se, z: x.estimate / x.se, p: pOf(x.term), timeRatio: { estimate: x.ratio, lower: x.lower, upper: x.upper } })),
+    loglik: fit.loglik, aic: fit.aic, converged: fit.converged, warnings: fit.warnings, tests: { type, rows: tests },
+    life: life.map(c => ({ runs: c.runs, settings: c.settings, units: c.units, failures: c.failures, quantiles: c.quantiles.map(q => ({ p: q.p, estimate: q.fit, lower: q.lower, upper: q.upper })) })) });
+}
+
 /** The random grouping(s) for a count or proportion response's fit: --random wholePlot|block|run (or a nested list, e.g. block,wholePlot)|none, or the whole plots of a split-plot. */
 function countRandomOf(study, opt, distribution) {
   const r = opt.random === undefined ? 'auto' : String(opt.random);
@@ -827,8 +875,10 @@ function cmdFit({ pos, opt }) {
   const glmResp = opt.distribution && opt.distribution !== 'normal' ? String(opt.distribution) : study.responses.find(r => r.id === respId)?.distribution;
   if (opt.firth && !glmResp) fail('--firth is for a pass/fail or binomial response (set the response\'s distribution)');
   if (glmResp && (opt.lenth || opt.boxcox)) fail(`--lenth and --boxcox assume normal noise; ${respId} is ${glmResp}`);
+  const life = ['weibull', 'lognormal'].includes(glmResp);
+  if (life && (opt.firth || opt.random || opt.ols || opt.link)) fail(`--firth, --random, --ols and --link are not for times to failure; ${respId} is ${glmResp}`);
   // counts and proportions with whole plots (or blocks, when asked): the GLMM
-  if (glmResp && !opt.ols) {
+  if (glmResp && !life && !opt.ols) {
     const g = countRandomOf(study, opt, glmResp);
     if (g) {
       if (opt.firth) fail('--firth: Firth\'s penalised likelihood is for fixed-effect models; with separated proportions, try --random none --firth');
@@ -881,6 +931,7 @@ function cmdFit({ pos, opt }) {
     put({ reduction: { method: r.method, from: r.start.formula, formula: r.formula, steps: r.steps.map(st => ({ drop: st.drop, F: st.F, ...(st.chi2 !== undefined ? { chi2: st.chi2 } : {}), p: st.p, aicc: st.aicc })) } });
     fit = r.fit;
   }
+  if (life) return printLife(study, fit, opt);
   if (fit.distribution) return printGLM(study, fit, opt);
   out(`${fit.response} ~ ${fit.model.terms.map(t => t.label).join(' + ') || '1'}${fit.model.intercept ? '' : ' (no intercept)'}`);
   out(`${fit.n} runs, ${fit.rank} estimable coefficients, ${fit.dfRes} residual df${fit.rows.some(r => r.n > 1) ? '; per-run means of repeated observations' : ''}`);
@@ -1374,7 +1425,19 @@ function cmdPredict({ pos, opt }) {
     return;
   }
   const fit = fitModel(study, formula, opt.firth && resp?.distribution ? { firth: true } : {});
-  const p = predict(fit, at);
+  const p = ['weibull', 'lognormal'].includes(fit.distribution) ? null : predict(fit, at);
+  if (!p) {
+    // times to failure: the quantiles of the life (default the B10 and the median), with intervals
+    const qs = [...new Set([opt.quantile !== undefined ? Number(opt.quantile) : 0.1, 0.5])];
+    if (!qs.every(q => q > 0 && q < 1)) fail('--quantile: a fraction failed between 0 and 1, e.g. 0.1 for the B10 life');
+    const name = (q) => (q === 0.5 ? 'median' : `B${num(100 * q, 3)}`), Q = qs.map(q => predict(fit, at, { p: q }));
+    put({ kind: 'survreg', response: fit.response, distribution: fit.distribution, predictions: at.map((s, i) => ({ settings: s, quantiles: qs.map((q, k) => ({ p: q, fit: Q[k][i].fit, lower: Q[k][i].lower, upper: Q[k][i].upper })), fit: Q.at(-1)[i].fit, lower: Q.at(-1)[i].lower, upper: Q.at(-1)[i].upper })), level: 0.95 });
+    out(table([{ key: 'at', label: 'settings', align: 'left' }, ...qs.flatMap((q, k) => [{ key: `q${k}`, label: `${name(q)} life` }, { key: `i${k}`, label: '95% CI', align: 'left' }])],
+      at.map((s, i) => ({ at: showSettings(s), ...Object.fromEntries(qs.flatMap((q, k) => [[`q${k}`, Q[k][i].fit], [`i${k}`, `${num(Q[k][i].lower)} … ${num(Q[k][i].upper)}`]])) }))));
+    covariateMeanNote(fit, at);
+    out(`${noiseOf(fit).label}: ${name(qs[0])} = the time by which ${num(100 * qs[0], 3)} % of units are expected to fail; intervals for the model's estimate (delta method on log time). Settings outside those tested are extrapolations: check the probability plot's lines stay parallel.`);
+    return;
+  }
   if (fit.distribution) {
     // counts and proportions: the mean (a rate per unit exposure, or a proportion), its interval from
     // the link scale, and the interval for one new run with the given exposure or trials
@@ -1631,7 +1694,7 @@ const nm = (names, i) => (names ? names[i] : T.factorName(i));
 function cmdPlot({ pos, opt }) {
   const file = pos[0], study = load(file);
   if (!study.design) fail('the study has no design yet');
-  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : opt.contour !== undefined ? 'contour' : opt.desirability !== undefined ? 'desirability' : fail('plot: give --pairs, --pv A,B, --vdg, --contour A,B or --desirability A,B');
+  const which = opt.pairs ? 'pairs' : opt.pv !== undefined ? 'pv' : opt.vdg ? 'vdg' : opt.contour !== undefined ? 'contour' : opt.desirability !== undefined ? 'desirability' : opt.life ? 'life' : fail('plot: give --pairs, --pv A,B, --vdg, --contour A,B, --desirability A,B or --life');
   const sp = codedRuns(study), X = sp.runs.map(r => r.x), F = study.factors;
   const base = file.replace(/\.aikidoe\.json$|\.json$/, '');
   const outFile = opt.out ? String(opt.out) : `${base}-${which}.svg`;
@@ -1643,7 +1706,14 @@ function cmdPlot({ pos, opt }) {
   let svg, res = { kind: 'plot', plot: which, file: outFile, runs: sp.runs.length };
   const atOf = () => Object.fromEntries(list(opt.at).flatMap(x => String(x).split(',')).filter(Boolean).map(t => { const [id, v] = t.split('='); const f = F.find(x => x.id === id.trim()) ?? fail(`--at: unknown factor "${id}"`);
     return [f.id, f.type === 'categorical' ? Math.max(0, f.levels.indexOf(v.trim())) : code(f, Number(v))]; }));
-  if (which === 'contour') {
+  if (which === 'life') {
+    if (!opt.model) fail('--life: give the model, --model "life ~ …"');
+    const fit = fitModel(study, String(opt.model));
+    if (!['weibull', 'lognormal'].includes(fit.distribution)) fail(`--life: ${fit.response} is not a time to failure (set its distribution to weibull or lognormal)`);
+    const r = study.responses.find(x => x.id === fit.response), pp = probabilityPlot(fit);
+    svg = probabilitySVG(pp, { timeLabel: `${r.name ?? r.id}${r.units ? ` (${r.units})` : ''}` });
+    res = { ...res, distribution: fit.distribution, groups: pp.groups.map(g => ({ label: g.label, runs: g.runs, units: g.units, failures: g.points.reduce((a, p) => a + p.failed, 0) })) };
+  } else if (which === 'contour') {
     const [a, b] = String(opt.contour).split(',').map(x => x.trim());
     if (!a || !b) fail('--contour: give two factors, e.g. --contour A,B');
     if (!opt.model) fail('--contour: give the model, --model "y ~ …"');

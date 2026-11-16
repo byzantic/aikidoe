@@ -13,7 +13,7 @@ The format is published as a JSON Schema: [schema/study.schema.json](../../../sc
 (`doe schema` prints it). The schema checks the structure;
 the library checks the rest when it reads a study:
 
-> Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; mixture components are continuous factors (not log, not hard to change) with low ≥ 0, their lows add up to less than the total and their highs to at least it, and every run's components add up to the total; a count response's values are whole numbers ≥ 0, a binomial response's successes lie between 0 and the trials (the response's or the observation's), a bernoulli response's are 0 or 1, and exposure is only for counts with the log link; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.
+> Rules a JSON Schema cannot express, checked by the library's validateStudy: high > low; factor and response ids all distinct; a log-transformed factor has low > 0 and positive settings; every run's settings give every factor and nothing else, with a categorical value among its levels; run and order numbers are distinct; runs in one whole plot share their hard-to-change settings; observations refer to runs in the design and to non-derived responses; derived.from names a non-derived response; history runs are in the design; constraints are linear in continuous factor ids; mixture components are continuous factors (not log, not hard to change) with low ≥ 0, their lows add up to less than the total and their highs to at least it, and every run's components add up to the total; a count response's values are whole numbers ≥ 0, a binomial response's successes lie between 0 and the trials (the response's or the observation's), a bernoulli response's are 0 or 1, and exposure is only for counts with the log link; a time to an event is greater than 0, and censored is only for weibull and lognormal responses; a target lies between lower and upper; goal 'target' needs a target and goal 'range' lower and upper.
 
 ## Top level
 
@@ -89,9 +89,10 @@ Without `type`, a factor whose levels include a string is categorical.
 | `id` (required) | [id](#id) |  |
 | `name` | string |  |
 | `units` | string |  |
-| `distribution` | `"normal"` \| `"poisson"` \| `"quasipoisson"` \| `"negbin"` \| `"binomial"` \| `"quasibinomial"` \| `"bernoulli"` | the kind of value and its noise (issue #64): a measurement (normal), a count (poisson; negbin or quasipoisson when overdispersed), successes out of trials (binomial, quasibinomial), or pass/fail (bernoulli, 0 or 1). Anything but normal is fitted by a generalised linear model, one observation per run |
-| `link` | `"identity"` \| `"log"` \| `"sqrt"` \| `"logit"` \| `"probit"` \| `"cloglog"` | the scale the model is linear on: log (default), identity or sqrt for counts; logit (default), probit or cloglog for proportions |
+| `distribution` | `"normal"` \| `"poisson"` \| `"quasipoisson"` \| `"negbin"` \| `"binomial"` \| `"quasibinomial"` \| `"bernoulli"` \| `"weibull"` \| `"lognormal"` | the kind of value and its noise (issue #64): a measurement (normal), a count (poisson; negbin or quasipoisson when overdispersed), successes out of trials (binomial, quasibinomial), or pass/fail (bernoulli, 0 or 1), fitted by a generalised linear model, one observation per run; or a time to an event such as failure (weibull, lognormal; issue #83), fitted by an accelerated-life model, one observation per unit tested, which may be censored |
+| `link` | `"identity"` \| `"log"` \| `"sqrt"` \| `"logit"` \| `"probit"` \| `"cloglog"` | the scale the model is linear on: log (default), identity or sqrt for counts; logit (default), probit or cloglog for proportions; log for times to an event |
 | `trials` | integer (≥ 1) | binomial: the number of trials in every run (otherwise each observation gives its own) |
+| `unitsPerRun` | integer (≥ 1) | time to an event: the units (devices, specimens) tested at each run's settings; the run sheet gets a row for each (repeat 1 … n) |
 | `goal` | `"none"` \| `"maximize"` \| `"minimize"` \| `"target"` \| `"range"` | for optimisation (desirability) |
 | `target` | number | desirability target |
 | `lower` | number | desirability lower limit |
@@ -136,6 +137,7 @@ Without `type`, a factor whose levels include a string is categorical.
 | `value` (required) | number or null | null: missing (measured but failed) |
 | `trials` | integer (≥ 1) | binomial response: the trials of this run (value is the number of successes) |
 | `exposure` | number (> 0) | count response with the log link: what the count is out of (volume plated, area, cells examined); its log is an offset, so the model is for the rate (default 1) |
+| `censored` | boolean | time-to-event response: true when the unit had not failed by the end of the test, so value is the time it had run without failing (right censored) |
 | `lot` | [label](#label) | lot |
 | `wafer` | [label](#label) | wafer within the run |
 | `site` | [label](#label) | site on the wafer |
