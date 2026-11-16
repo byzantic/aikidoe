@@ -86,7 +86,8 @@ before acting.
 - Times to failure from a life test: set the response's kind to Weibull or log-normal, and mark
   the units still working when the test stopped as censored rather than leaving them out
   ([times to failure](analysis.md#times-to-failure)). Check the probability plot: its lines should
-  be straight and parallel.
+  be straight and parallel. Plan the test so that most units fail before it stops: units still
+  working at the end carry little information ([power and censoring](analysis.md#power-and-censoring)).
 - Scores in ordered categories (poor … excellent, grades 0–4): set the kind to ordinal rather than
   averaging the numbers, and check the test of proportional odds
   ([ordinal scores](analysis.md#ordinal-scores)).

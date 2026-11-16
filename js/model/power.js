@@ -349,6 +349,11 @@ export function simulatePower(mm, opts = {}) {
   });
 }
 
+/** The model with the design's nuisance terms (blocks, named blocking variables) for these runs: { model, factors, settings }. */
+export function withNuisanceFor(study, parsed, runs) {
+  return study.design.blocking ? withNuisance(study, parsed, runs) : withBlocks(parsed, study.factors, runs.map(r => r.settings), runs.some(r => r.block !== undefined) ? runs.map(r => r.block ?? '') : null);
+}
+
 /** Power of the study's design for a count or proportion response (glmPowerFromMatrix options). */
 export function studyGlmPower(study, { model = 'main', ...opts } = {}) {
   if (!study.design) throw new Error('the study has no design yet');

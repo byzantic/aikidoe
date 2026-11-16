@@ -105,23 +105,40 @@ export function fitSurvreg(mm, t, { distribution = 'weibull', status, maxit = 10
   if (distribution === 'weibull') { beta = beta.map((v, j) => (keep[j] === columns.indexOf('(Intercept)') ? v + 0.5772 * Math.exp(tau) : v)); }
   let cur = lik(Xk, y, status, beta, tau, D), iter = 0, converged = false;
   const warnings = [];
+  // Newton's method, damped (Levenberg–Marquardt) whenever the full step does not raise the
+  // likelihood: far from the maximum, with many units censored, −H need not be positive definite.
+  // A step is never taken unless the likelihood rises; convergence needs a small gradient.
+  let mu = 0;
+  const P1 = p + 1, gradSmall = (g) => Math.max(...g.map(Math.abs)) < 1e-8 * Math.max(1, Math.abs(cur.ll));
   for (iter = 1; iter <= maxit; iter++) {
-    // Newton step: (−H) δ = g; halve while the likelihood falls
-    let step;
-    try { step = lu(cur.H.map(r => r.map(v => -v))).solve(cur.g); } catch { step = cur.g.map(v => v * 1e-3); }
-    let lam = 1, next = null, nb, nt;
-    for (let h = 0; h < 40; h++) {
-      nb = beta.map((v, j) => v + lam * step[j]); nt = tau + lam * step[p];
-      next = lik(Xk, y, status, nb, nt, D);
-      if (Number.isFinite(next.ll) && next.ll >= cur.ll - 1e-12 * Math.abs(cur.ll)) break;
-      lam /= 2;
+    if (gradSmall(cur.g)) { converged = true; break; }
+    let moved = false;
+    for (let tries = 0; tries < 60 && !moved; tries++) {
+      let step;
+      try { step = lu(cur.H.map((r, i) => r.map((v, j) => -v + (i === j ? mu * (1 + Math.abs(cur.H[i][i])) : 0)))).solve(cur.g); } catch { step = null; }
+      if (step && step.every(Number.isFinite)) {
+        const nb = beta.map((v, j) => v + step[j]), nt = tau + step[p];
+        const next = lik(Xk, y, status, nb, nt, D);
+        if (Number.isFinite(next.ll) && next.ll > cur.ll) {
+          const gain = next.ll - cur.ll;
+          beta = nb; tau = nt; cur = next; moved = true;
+          mu = mu > 0 ? mu / 10 : 0;
+          if (mu < 1e-10) mu = 0;
+          if (gain < tol * (Math.abs(cur.ll) + tol) && gradSmall(cur.g)) converged = true;
+          break;
+        }
+      }
+      mu = mu > 0 ? mu * 10 : 1e-4;
     }
-    const gain = next.ll - cur.ll;
-    beta = nb; tau = nt; cur = next;
-    if (Math.abs(gain) < tol * (Math.abs(cur.ll) + tol) && Math.max(...step.map(Math.abs)) * lam < 1e-7) { converged = true; break; }
+    if (converged || !moved) { if (!moved && gradSmall(cur.g)) converged = true; break; }
+    void P1;
   }
   if (!converged) warnings.push('the fit did not converge: some estimates may be running off (a factor setting with no failures?)');
-  const V = inv(cur.H.map(r => r.map(v => -v)));
+  // estimates running off (a setting with no failures) leave the information singular: the
+  // likelihood is still right (for the tests), the standard errors are not available
+  let V;
+  try { V = inv(cur.H.map(r => r.map(v => -v))); if (V.some(r => r.some(v => !Number.isFinite(v)))) throw new Error('singular'); }
+  catch { V = cur.H.map(r => r.map(() => NaN)); if (!warnings.length) warnings.push('the estimates run off to infinity (a setting at which no unit failed?): the standard errors are not available'); }
   const scale = Math.exp(tau);
   const coef = new Array(P).fill(NaN), se = new Array(P).fill(NaN);
   keep.forEach((j, a) => { coef[j] = beta[a]; se[j] = Math.sqrt(V[a][a]); });

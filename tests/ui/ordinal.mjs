@@ -53,7 +53,35 @@ try {
   const r1 = (await state()).doc.observations.filter(o => o.run === 1 && o.repeat === 1);
   check('typing a category name stores its score', r1.length === 1 && r1[0].value === 4);
 
+  section('Design: power for an odds ratio');
+  await page.click('[data-step="design"]'); await settle();
+  await page.selectOption('select[aria-label="power for"]', 'look'); await settle();
+  await page.fill('input[aria-label="power ratio"]', '3'); await page.keyboard.press('Tab'); await settle();
+  await page.fill('input[aria-label="power baseline"]', '40, 30, 20, 10'); await page.keyboard.press('Tab'); await settle();
+  const ptxt = await page.textContent('#power');
+  check('power at an odds ratio of 3 with five scores per run, and the ratio for 80 %', /power at odds ratio 3/.test(ptxt) && /odds ratio for 80%/.test(ptxt) && /40 scores in all/.test(ptxt), ptxt.slice(0, 300));
+  await page.click('#power-simulate'); await settle();
+  check('checked by simulation', /±/.test(await page.textContent('#power')));
+  await shot('ordinal-power');
+
+  section('the Guide: a score');
+  const choose = async (v) => { await page.click(`[data-choice="${v}"]`); await settle(); };
+  const type = async (id, v) => { await page.fill(`input[aria-label="guide ${id}"]`, String(v)); await page.click('#guide-next'); await settle(); };
+  await page.goto(`${url}#guide`); await settle();
+  await page.click('#guide-restart').catch(() => {}); await settle();
+  await choose('understand'); await choose('good'); await type('factors', 3); await page.click('#guide-skip'); await settle();
+  await choose('no'); await choose('continuous'); await type('htc', 0); await choose('no'); await choose('no'); await choose('no'); await choose('none');
+  await choose('score');
+  check('then the ratio that matters', (await page.getAttribute('[data-question]', 'data-question')) === 'ratio');
+  await choose('medium'); await page.click('#guide-skip'); await settle(); await choose('yes');
+  const gtxt = await page.textContent('#guide');
+  check('the plan: an ordinal model and scores in all', /ordinal \(proportional-odds\) model/.test(gtxt) && /scores in all/.test(gtxt));
+  await page.click('#guide-create'); await settle();
+  check('the study’s response is an ordinal score with categories', (await state()).doc.responses[0].distribution === 'ordinal' && (await state()).doc.responses[0].categories.length === 4);
+
   section('Optimise renders');
+  await page.goto(url); await settle();
+  await page.click('#btn-examples'); await page.click('[data-example="coating-panel"]'); await settle();
   await page.click('[data-step="optimise"]'); await settle();
   check('the Optimise step renders', (await page.textContent('#main')).length > 50);
 

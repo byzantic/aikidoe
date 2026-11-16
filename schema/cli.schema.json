@@ -4057,6 +4057,147 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "description": "times to failure or ordinal scores (issue #83): power for a time ratio or an odds ratio, from the expected information, and by simulation with --simulate",
+          "required": [
+            "kind",
+            "model",
+            "n",
+            "alpha",
+            "terms"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "life",
+                "ordinal"
+              ]
+            },
+            "model": {
+              "type": "string"
+            },
+            "n": {
+              "type": "integer"
+            },
+            "alpha": {
+              "type": "number"
+            },
+            "distribution": {
+              "enum": [
+                "weibull",
+                "lognormal"
+              ]
+            },
+            "units": {
+              "type": "integer",
+              "description": "life: units tested in all"
+            },
+            "median": {
+              "type": "number"
+            },
+            "shape": {
+              "type": "number"
+            },
+            "sigma": {
+              "type": "number"
+            },
+            "testEnd": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "life: when the test stops (null: every unit runs until it fails)"
+            },
+            "failedAtCentre": {
+              "type": "number"
+            },
+            "scores": {
+              "type": "integer",
+              "description": "ordinal: scores in all"
+            },
+            "baseline": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "terms": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "df",
+                  "ratio",
+                  "power",
+                  "detectable"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  },
+                  "df": {
+                    "type": "integer"
+                  },
+                  "ratio": {
+                    "type": "number"
+                  },
+                  "power": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "powerUncensored": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "failed": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "description": "life: the smallest and largest fraction of units expected to fail at a run"
+                  },
+                  "detectable": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "simulated": {
+                    "type": "object",
+                    "required": [
+                      "power",
+                      "se",
+                      "nsim"
+                    ],
+                    "properties": {
+                      "power": {
+                        "type": "number"
+                      },
+                      "se": {
+                        "type": "number"
+                      },
+                      "nsim": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },

@@ -1,0 +1,315 @@
+{
+  "fixture": "power-life-ordinal-r",
+  "generator": "tests/ref/power_life_ordinal_r.R",
+  "meta": {
+    "R": "4.3.3",
+    "packages": {
+      "survival": "3.5.8",
+      "ordinal": "2023.12.4"
+    }
+  },
+  "cases": [
+    {
+      "name": "information weibull zc Inf",
+      "input": {
+        "kind": "information",
+        "distribution": "weibull",
+        "zc": null
+      },
+      "output": {
+        "A": 1,
+        "B": 0.422784335098467,
+        "C": 1.82368066085288,
+        "failed": 1
+      }
+    },
+    {
+      "name": "information weibull zc 1",
+      "input": {
+        "kind": "information",
+        "distribution": "weibull",
+        "zc": 1
+      },
+      "output": {
+        "A": 0.934011964154688,
+        "B": 0.272075793834534,
+        "C": 1.47593312215845,
+        "failed": 0.934011964154687
+      }
+    },
+    {
+      "name": "information weibull zc 0",
+      "input": {
+        "kind": "information",
+        "distribution": "weibull",
+        "zc": 0
+      },
+      "output": {
+        "A": 0.632120558828558,
+        "B": -0.164479040468495,
+        "C": 0.821346956457056,
+        "failed": 0.632120558828558
+      }
+    },
+    {
+      "name": "information weibull zc -1",
+      "input": {
+        "kind": "information",
+        "distribution": "weibull",
+        "zc": -1
+      },
+      "output": {
+        "A": 0.307799372444654,
+        "B": -0.336631461669863,
+        "C": 0.703677940912225,
+        "failed": 0.307799372444654
+      }
+    },
+    {
+      "name": "information weibull zc -2.5",
+      "input": {
+        "kind": "information",
+        "distribution": "weibull",
+        "zc": -2.5
+      },
+      "output": {
+        "A": 0.0788063448244842,
+        "B": -0.198640289245355,
+        "C": 0.581112352988369,
+        "failed": 0.0788063448244842
+      }
+    },
+    {
+      "name": "information lognormal zc Inf",
+      "input": {
+        "kind": "information",
+        "distribution": "lognormal",
+        "zc": null
+      },
+      "output": {
+        "A": 1,
+        "B": -0,
+        "C": 2,
+        "failed": 1
+      }
+    },
+    {
+      "name": "information lognormal zc 1",
+      "input": {
+        "kind": "information",
+        "distribution": "lognormal",
+        "zc": 1
+      },
+      "output": {
+        "A": 0.968412109311776,
+        "B": -0.11490336127591,
+        "C": 1.56778613086118,
+        "failed": 0.841344746068543
+      }
+    },
+    {
+      "name": "information lognormal zc 0",
+      "input": {
+        "kind": "information",
+        "distribution": "lognormal",
+        "zc": 0
+      },
+      "output": {
+        "A": 0.818309886183791,
+        "B": -0.398942280401433,
+        "C": 1,
+        "failed": 0.5
+      }
+    },
+    {
+      "name": "information lognormal zc -1",
+      "input": {
+        "kind": "information",
+        "distribution": "lognormal",
+        "zc": -1
+      },
+      "output": {
+        "A": 0.470216751790438,
+        "B": -0.553532222378124,
+        "C": 0.870842730241038,
+        "failed": 0.158655253931457
+      }
+    },
+    {
+      "name": "information lognormal zc -2.5",
+      "input": {
+        "kind": "information",
+        "distribution": "lognormal",
+        "zc": -2.5
+      },
+      "output": {
+        "A": 0.0503395776648853,
+        "B": -0.127853081341341,
+        "C": 0.332052034004906,
+        "failed": 0.00620966532577613
+      }
+    },
+    {
+      "name": "information weibull uncensored textbook",
+      "input": {
+        "kind": "information",
+        "distribution": "weibull"
+      },
+      "output": {
+        "A": 1,
+        "B": 0.422784335098468,
+        "C": 1.82368066085288,
+        "failed": 1
+      }
+    },
+    {
+      "name": "whitehead OR 2 N 100",
+      "input": {
+        "kind": "whitehead",
+        "baseline": [0.25, 0.25, 0.25, 0.25],
+        "ratio": 2,
+        "N": 100
+      },
+      "output": {
+        "lambdaCentre": 3.75353917123595,
+        "lambdaAverage": 3.75316780377589
+      }
+    },
+    {
+      "name": "whitehead OR 3 N 60",
+      "input": {
+        "kind": "whitehead",
+        "baseline": [0.4, 0.2, 0.2, 0.2],
+        "ratio": 3,
+        "N": 60
+      },
+      "output": {
+        "lambdaCentre": 5.50368726130537,
+        "lambdaAverage": 5.48671648824132
+      }
+    },
+    {
+      "name": "whitehead OR 1.5 N 200",
+      "input": {
+        "kind": "whitehead",
+        "baseline": [0.5, 0.3, 0.2],
+        "ratio": 1.5,
+        "N": 200
+      },
+      "output": {
+        "lambdaCentre": 2.30162735450432,
+        "lambdaAverage": 2.30241974606962
+      }
+    },
+    {
+      "name": "life power weibull end 1000",
+      "input": {
+        "kind": "life",
+        "dist": "weibull",
+        "median": 800,
+        "ratio": 0.5,
+        "shape": 2,
+        "units": 6,
+        "testEnd": 1000,
+        "nsim": 1000
+      },
+      "output": {
+        "power": 0.815,
+        "failed": 0.65
+      }
+    },
+    {
+      "name": "life power weibull end Inf",
+      "input": {
+        "kind": "life",
+        "dist": "weibull",
+        "median": 800,
+        "ratio": 0.5,
+        "shape": 2,
+        "units": 6,
+        "nsim": 1000
+      },
+      "output": {
+        "power": 0.895,
+        "failed": 1
+      }
+    },
+    {
+      "name": "life power lognormal end 1000",
+      "input": {
+        "kind": "life",
+        "dist": "lognormal",
+        "median": 800,
+        "ratio": 0.5,
+        "sigma": 0.6,
+        "units": 6,
+        "testEnd": 1000,
+        "nsim": 1000
+      },
+      "output": {
+        "power": 0.763,
+        "failed": 0.624125
+      }
+    },
+    {
+      "name": "life power weibull end 600",
+      "input": {
+        "kind": "life",
+        "dist": "weibull",
+        "median": 800,
+        "ratio": 0.5,
+        "shape": 2,
+        "units": 6,
+        "testEnd": 600,
+        "nsim": 1000
+      },
+      "output": {
+        "power": 0.538,
+        "failed": 0.359166666666666
+      }
+    },
+    {
+      "name": "ordinal power OR 3 n 10",
+      "input": {
+        "kind": "ordinal",
+        "baseline": [0.25, 0.25, 0.25, 0.25],
+        "ratio": 3,
+        "scoresPerRun": 10,
+        "nsim": 1000
+      },
+      "output": {
+        "power": 0.49
+      }
+    },
+    {
+      "name": "ordinal power OR 2 n 20",
+      "input": {
+        "kind": "ordinal",
+        "baseline": [0.4, 0.2, 0.2, 0.2],
+        "ratio": 2,
+        "scoresPerRun": 20,
+        "nsim": 1000
+      },
+      "output": {
+        "power": 0.427
+      }
+    },
+    {
+      "name": "ordinal power OR 4 n 5",
+      "input": {
+        "kind": "ordinal",
+        "baseline": [0.1, 0.2, 0.4, 0.3],
+        "ratio": 4,
+        "scoresPerRun": 5,
+        "nsim": 1000
+      },
+      "output": {
+        "power": 0.406
+      }
+    }
+  ],
+  "tolerance": {
+    "rel": 1e-06,
+    "abs": 1e-09
+  }
+}

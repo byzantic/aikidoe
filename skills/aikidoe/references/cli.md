@@ -151,6 +151,13 @@ Commands
        power to detect a rate ratio (counts) or odds ratio (proportions) from a factor's low to high setting
        [--sigma-wp σ]  in a split-plot: σ of the whole-plot shift on the link scale (the analysis's random effect)
        [--sigma-block σ]  with blocks: σ of the block shift (random blocks; with --sigma-wp, blocks ⊃ whole plots)
+  power STUDY --response R (time to failure) --median t [--ratio 0.5 | --ratio "A=0.5,default=0.7"] [--shape β | --sigma σ]
+       [--units n] [--test-end T] [--simulate N [--seed S]]
+       power to detect a time ratio (the life at the high setting over the low) in a life test stopped at T:
+       the fraction of units expected to fail at each run, and the power had every unit run to failure
+  power STUDY --response R (ordinal score) [--baseline "0.4,0.3,0.2,0.1"] [--ratio r] [--scores n] [--simulate N [--seed S]]
+       power to detect an odds ratio for a higher score, given the chance of each category at the centre
+       (default equal)
   recommend … [--response R --baseline b --ratio r …]   rank designs by that power instead of Δ/σ
   augment STUDY (--foldover [--factor F] | --axial [--alpha orthogonal|rotatable|faces|α] [--centre n]
                 | --optimal --runs n [--model …] [--criterion D|I|A]
