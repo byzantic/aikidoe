@@ -19,7 +19,7 @@ const sum = (a) => a.reduce((s, v) => s + v, 0);
 /**
  * Per-run response table: [{ run, settings, y, n }] for runs with at least one observation.
  * A count or proportion response (a distribution other than normal) has one row per observation,
- * with trials and exposure.
+ * with trials and exposure; a time to an event (issue #83) one per unit tested, with censored.
  * aggregate 'mean' (default) averages multiple observations of a run (sites, wafers, repeats);
  * 'none' keeps one row per observation (only appropriate when observations are true replicates).
  */
@@ -32,7 +32,7 @@ export function responseTable(study, responseId, { aggregate = 'mean', perObserv
   // counts and proportions (issue #64): one row per observation, never averaged, with its trials
   // (binomial) and exposure (counts)
   if (resp.distribution || perObservation) return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1,
-    ...(o.trials ?? resp.trials ? { trials: o.trials ?? resp.trials } : {}), ...(o.exposure !== undefined ? { exposure: o.exposure } : {}), ...meta(runs.get(o.run)) }));
+    ...(o.trials ?? resp.trials ? { trials: o.trials ?? resp.trials } : {}), ...(o.exposure !== undefined ? { exposure: o.exposure } : {}), ...(o.censored ? { censored: true } : {}), ...meta(runs.get(o.run)) }));
   if (aggregate === 'none') return obs.map(o => ({ run: o.run, settings: runs.get(o.run).settings, y: o.value, n: 1, ...meta(runs.get(o.run)) }));
   const by = new Map();
   for (const o of obs) { if (!by.has(o.run)) by.set(o.run, []); by.get(o.run).push(o.value); }

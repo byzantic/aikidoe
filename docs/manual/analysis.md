@@ -956,6 +956,109 @@ doe predict STUDY "colonies ~ T + M + D" --at "T=37,M=SOC,D=10" --exposure 100
   ([power](concepts.md#power)); without it, power treats the runs as independent and overstates
   it for hard-to-change factors.
 
+## Times to failure
+
+Life tests give a **time to an event**: hours until a device fails, cycles until a joint cracks,
+days until a product goes off. Two things set them apart from measurements. Their spread grows with
+their size, so the analysis works on the log of the time. And the test usually stops before every
+unit has failed. A unit still working when the test stopped has a **censored** time: it tells you
+that the life is longer than the test, not how long it is. Leaving such units out, or entering the
+end of the test as if they had failed then, both make the life look shorter than it is. An
+**accelerated-life model** uses each unit for what it shows:
+
+  log(time) = b₀ + b₁·A + b₂·B + … + σ·noise
+
+The noise has a **Weibull** (extreme-value) or **log-normal** shape: these are the two usual life
+distributions. A unit that failed counts through the chance of failing at its time. A censored unit
+counts through the chance of lasting at least that long. The model is fitted by maximum likelihood,
+as R's `survival::survreg`.
+
+Set the response's kind to *time to failure (Weibull)* or *(log-normal)* on the Define step
+(`distribution: "weibull"` or `"lognormal"` in the study file; `doe init … --response
+life:h@weibull,8`). The number after the distribution is how many **units are tested per run**
+(`unitsPerRun`). The run sheet then has a row for each unit, and a column `life.censored`. Write 1
+(or yes) there when the unit was still working at the end; leave it blank when it failed. In
+long format the column is `censored`.
+
+The example *Interconnect life* (in the app's examples, and
+`examples/interconnect-life.aikidoe.json`) tests eight structures at each corner of temperature and
+current density, and at the centre, and stops at 1000 h. Sixteen of the 40 were still working then.
+
+```console
+$ doe fit examples/interconnect-life.aikidoe.json "life ~ temp * J" --reduce p
+model reduction (backward, p > 0.1; hierarchy kept), from life ~ temp + J + temp:J:
+  drop temp:J     χ² = 0.3948 on 1 df, p = 0.53  AICc → 362.958
+reduced model: life ~ temp + J   (a suggestion: put a term back by editing the formula)
+
+life ~ temp + J
+Weibull times to an event (accelerated life): 40 units, 24 failed, 16 still working at the end (censored)
+scale on log time σ = 0.5539: Weibull shape β = 1/σ = 1.805 (wear-out: the failure rate rises with age)
+
+term         estimate  std. error       z        p       time ratio  95% Wald interval
+-----------  --------  ----------  ------  -------  ---  ----------  -----------------
+(Intercept)      6.87      0.1382   49.69  <0.0001  ***
+temp          -0.7806      0.1638  -4.765  <0.0001  ***      0.4581  0.3323 … 0.6316
+J             -0.4194       0.137   -3.06  0.00221  **       0.6574  0.5026 … 0.86
+log-time scale, coded units (−1 low, +1 high): a time ratio multiplies every quantile of the life per coded unit (squared for low → high)
+
+log-likelihood = -176.9 (4 parameters, σ included)   AIC = 361.8
+
+likelihood-ratio tests (type I, sequential)
+source  df     χ²        p
+------  --  -----  -------
+temp     1  20.39  <0.0001
+J        1  8.748   0.0031
+
+life at the conditions tested (B10 and median, h; 95% intervals for the model's estimate)
+settings         run  units  failed  B10    95% interval   median  95% interval
+---------------  ---  -----  ------  -----  -------------  ------  -------------
+temp=150, J=1    1        8       1  918.8  494.3 … 1708   2609    1406 … 4839
+temp=200, J=1    2        8       7  192.9  107.3 … 346.7  547.5   363.8 … 823.9
+temp=150, J=2    3        8       4  397.1  223.9 … 704.3  1127    676.9 … 1878
+temp=200, J=2    4        8       8  83.35  44.11 … 157.5  236.6   158.1 … 354.2
+temp=175, J=1.5  5        8       4  276.7  178.9 … 428    785.7   605.7 … 1019
+```
+
+- A **time ratio** is exp(coefficient): the factor by which every quantile of the life is
+  multiplied per coded unit. From a factor's low to its high setting, square it. Here raising the
+  temperature from 150 to 200 °C multiplies the life by about 0.46² ≈ 0.21.
+- The **Weibull shape** β = 1/σ says how failures spread out in time. Above 1, the failure rate
+  rises with age (wear-out, as for electromigration); below 1, it falls (early failures).
+- The **tests** are likelihood-ratio tests: twice the gain in log-likelihood from adding a term,
+  against χ² on its df. Model reduction (`--reduce`, and the *reduce* buttons) works with them, and
+  by AICc with σ counted as a parameter.
+- **Life at the conditions tested**: the **B10 life** (the time by which 10 % of units are
+  expected to fail) and the median life, with 95 % intervals for the model's estimate. These use
+  the delta method on log time, as `predict(…, type = "quantile")`. `--quantile 0.01` gives the B1
+  life instead. `doe predict … --at "temp=125,J=1"` gives the life at other settings, such as use
+  conditions. That is an extrapolation, and it holds only if the failure mechanism stays the same.
+- A condition with **no failures** still informs the fit: its units say that the life there is
+  longer than the test. Its life comes from the model, fitted to the other conditions.
+
+Try the log-normal model as well (the button in the Analyse step, or `--distribution lognormal`),
+and compare the AIC: the lower one fits better.
+
+### Probability plot
+
+The probability plot puts each condition's failures at their **plotting positions** against time,
+on a log scale. The fraction failed is the Kaplan–Meier estimate, taken midway through each of its
+steps. In this way the units still working count, and the last failure is not put at 100 %. The
+vertical axis is on the distribution's scale: log(−log(1 − F)) for Weibull, the normal quantile of
+F for log-normal. On it, the model is a straight line for each condition.
+
+```console
+$ doe plot examples/interconnect-life.aikidoe.json --life --model "life ~ temp + J" --out interconnect-life.svg
+wrote interconnect-life.svg
+```
+
+![Weibull probability plot of the interconnect life test](img/interconnect-life.svg)
+
+- Points close to their lines mean the distribution fits.
+- **Parallel** lines mean one shape suits every condition, as the model assumes: the same failure
+  mechanism everywhere.
+- Points that curve away from a line suggest trying the other distribution.
+- Lines that fan out suggest that the mechanism changes with the stress.
+
 ## Mixed models
 
 When readings are nested — several sites on a wafer, wafers in a run, runs in a whole plot — the

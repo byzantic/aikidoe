@@ -19,6 +19,10 @@
 // column "<id>.trials" (the trials of each run), a count response with the log link a column
 // "<id>.exposure" (volume plated, cells counted, area …; blank for 1). In long format: columns
 // trials and exposure.
+// Times to an event (issue #83): a weibull or lognormal response gets a column "<id>.censored": 1
+// (or yes) when the unit was still working when the test stopped, so the time is how long it ran
+// without failing; blank (or 0) when it failed. With unitsPerRun, each run has a row per unit
+// tested (repeat 1 … n). In long format: a column censored.
 //
 // Covariates (issue #82): one column per covariate, before the results, filled in like a result
 // (a row of a wafer holds that wafer's value). In long format a covariate's id in the response
@@ -35,12 +39,23 @@ const siteIds = (study) => (study.sites?.positions ?? []).map(p => String(p.id))
 const usesSites = (study, r) => r.levels.includes('site') && siteIds(study).length > 0;
 const wellOf = (study) => new Map((study.plates?.wells ?? []).filter(w => w.run !== undefined).map(w => [w.run, w]));
 
-const COUNT = ['poisson', 'quasipoisson', 'negbin'], PROP = ['binomial', 'quasibinomial'];
-/** The extra columns a response needs: 'trials' (binomial, trials not fixed), 'exposure' (counts, log link). */
+const COUNT = ['poisson', 'quasipoisson', 'negbin'], PROP = ['binomial', 'quasibinomial'], LIFE = ['weibull', 'lognormal'];
+const AUX = ['trials', 'exposure', 'censored'];
+/** The extra columns a response needs: 'trials' (binomial, trials not fixed), 'exposure' (counts, log link), 'censored' (times to an event). */
 export const auxFields = (r) => [
   ...(PROP.includes(r.distribution) && r.trials === undefined ? ['trials'] : []),
   ...(COUNT.includes(r.distribution) && (r.link ?? 'log') === 'log' ? ['exposure'] : []),
+  ...(LIFE.includes(r.distribution) ? ['censored'] : []),
 ];
+/** A censored cell: true (1, yes, y, true, censored, +), false (0, no, n, false, blank), NaN otherwise. */
+export function parseFlag(text) {
+  const t = String(text ?? '').trim().toLowerCase();
+  if (['', '0', 'no', 'n', 'false', 'failed', '-'].includes(t)) return false;
+  if (['1', 'yes', 'y', 'true', 'censored', 'c', '+'].includes(t)) return true;
+  return NaN;
+}
+// the units tested in each run (times to an event): the most any response asks for
+const unitsPerRun = (study) => Math.max(0, ...study.responses.filter(r => LIFE.includes(r.distribution) && !r.derived).map(r => r.unitsPerRun ?? 0));
 
 /** Result columns: [{ header, response, site, aux? }] (aux: 'trials' or 'exposure' of the response). */
 function resultColumns(study) {
@@ -69,6 +84,7 @@ export function setCovariateCell(doc, id, run, keys, value) {
 
 function metaColumns(study) {
   const used = new Set(study.observations.flatMap(o => META.filter(k => o[k] !== undefined)));
+  if (unitsPerRun(study) > 1) used.add('repeat');
   if (nested(study, 'lot')) used.add('lot');
   if (nested(study, 'wafer')) { used.add('wafer'); used.add('slot'); }
   return META.filter(k => used.has(k));
@@ -97,12 +113,17 @@ export function runSheet(study) {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(o);
     }
+    // a row for each unit to be tested (times to an event), as well as those with results
+    const U = unitsPerRun(study);
+    if (U > 1) for (let u = 1; u <= U; u++) { const key = JSON.stringify(meta.map(k => (k === 'repeat' ? u : null))); if (!groups.has(key) && ![...groups.keys()].some(k => JSON.parse(k)[meta.indexOf('repeat')] === u)) groups.set(key, []); }
+    if (U > 1) { const ir = meta.indexOf('repeat'); const sorted = [...groups.entries()].sort((a, b) => (JSON.parse(a[0])[ir] ?? 0) - (JSON.parse(b[0])[ir] ?? 0)); groups.clear(); for (const [k, v] of sorted) groups.set(k, v); }
     if (!groups.size) groups.set(JSON.stringify(meta.map(() => null)), []);
     for (const [key, list] of groups) {
       const mv = JSON.parse(key);
       const cells = res.map(c => {
         const hit = list.filter(o => o.response === c.response && (c.site === undefined ? o.site === undefined : String(o.site) === String(c.site)));
         if (hit.length > 1) throw new Error(`run ${run.run}: several values for ${c.header} with the same ${meta.join('/') || 'run'}; export the observations in long format instead`);
+        if (c.aux === 'censored') return hit.length && hit[0].censored ? 1 : '';
         if (c.aux) return hit.length ? hit[0][c.aux] ?? '' : '';
         return hit.length ? (hit[0].value === null ? 'NA' : hit[0].value) : '';
       });
@@ -139,8 +160,8 @@ export function runSheetHTML(study, { title, date } = {}) {
   const label = (h) => {
     const f = study.factors.find(x => x.id === h);
     if (f) return `${esc(f.name)}${f.units ? ` <span class="u">(${esc(f.units)})</span>` : ''}`;
-    const ax = /^(.*)\.(trials|exposure)$/.exec(h), ar = ax && study.responses.find(x => x.id === ax[1]);
-    if (ar) return `${esc(ar.name)} <span class="u">(${ax[2]})</span>`;
+    const ax = /^(.*)\.(trials|exposure|censored)$/.exec(h), ar = ax && study.responses.find(x => x.id === ax[1]);
+    if (ar) return `${esc(ar.name)} <span class="u">(${ax[2] === 'censored' ? 'still working at the end? 1 = yes' : ax[2]})</span>`;
     const cu = (study.covariates ?? []).find(x => `${x.id}.unit` === h);
     if (cu) return `${esc(cu.name)}: unit`;
     const cv = (study.covariates ?? []).find(x => x.id === h);
@@ -189,9 +210,9 @@ ${body}</tbody></table></div>
 
 /** All observations as a long-format CSV. */
 export function observationsCSV(study, { delimiter = ',' } = {}) {
-  const opt = ['trials', 'exposure', 'lot', 'wafer', 'site', 'slot', 'operator', 'repeat', 'note'].filter(k => study.observations.some(o => o[k] !== undefined));
+  const opt = ['trials', 'exposure', 'censored', 'lot', 'wafer', 'site', 'slot', 'operator', 'repeat', 'note'].filter(k => study.observations.some(o => o[k] !== undefined));
   const header = ['run', 'response', 'value', ...opt];
-  const rows = study.observations.map(o => [o.run, o.response, o.value === null ? 'NA' : o.value, ...opt.map(k => o[k] ?? '')]);
+  const rows = study.observations.map(o => [o.run, o.response, o.value === null ? 'NA' : o.value, ...opt.map(k => (k === 'censored' ? (o.censored ? 1 : '') : o[k] ?? ''))]);
   return writeCSV(header, rows, { delimiter });
 }
 
@@ -228,8 +249,8 @@ function mapColumns(study, header, given = {}) {
     else if (['response', 'value', 'site'].includes(k)) mapping[h] = k;
     else if (['note', 'notes', 'comment', 'comments'].includes(k)) mapping[h] = 'note';
     else if (META.includes(k)) mapping[h] = k;
-    else if (k === 'trials' || k === 'exposure') mapping[h] = k;
-    else if (/\.(trials|exposure)$/.test(h.trim()) && resp.has(h.trim().replace(/\.(trials|exposure)$/, ''))) mapping[h] = { aux: { response: resp.get(h.trim().replace(/\.(trials|exposure)$/, '')).id, key: /trials$/.test(h.trim()) ? 'trials' : 'exposure' } };
+    else if (AUX.includes(k)) mapping[h] = k;
+    else if (/\.(trials|exposure|censored)$/.test(h.trim()) && resp.has(h.trim().replace(/\.(trials|exposure|censored)$/, ''))) mapping[h] = { aux: { response: resp.get(h.trim().replace(/\.(trials|exposure|censored)$/, '')).id, key: /\.(trials|exposure|censored)$/.exec(h.trim())[1] } };
     else if (h.includes('@') && resp.has(h.slice(0, h.indexOf('@')))) mapping[h] = { result: { response: resp.get(h.slice(0, h.indexOf('@'))).id, site: label(h.slice(h.indexOf('@') + 1)) } };
     else if (resp.has(h)) mapping[h] = { result: { response: resp.get(h).id } };
     else if (fac.has(h)) mapping[h] = { factor: fac.get(h).id };
@@ -333,6 +354,15 @@ export function importResults(study, text, opts = {}) {
         const a = num(r[jj], jj);
         if (Number.isNaN(a) || a === undefined) { err(line, header[jj], `"${r[jj]}" is not a number`); continue; }
         if (ja >= 0 || auxFields(study.responses.find(x => x.id === o.response)).includes(key) || (key === 'trials' && study.responses.find(x => x.id === o.response)?.distribution?.includes('binomial'))) out[key] = a;
+      }
+      // censored (times to an event): the response's own column, or a shared one
+      {
+        const ja = roles.findIndex(x => x?.aux && x.aux.response === o.response && x.aux.key === 'censored'), jj = ja >= 0 ? ja : col('censored');
+        if (jj >= 0 && auxFields(study.responses.find(x => x.id === o.response)).includes('censored')) {
+          const c = parseFlag(r[jj]);
+          if (Number.isNaN(c)) err(line, header[jj], `"${r[jj]}": write 1 (or yes) if the unit was still working at the end of the test, blank or 0 if it failed`);
+          else if (c) out.censored = true;
+        }
       }
       obs.push({ o: out, line, column: header[j] });
     };

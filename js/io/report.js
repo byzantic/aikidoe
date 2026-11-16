@@ -7,13 +7,14 @@ import { runSheet } from './runsheet.js';
 import { fitModel, anova } from '../model/fit.js';
 import { lackOfFit } from '../model/ols.js';
 import { noiseOf } from '../model/noise.js';
+import { timeRatios, lifeAtConditions, probabilityPlot } from '../model/survreg.js';
 import { fitMixedModel, observationTable, randomEffects } from '../model/mixed.js';
 import { fitCountMixedModel, randomGroupOf, glmmTests } from '../model/glmm.js';
 import { defaultFormula } from '../model/defaults.js';
 import { checkConfirmation } from '../design/augment.js';
 import { serializeStudy } from '../study.js';
 import { responseSlice, runsOnSlice, stationaryPoint, canonicalAxesOn } from '../model/surface.js';
-import { contourSVG, viridis } from './svg-space.js';
+import { contourSVG, probabilitySVG, viridis } from './svg-space.js';
 import { covariateSlopes, covariateTable, droppedNote } from '../model/covariates.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -97,6 +98,20 @@ function responseSection(study, r, formula) {
       const rows = glmmTests(fit, 1), F = rows.some(x => x.F !== undefined);
       out.push('<h3>Likelihood-ratio tests (type I)</h3>', tbl(['source', 'df', 'χ²', ...(F ? ['F'] : []), 'p'], rows.map(x => [x.term, x.df, x.chi2, ...(F ? [x.F ?? ''] : []), pval(x.p)])));
       out.push(contourHTML(study, fit, r));
+    } else if (['weibull', 'lognormal'].includes(r.distribution)) {
+      // times to failure (issue #83): the accelerated-life model, the life at each condition and the probability plot
+      const fit = fitModel(study, formula), nm = noiseOf(fit), u = r.units ? ` (${r.units})` : '';
+      out.push(`<p>Model: <code>${esc(formula)}</code> — ${esc(nm.label)}, ${fit.n} units, ${fit.events} failed, ${fit.censored} still working at the end of the test (censored); coefficients on the log-time scale in coded units. A time ratio multiplies every quantile of the life per coded unit.${fit.aliased.length ? ` Aliased (not estimable): ${esc(fit.aliased.join(', '))}.` : ''}</p>`);
+      out.push(covariateHTML(fit, r));
+      const tr = timeRatios(fit);
+      out.push(tbl(['term', 'estimate', 'std. error', 'z', 'p', '', 'time ratio', '95% interval'], tr.map(x => [x.term, x.estimate, x.se, x.estimate / x.se, pval(fit.p[fit.columns.indexOf(x.term)]), stars(fit.p[fit.columns.indexOf(x.term)]), x.assign >= 0 ? x.ratio : '', x.assign >= 0 ? `${num(x.lower)} … ${num(x.upper)}` : ''])));
+      out.push(`<p class="stats">σ of log time = ${esc(num(fit.scale))}${fit.distribution === 'weibull' ? ` · Weibull shape β = ${esc(num(1 / fit.scale))}` : ''} · log-likelihood = ${esc(num(fit.loglik))} · AIC = ${esc(num(fit.aic))}</p>`);
+      for (const w of fit.warnings) out.push(`<p class="note">${esc(w)}</p>`);
+      const rows = anova(fit, 1);
+      out.push('<h3>Likelihood-ratio tests (type I)</h3>', tbl(['source', 'df', 'χ²', 'p'], rows.filter(x => x.term !== 'Residuals').map(x => [x.term, x.df, x.chi2, pval(x.p)])));
+      out.push(`<h3>Life at the conditions tested${esc(u)}</h3>`, tbl(['settings', 'run', 'units', 'failed', 'B10 life', '95% interval', 'median life', '95% interval'], lifeAtConditions(fit).map(c => [Object.entries(c.settings).map(([k, v]) => `${k}=${v}`).join(', '), c.runs.join(', '), c.units, c.failures,
+        c.quantiles[0].fit, `${num(c.quantiles[0].lower)} … ${num(c.quantiles[0].upper)}`, c.quantiles[1].fit, `${num(c.quantiles[1].lower)} … ${num(c.quantiles[1].upper)}`])));
+      out.push(`<div class="plots">${probabilitySVG(probabilityPlot(fit), { timeLabel: `${r.name}${u}` })}</div>`);
     } else if (r.distribution) {
       // counts and proportions: the generalised linear model
       const fit = fitModel(study, formula), nm = noiseOf(fit), ratio = fit.link === 'log' ? 'rate ratio' : fit.link === 'logit' ? 'odds ratio' : null;

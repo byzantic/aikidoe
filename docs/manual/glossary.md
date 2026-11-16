@@ -1,5 +1,9 @@
 # Glossary
 
+**Accelerated life test** — a life test at harsher conditions than in use (hotter, higher
+current, more stress), so units fail within the test; a model of how the life depends on the
+stress then predicts the life in use. See [times to failure](analysis.md#times-to-failure).
+
 **Alias** — two effects a fraction cannot tell apart; their estimates are the same combination of
 the runs. See [aliasing and resolution](concepts.md#aliasing-and-resolution).
 
@@ -12,6 +16,9 @@ least-squares mean. See [Adjusted means](analysis.md#adjusted-means).
 
 **Axial points** — runs at ±α on one factor's axis, the others at the centre; with a factorial and
 centre points they make a central composite design.
+
+**B10 life** — the time by which 10 % of units are expected to fail (B1: 1 %); a common
+measure of reliability, more relevant than the median when early failures matter.
 
 **Balanced allocation** — giving the units (animals, flasks, wafers) to the runs so that a
 covariate known in advance is uncorrelated with the factors' effects, instead of leaving it to
@@ -28,6 +35,10 @@ stage); the design and analysis account for it.
 lets the analysis estimate it and allow for it. See [crossovers](designs-comparative.md#crossovers).
 
 **Centre point** — a run at the middle of every continuous factor's range.
+
+**Censored time** — the time of a unit still working when the test stopped: its life is known to
+be longer, not how long. An accelerated-life model uses it for that, rather than leaving it out
+or treating the end of the test as a failure.
 
 **Coded units** — each continuous factor scaled so its range runs from −1 to +1.
 
@@ -157,6 +168,10 @@ machine's range), wider than the experiment's range; a path of steepest ascent s
 **Parallel curves** — dose–response curves of the same shape shifted along the log-dose axis; the
 condition for a single relative potency. See [relative potency](dose-response.md#relative-potency).
 
+**Probability plot** — times to failure plotted on a scale on which a Weibull (or log-normal)
+distribution is a straight line; points along parallel lines mean the model fits, with one shape
+for every condition. See [probability plot](analysis.md#probability-plot).
+
 **Plate layout** — which run goes in which well of a microplate; a balanced layout keeps the
 effects clear of plate, edge and row and column differences. See [layouts](plates.md#layouts).
 
@@ -222,6 +237,9 @@ there, before any run is made. See [prediction variance](concepts.md#prediction-
 
 **Surrogate** — a model fitted to a simulator's runs, used in its place for fast prediction.
 
+**Time ratio** — in a model of times to failure, the factor by which every quantile of the life
+(the B10, the median …) is multiplied per coded unit of a factor: exp of its coefficient.
+
 **Tolerance** — the spread of a factor's actual value about its setting.
 
 **Tukey's method** — comparing every pair of a factor's levels with intervals and p values that
@@ -230,6 +248,10 @@ give many chances of a false alarm. See [comparing treatments](analysis.md#compa
 
 **Variance dispersion graph** — the smallest, average and largest scaled prediction variance at
 each distance from the centre of a design: one picture to compare response-surface designs.
+
+**Weibull distribution** — the usual distribution of times to failure; its shape β says whether
+the failure rate falls with age (β < 1, early failures), stays constant (β = 1) or rises (β > 1,
+wear-out).
 
 **Williams design** — an order of the treatments for a crossover in which each treatment follows
 every other equally often, so carry-over is balanced (Williams 1949).

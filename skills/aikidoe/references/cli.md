@@ -21,6 +21,7 @@ Commands
                           append ! to mark it hard to change, e.g. T:900:1000:°C!
        SPEC for a response: id[:units][@distribution[,trials][,link]]   counts and proportions:
                           count@poisson, count@negbin, germ:%@binomial,20, pass@bernoulli, y@binomial,,probit
+                          times to failure: life:h@weibull,8 or life:h@lognormal,8 (8 units tested per run)
        [--mixture A,B,C [--total T]]   the factors that are components of a mixture, adding up to T (default 1)
        [--covariate id[:units] …]      variables that are measured, not set (see covariate)
   path STUDY --results [--next NEW.aikidoe.json [--design factorial|ccd|none] [--centre 4] [--at "A=…,B=…"]]
@@ -122,6 +123,9 @@ Commands
        odds ratios and profile intervals [--wald], analysis of deviance, overdispersion and
        separation checks [--firth]; [--distribution poisson|negbin|quasipoisson|binomial|… --link L]
        to try another than the response's
+       times to failure (a weibull or lognormal response, with units still working at the end of
+       the test censored): an accelerated-life model with time ratios, likelihood-ratio tests and
+       the life at each condition tested [--quantile 0.1] (the B10 life, and the median)
        counts and proportions in a split-plot (or with blocks): a GLMM with a random intercept per
        whole plot (automatic) or block [--random wholePlot|block|none] [--nagq 25 (1: Laplace)];
        likelihood-ratio tests, σ of the random effect and its test; --reduce works on it too
@@ -152,6 +156,7 @@ Commands
        (counts and proportions: [--exposure e] [--trials n] for the new run; with a random effect
        [--random …]: for a typical whole plot or block, averaged over them, and a new run in a new one)
        (mixed model: [--runs n] [--separate-whole-plots]; augment --confirm takes the same)
+       (times to failure: the B10 and median life, or another quantile with [--quantile 0.1])
   sites STUDY (--scheme 5|9 [--diameter 200] | --site id:x:y …)   drop-in site scheme (mm from centre)
   summary STUDY RESPONSE --stats mean,sd,logsd,rangemean   per-wafer summaries as derived responses
        (position terms in mixed-model formulas: radius2, edge, waferX, waferY, slot, slotZone)
@@ -202,6 +207,8 @@ Commands
   schema [--cli]                     JSON Schema of the study file (--cli: of the --json output)
   alias STUDY  |  alias --factors k (--runs N | --generators …)  [--order 2|3]
   plot STUDY (--pairs [--factors A,B,…] | --pv A,B [--at "C=0.5,…"] | --vdg) [--model M] [--out FILE.svg]
+  plot STUDY --life --model "life ~ …" [--out FILE.svg]
+       times to failure: the probability plot (Weibull or log-normal scale) of each condition tested
        where the runs sit, as SVG: every pair of factors (coded units), the scaled prediction
        variance over two factors for a model (default: quadratic, else 2fi, else main), or the
        variance dispersion graph

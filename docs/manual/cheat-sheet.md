@@ -83,6 +83,10 @@ before acting.
   measurements: set the response's kind so it is fitted as counts or proportions
   ([counts and proportions](analysis.md#counts-and-proportions)), and check for overdispersion
   and separation.
+- Times to failure from a life test: set the response's kind to Weibull or log-normal, and mark
+  the units still working when the test stopped as censored rather than leaving them out
+  ([times to failure](analysis.md#times-to-failure)). Check the probability plot: its lines should
+  be straight and parallel.
 - A covariate you recorded goes in the model by name; judge the terms by type II tests, and the
   factors' effects are then at the average covariate. Compare levels by their adjusted means, and
   check the slope is the same at every setting.

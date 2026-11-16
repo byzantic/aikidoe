@@ -26,10 +26,12 @@
 //
 // A response's distribution selects the model: normal (least squares, ols.js), or a generalised
 // linear model (glm.js) for counts (poisson, quasipoisson, negbin) and proportions (binomial,
-// quasibinomial, bernoulli), with the response's link.
+// quasibinomial, bernoulli), with the response's link; or an accelerated-life model (survreg.js)
+// for times to an event (weibull, lognormal), with right censoring.
 import { fitOLS, olsPredict, olsAnova } from './ols.js';
 import { fitGLM, glmPredict, glmTests, glmCompare, glmWeights, LINKS, canonicalLink, DISTRIBUTIONS } from './glm.js';
 import { fDist } from '../dist.js';
+import { fitSurvreg, survPredict, survTests, survCompare, SURV_DISTRIBUTIONS } from './survreg.js';
 
 const identity = { name: 'identity', fun: (m) => m, inv: (e) => e, deriv: () => 1 };
 
@@ -90,13 +92,35 @@ function glmNoise(id, link) {
   });
 }
 
-export const NOISE_MODELS = Object.freeze({ normal, ...Object.fromEntries(['poisson', 'quasipoisson', 'negbin', 'binomial', 'quasibinomial', 'bernoulli'].map(id => [id, glmNoise(id)])) });
+/**
+ * Times to an event (issue #83): an accelerated-life model (survreg.js), linear in log time. Rows
+ * carry censored (the unit had not failed when the test stopped). Predictions are of the median
+ * time, or of the p quantile with opts.p (0.1 for the B10 life).
+ */
+function lifeNoise(id) {
+  const log = { name: 'log', fun: Math.log, inv: Math.exp, deriv: Math.exp };
+  return Object.freeze({
+    id, label: `${SURV_DISTRIBUTIONS[id].label} times to an event (accelerated life)`, link: log, distribution: id,
+    prepare: (rows) => ({ y: rows.map(r => r.y), status: rows.map(r => (r.censored ? 0 : 1)) }),
+    fit: (mm, y, opts = {}) => fitSurvreg(mm, y, { distribution: id, status: opts.status }),
+    predict: (fit, X, opts) => survPredict(fit, X, opts),
+    tests: (fit, type = 1) => survTests(fit, type),
+    residuals: (fit) => ({ response: fit.y.map((v, i) => v - fit.linear[i]), standardised: fit.residuals, studentised: fit.residuals }),
+    compare: (big, small) => survCompare(big, small),
+    loglik: (fit) => ({ loglik: fit.loglik, k: fit.k }),
+    weights: () => null,
+    capabilities: Object.freeze({ lackOfFit: false, boxCox: false, lenth: false, mixed: false }),
+  });
+}
+
+export const NOISE_MODELS = Object.freeze({ normal, ...Object.fromEntries(['poisson', 'quasipoisson', 'negbin', 'binomial', 'quasibinomial', 'bernoulli'].map(id => [id, glmNoise(id)])),
+  weibull: lifeNoise('weibull'), lognormal: lifeNoise('lognormal') });
 
 /** The noise model with this id (default normal), with a link other than the canonical one. */
 export function noiseModel(id = 'normal', { link } = {}) {
   const m = NOISE_MODELS[id];
   if (!m) throw new Error(`unknown noise model "${id}" (known: ${Object.keys(NOISE_MODELS).join(', ')})`);
-  return id === 'normal' || !link || link === m.link.name ? m : glmNoise(id, link);
+  return id === 'normal' || !link || link === m.link.name ? m : m.distribution in SURV_DISTRIBUTIONS ? m : glmNoise(id, link);
 }
 
 /** The noise model of a study's response: its distribution and link, normal unless it says otherwise. */

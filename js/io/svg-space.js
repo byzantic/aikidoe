@@ -11,6 +11,7 @@
 //   standalone(svg)          an SVG string as a file (xmlns, a default text colour)
 import { num } from '../format.js';
 import { ticks } from './ticks.js';
+import { normal } from '../dist.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const f1 = (v) => (Math.round(v * 10) / 10).toString();
@@ -241,3 +242,45 @@ export function standalone(svg) {
   const head = /\sstyle="/.test(root) ? root.replace(/\sstyle="([^"]*)"/, ' style="background:#ffffff;$1"') : `${root} style="background:#ffffff"`;
   return `<?xml version="1.0" encoding="UTF-8"?>\n${head.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif" font-size="11" color="#1b1d21" ')}${rest}\n`;
 }
+
+/**
+ * A probability plot of times to an event (issue #83; data from survreg.js probabilityPlot):
+ * the fraction failed on the distribution's scale against time on a log scale, a colour and a
+ * fitted straight line per condition tested, with a legend below. Units still working when the
+ * test stopped are not drawn but move the failures' plotting positions.
+ */
+let ppSeq = 0;
+export function probabilitySVG(pp, { width = 460, timeLabel = 'time', title } = {}) {
+  const clip = `pp-clip-${++ppSeq}`;
+  const PAL = ['#0072B2', '#D55E00', '#009E73', '#CC79A7', '#E69F00', '#56B4E9', '#000000', '#999999'];
+  const G = pp.groups, rowsL = Math.ceil(G.length / 2), m = { l: 50, r: 14, t: 10, b: 38 + 15 * rowsL }, W = width, H = 270 + 15 * rowsL;
+  const zOf = pp.distribution === 'weibull' ? (F) => Math.log(-Math.log1p(-F)) : null;
+  const zs = G.flatMap(g => g.points.map(p => p.z));
+  const lt0 = Math.log10(pp.tMin), lt1 = Math.log10(pp.tMax), dx = (lt1 - lt0) || 1;
+  const x0 = lt0 - 0.08 * dx, x1 = lt1 + 0.08 * dx;
+  const zmin = Math.min(...zs, pp.distribution === 'weibull' ? -2.3 : -1.3), zmax = Math.max(...zs, 0.6);
+  const y0 = zmin - 0.1 * (zmax - zmin), y1 = zmax + 0.1 * (zmax - zmin);
+  const X = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = (v) => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  const out = [`<svg class="plot probability" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="width:${W}px;max-width:100%;height:auto" role="img" aria-label="${esc(title ?? `${pp.label} probability plot: fraction failed against ${timeLabel}`)}">`,
+    `<desc>${esc(G.map(g => `${g.label}: ${g.points.length} failure(s) of ${g.units}`).join('; '))}</desc>`];
+  // time ticks: 1, 2, 5 × 10^k (only 1 × 10^k over more than two decades)
+  const xt = [];
+  for (let k = Math.floor(x0) - 1; k <= Math.ceil(x1); k++) for (const d of x1 - x0 > 2 ? [1] : [1, 2, 5]) { const v = k + Math.log10(d); if (v >= x0 && v <= x1) xt.push(v); }
+  for (const v of xt) out.push(`<line x1="${f1(X(v))}" x2="${f1(X(v))}" y1="${m.t}" y2="${H - m.b}" stroke="currentColor" stroke-opacity="0.12"/><text x="${f1(X(v))}" y="${H - m.b + 14}" text-anchor="middle" font-size="9.5">${esc(num(10 ** v, 3))}</text>`);
+  const Fs = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 0.999];
+  const zq = zOf ?? normal.ppf;
+  for (const F of Fs) { const z = zq(F); if (z < y0 || z > y1) continue; out.push(`<line x1="${m.l}" x2="${W - m.r}" y1="${f1(Y(z))}" y2="${f1(Y(z))}" stroke="currentColor" stroke-opacity="0.12"/><text x="${m.l - 5}" y="${f1(Y(z) + 3)}" text-anchor="end" font-size="9.5">${esc(num(100 * F, 3))}</text>`); }
+  out.push(`<clipPath id="${clip}"><rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}"/></clipPath>`);
+  G.forEach((g, i) => {
+    const c = PAL[i % PAL.length], L = (lt) => (lt * Math.LN10 - g.line.eta) / g.line.sigma;
+    out.push(`<g clip-path="url(#${clip})"><path d="M${f1(X(x0))},${f1(Y(L(x0)))}L${f1(X(x1))},${f1(Y(L(x1)))}" stroke="${c}" stroke-width="1.5" fill="none"${i >= PAL.length ? ' stroke-dasharray="5 3"' : ''}/></g>`);
+    for (const p of g.points) out.push(`<circle cx="${f1(X(Math.log10(p.t)))}" cy="${f1(Y(p.z))}" r="3.2" fill="${c}"><title>${esc(`${g.label}: ${num(p.t, 4)} (${num(100 * p.F, 3)}% failed)`)}</title></circle>`);
+  });
+  out.push(`<line x1="${m.l}" x2="${W - m.r}" y1="${H - m.b}" y2="${H - m.b}" stroke="currentColor"/><line x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${H - m.b}" stroke="currentColor"/>`,
+    `<text x="${(m.l + W - m.r) / 2}" y="${H - m.b + 30}" text-anchor="middle">${esc(timeLabel)} (log scale)</text><text transform="translate(12 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle">% failed (${esc(pp.label)} scale)</text>`);
+  G.forEach((g, i) => { const col = i % 2, row = Math.floor(i / 2), x = m.l + col * (W - m.l) / 2, y = H - 15 * rowsL + 15 * row + 2;
+    out.push(`<circle cx="${f1(x + 4)}" cy="${y}" r="3.2" fill="${PAL[i % PAL.length]}"/><text x="${f1(x + 12)}" y="${y + 3.5}" font-size="9.5">${esc(g.label)} (${g.points.reduce((a, p) => a + p.failed, 0)}/${g.units} failed)</text>`); });
+  out.push('</svg>');
+  return out.join('');
+}
+

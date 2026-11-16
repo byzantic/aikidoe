@@ -1,0 +1,360 @@
+{
+  "aikidoe": 1,
+  "name": "Electromigration life test",
+  "description": "Accelerated life test of a metal interconnect: temperature and current density in a 2² factorial with a centre point, eight test structures per condition, the test stopped at 1000 h. Structures still working at 1000 h are censored. Simulated data.",
+  "seed": 83,
+  "factors": [
+    {
+      "id": "temp",
+      "name": "Temperature",
+      "type": "continuous",
+      "units": "°C",
+      "htc": false,
+      "low": 150,
+      "high": 200,
+      "transform": "none"
+    },
+    {
+      "id": "J",
+      "name": "Current density",
+      "type": "continuous",
+      "units": "MA/cm²",
+      "htc": false,
+      "low": 1,
+      "high": 2,
+      "transform": "none"
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "life",
+      "name": "Time to failure",
+      "units": "h",
+      "distribution": "weibull",
+      "unitsPerRun": 8,
+      "goal": "maximize",
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "full-factorial",
+    "params": {
+      "levels": [
+        2,
+        2
+      ],
+      "centrePoints": 1,
+      "seed": 83
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 5,
+        "kind": "factorial",
+        "settings": {
+          "temp": 150,
+          "J": 1
+        }
+      },
+      {
+        "run": 2,
+        "order": 1,
+        "kind": "factorial",
+        "settings": {
+          "temp": 200,
+          "J": 1
+        }
+      },
+      {
+        "run": 3,
+        "order": 2,
+        "kind": "factorial",
+        "settings": {
+          "temp": 150,
+          "J": 2
+        }
+      },
+      {
+        "run": 4,
+        "order": 3,
+        "kind": "factorial",
+        "settings": {
+          "temp": 200,
+          "J": 2
+        }
+      },
+      {
+        "run": 5,
+        "order": 4,
+        "kind": "centre",
+        "settings": {
+          "temp": 175,
+          "J": 1.5
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 1
+    },
+    {
+      "run": 1,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 2
+    },
+    {
+      "run": 1,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 3
+    },
+    {
+      "run": 1,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 4
+    },
+    {
+      "run": 1,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 5
+    },
+    {
+      "run": 1,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 6
+    },
+    {
+      "run": 1,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 7
+    },
+    {
+      "run": 1,
+      "response": "life",
+      "value": 605,
+      "repeat": 8
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 198,
+      "repeat": 1
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 761,
+      "repeat": 2
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 3
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 422,
+      "repeat": 4
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 588,
+      "repeat": 5
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 394,
+      "repeat": 6
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 341,
+      "repeat": 7
+    },
+    {
+      "run": 2,
+      "response": "life",
+      "value": 518,
+      "repeat": 8
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 395,
+      "repeat": 1
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 2
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 3
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 578,
+      "repeat": 4
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 5
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 6
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 743,
+      "repeat": 7
+    },
+    {
+      "run": 3,
+      "response": "life",
+      "value": 336,
+      "repeat": 8
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 359,
+      "repeat": 1
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 63,
+      "repeat": 2
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 204,
+      "repeat": 3
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 478,
+      "repeat": 4
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 217,
+      "repeat": 5
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 263,
+      "repeat": 6
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 418,
+      "repeat": 7
+    },
+    {
+      "run": 4,
+      "response": "life",
+      "value": 23,
+      "repeat": 8
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 1
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 733,
+      "repeat": 2
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 3
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 859,
+      "repeat": 4
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 5
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 562,
+      "repeat": 6
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 1000,
+      "censored": true,
+      "repeat": 7
+    },
+    {
+      "run": 5,
+      "response": "life",
+      "value": 389,
+      "repeat": 8
+    }
+  ],
+  "history": []
+}
