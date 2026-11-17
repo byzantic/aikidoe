@@ -81,7 +81,10 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    (every factor at three levels: `doe design --runs 27` gives a minimum-aberration 3^(k−p) fraction,
    `--generators "D=AB,E=AB2C"` your own; `doe alias` lists main effects aliased with 2fi components AB, AB²;
    factors at mixed levels: `doe design --array` gives the smallest orthogonal array (L18, L36 …) with the
-   columns of least aberration, `--array L36 --columns 1,13,…` a given one)
+   columns of least aberration, `--array L36 --columns 1,13,…` a given one;
+   noise factors: `doe design --crossed --noise M,N` for Taguchi's inner × outer array and `doe sn` for
+   signal-to-noise ratios, though a combined array with control × noise interactions usually needs fewer runs;
+   `doe recommend` shows max |r|, the largest main-effect/2fi alias correlation)
    (where the runs sit: `--pairs`, `--pv A,B` prediction variance, `--vdg`; SVG files to show the user),
    `doe sheet STUDY --csv sheet.csv` (or `--html`). Tell the user to run it in the given order.
    Runs in the wells of microplates: `doe plate STUDY --control id:role:n … --pipetting FILE.csv`

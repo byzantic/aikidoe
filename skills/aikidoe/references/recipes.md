@@ -14,16 +14,16 @@ $ doe init etch.aikidoe.json --name "Etch rate" --factor power:200:400:W --facto
 created etch.aikidoe.json: 5 factors, 1 responses, seed 101
 $ doe recommend etch.aikidoe.json --goal model --budget 16 --no-optimal
 goal: model — estimate main effects and two-factor interactions; model 2fi (16 terms); power at Δ = 2σ, α = 0.05; budget 16 runs
-#  design                runs  res.  P  D-eff %  min power
--  --------------------  ----  ----  -  -------  ---------
-1  2^(5−1) fraction        16  V     4      100
-2  Full factorial          32               100     0.9996
-3  Central composite       32             59.27     0.9633
-4  Box–Behnken             43             16.64     0.4876
-–  Plackett–Burman 12      12  3.67  3
-–  2^(5−2) fraction         8  III   2
-–  Definitive screening    13
-res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial
+#  design                runs  res.  P  D-eff %  max |r|  min power
+-  --------------------  ----  ----  -  -------  -------  ---------
+1  2^(5−1) fraction        16  V     4      100  0
+2  Full factorial          32               100  0           0.9996
+3  Central composite       32             59.27  0           0.9633
+4  Box–Behnken             43             16.64  0           0.4876
+–  Plackett–Burman 12      12  3.67  3           0.33
+–  2^(5−2) fraction         8  III   2           1
+–  Definitive screening    13                    0
+res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial; max |r|: the largest correlation between a main effect and a two-factor interaction (1: fully aliased)
 
 1. 2^(5−1) fraction (16 runs)
    + estimates main effects and all two-factor interactions (16 terms) in 16 runs

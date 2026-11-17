@@ -168,3 +168,108 @@ residual  4.417                         100
 The fitted surface's slope in temperature is 10.81 − 9.06 C + 8.31 D (coded units); it vanishes
 at these settings, so only the run-to-run variation (σ = 4.42) remains: the mean is on target and the
 temperature no longer matters.
+
+### Inner and outer arrays
+
+Taguchi's way to find robust settings is a **crossed array**. The control factors (those you set
+in production) are run in an **inner array**, the noise factors in an **outer array**, and every
+inner run is tried at every outer condition. Each set of control settings then has a mean and a
+spread over the noise. These are summarised by a **signal-to-noise ratio** (S/N, in dB):
+- larger the better: −10 log₁₀ mean(1/y²);
+- smaller the better: −10 log₁₀ mean(y²);
+- nominal the best: 10 log₁₀(ȳ²/s²).
+
+The **response table** gives the average S/N at each level of each control factor; the level
+with the highest S/N is the most robust.
+
+Mark the noise factors on the Define step (or give them a noise sd), and the Design step offers
+the inner × outer array beside the other designs. On the command line:
+
+```console
+$ doe init coat.aikidoe.json --factor "temp=low,mid,high" --factor "time=short,mid,long" --factor "primer=none,thin,thick" --factor "humidity:30:70:%" --factor "lot:1:2" --response "thickness:um" --seed 7
+created coat.aikidoe.json: 5 factors, 1 responses, seed 7
+$ doe design coat.aikidoe.json --crossed --noise humidity,lot
+coat.aikidoe.json: crossed-array, 36 runs, randomisation complete, seed 7
+inner × outer array: L9 (3^4) for temp, time, primer × full factorial 2×2 for humidity, lot = 9 × 4 runs
+note: a combined array — the noise factors in the same design, with control × noise interactions in the model, then propagation of error (doe robust) — usually needs far fewer runs
+```
+
+```file results.csv
+run,thickness
+1,44.9
+2,52.7
+3,47.4
+4,55.0
+5,48.9
+6,52.7
+7,51.3
+8,55.0
+9,52.8
+10,52.8
+11,55.2
+12,55.2
+13,50.0
+14,53.6
+15,52.3
+16,56.1
+17,53.7
+18,54.0
+19,56.0
+20,56.5
+21,51.9
+22,59.8
+23,54.2
+24,62.3
+25,54.2
+26,55.4
+27,56.5
+28,57.9
+29,52.5
+30,61.2
+31,54.8
+32,63.6
+33,56.2
+34,61.4
+35,58.6
+36,63.8
+```
+
+```console
+$ doe import coat.aikidoe.json results.csv
+36 value(s) read (wide format)
+coat.aikidoe.json: 36 observation(s)
+$ doe sn coat.aikidoe.json --goal nominal
+thickness: signal-to-noise ratio, nominal the best (dB), over the noise factors humidity, lot
+temp  time   primer  n   mean      s    S/N
+----  -----  ------  -  -----  -----  -----
+low   short  none    4     50  4.657  20.62
+low   mid    thin    4  51.97  2.555  26.17
+low   long   thick   4     54  1.386  31.81
+mid   short  thin    4     53  2.547  26.37
+mid   mid    thick   4  55.05  1.406  31.86
+mid   long   none    4  57.05  4.823  21.46
+high  short  thick   4     56  1.577  31.01
+high  mid    none    4  58.02  5.231   20.9
+high  long   thin    4     60  3.307  25.18
+
+response table: the average S/N at each level of each control factor
+factor  level: S/N                                range  rank  best
+------  ---------------------------------------  ------  ----  -----
+temp    low: 26.2   mid: 26.56   high: 25.69     0.8656     2  mid
+time    short: 26   mid: 26.31   long: 26.15     0.3112     3  mid
+primer  none: 20.99   thin: 25.9   thick: 31.56   10.57     1  thick
+note: the S/N ratio mixes the mean and the spread; check the mean and s too, or fit the response with control × noise interactions and use propagation of error (doe robust)
+```
+
+Here the primer has by far the largest range of S/N: a thick primer makes the thickness least
+sensitive to humidity.
+
+A crossed array is expensive (inner × outer runs, here 9 × 4 = 36). The S/N ratio also mixes the
+mean and the spread, so the same value can come from different means (Box 1988). The usual
+advice (Shoemaker, Tsui & Wu 1991; Myers, Montgomery & Anderson-Cook, ch. 11) is a **combined
+array** instead: put the noise factors in an ordinary design with the control factors, and fit a
+model with the **control × noise interactions**. A control factor that interacts with a noise
+factor changes how much the noise matters. Propagation of error and dual response, above, then
+find settings with the mean on target and the least spread. A combined array usually needs far
+fewer runs. The default model for a crossed array is this response model, so both analyses are
+available from the same runs.

@@ -9,6 +9,8 @@ import { code } from '../study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from './factorial.js';
 import { fraction3, minimumAberration3 } from './threelevel.js';
 import { chooseArray, arrayDesign } from './arrays.js';
+import { crossedArray } from './crossed.js';
+import { studyAliasCorrelation } from './aliascorr.js';
 import { plackettBurman, PB_RUNS } from './pb.js';
 import { ccd, boxBehnken } from './rsm.js';
 import { CATALOGUE } from './catalogue.js';
@@ -72,6 +74,14 @@ export function candidates(study, { budget } = {}) {
     out.push({ id: `oa-${a.id}`, kind: 'array', label: `Orthogonal array ${a.name}`, runs: a.runs, res: a.gwlp[0] > 1e-9 ? 3 : 4,
       note: `main effects orthogonal; ${a.gwlp[0] > 1e-9 ? `aliased with interactions (A3 = ${num(a.gwlp[0], 3)})` : 'clear of two-factor interactions'}`, opts: { array: a.id } });
   }
+  // noise factors (issue #85): Taguchi's inner × outer array (the combined arrays are the others)
+  if (f.some(x => x.noise) && f.some(x => !x.noise)) {
+    try {
+      const cr = crossedArray(levels, f.map(x => !!x.noise));
+      out.push({ id: 'crossed', kind: 'crossed', label: `Inner × outer: ${cr.params.inner} × ${cr.params.outer}`, runs: cr.X.length, res: null,
+        note: 'every control setting tried at every noise condition; a combined array with control × noise interactions usually needs far fewer runs' });
+    } catch { /* no array fits */ }
+  }
   if (twoLevel && k >= 2) for (const N of pbSizes(k, { budget })) {
     const gr = generalisedResolution(plackettBurman(k, { runs: N }).X, { max: 4 });
     out.push({ id: `pb-${N}`, kind: 'pb', label: `Plackett–Burman ${N}`, runs: N, res: null, gres: Number.isFinite(gr.resolution) ? gr.resolution : null, note: 'main effects; 2fis partially aliased (spread out, not confounded); any 3 factors form a full 2³', opts: { runs: N } });
@@ -132,6 +142,7 @@ export function buildCandidate(study, cand, o = {}) {
     case 'pb': return plackettBurman(study.factors.length, { runs: cand.opts.runs });
     case 'fraction3': return fraction3(study.factors.length, { runs: cand.opts.runs, replicates: o.replicates || 1 });
     case 'array': return arrayDesign(levelsOf(study.factors), { array: cand.opts.array, replicates: o.replicates || 1 });
+    case 'crossed': return crossedArray(levelsOf(study.factors), study.factors.map(x => !!x.noise), { replicates: o.replicates || 1 });
     case 'ccd': return ccd(study.factors.length, { cubeRuns: cand.opts.cubeRuns, alpha: o.alpha === 'number' ? Number(o.alphaValue) : o.alpha || undefined,
       inscribed: !!o.inscribed, ...(o.rsmBlocks ? { blocks: true } : {}), ...(o.centre !== '' && o.centre !== undefined ? { centre: o.rsmBlocks ? [Number(o.centre), Number(o.centreAxial ?? o.centre)] : Number(o.centre) } : {}) });
     case 'bbd': return boxBehnken(study.factors.length, { centre: o.centre === '' || o.centre === undefined ? 3 : Number(o.centre), blocks: !!o.rsmBlocks });
@@ -273,6 +284,9 @@ function assess(study, c, d, { model, goal, budget, delta, alpha, eta, p, counts
       dEff = diagnoseCoded(study, X, { model }).dEfficiency;
     } catch { /* not available for this model */ }
   }
+  // alias correlations (issue #85): the largest |r| between a main effect and a two-factor interaction
+  let alias = null;
+  try { alias = studyAliasCorrelation(study, tmp.design.runs); } catch { /* not available */ }
   const res = d.params?.resolution ?? (Number.isFinite(c.res) ? c.res : null);
   const within = budget === undefined || n <= budget;
   // projection (issue #79): two-level designs, P; definitive screening, the quadratic in any 3 factors
@@ -292,6 +306,11 @@ function assess(study, c, d, { model, goal, budget, delta, alpha, eta, p, counts
       reasons.push('main effects clear of 2fis and quadratic terms');
       if (q3) (q3.share === 1 ? reasons : warnings).push(q3.share === 1 ? 'the full quadratic in any 3 factors can be fitted from these runs' : `the full quadratic in ${q3.estimable ? `only ${q3.estimable} of ${q3.total}` : 'none'} of the 3-factor sets can be fitted${k <= 4 ? `: ${6 - k} fake factors (13 runs, the default) make it all of them` : ''}`);
     }
+    if (alias && k >= 3 && !(res >= 4) && c.kind !== 'pb') {
+      if (alias.max > 1 - 1e-9) warnings.push(`some main effects are fully aliased with a two-factor interaction (${alias.worst.main} with ${alias.worst.interaction})`);
+      else if (alias.max > 1e-9) reasons.push(`main effects partly correlated with two-factor interactions (largest |r| ${num(alias.max, 2)}, ${alias.worst.main} with ${alias.worst.interaction}): spread out, not confounded`);
+    }
+    if (c.kind === 'crossed') warnings.push(`${n} runs: a combined array (the noise factors in the same design, with control × noise interactions in the model) usually needs far fewer`);
     if (c.kind === 'ccd' || c.kind === 'bbd') reasons.push(c.kind === 'ccd' ? 'rotatable: equal precision at equal distance from the centre' : 'three levels and no corner runs (avoids extreme combinations)');
     const at = counts ? `a ${String(counts.distribution).includes('binomial') || counts.distribution === 'bernoulli' ? 'odds' : 'rate'} ratio of ${counts.ratio} (baseline ${counts.baseline})` : `Δ = ${delta}σ`;
     if (minPower !== null) (minPower >= 0.8 ? reasons : warnings).push(`power ${minPower >= 0.8 ? '≥' : '<'} 0.8 for ${minPower >= 0.8 ? 'every term' : 'some terms'} at ${at} (smallest ${num(minPower, 2)})`);
@@ -304,5 +323,5 @@ function assess(study, c, d, { model, goal, budget, delta, alpha, eta, p, counts
   if (c.kind === 'full' && n > 64 && goal !== 'optimise') warnings.push('large: a fraction would answer the same question in fewer runs');
   return { id: c.id, kind: c.kind, label: c.label, runs: n, ...(wholePlots ? { wholePlots } : {}), ...(c.ignoresHtc ? { ignoresHtc: true } : {}), note: c.note, resolution: res === Infinity ? null : res,
     ...(c.gres !== undefined ? { generalisedResolution: c.gres } : {}), projectivity: P, ...(proj?.capped ? { projectivityCapped: true } : {}), ...(proj?.next ? { projectivityNext: { size: proj.next.size, share: proj.next.share } } : {}), ...(q3 ? { quadratic3: q3.share } : {}),
-    dEfficiency: dEff, minPower, estimable, withinBudget: within, reasons, warnings };
+    dEfficiency: dEff, ...(alias ? { aliasMax: alias.max } : {}), minPower, estimable, withinBudget: within, reasons, warnings };
 }

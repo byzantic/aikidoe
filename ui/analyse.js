@@ -21,6 +21,7 @@ import { mixtureAnalysis } from './mixture.js';
 import { glmAnalysis } from './glm.js';
 import { lifeAnalysis } from './life.js';
 import { ordinalAnalysis } from './ordinal.js';
+import { taguchiPanel } from './taguchi.js';
 import { LIFETIMES } from '../js/study.js';
 import { glmmAnalysis, cached } from './glmm.js';
 import { fitCountMixedModel, randomGroupOf } from '../js/model/glmm.js';
@@ -297,7 +298,9 @@ export function render(ctx) {
     diag = h('section', { class: 'panel' }, h('h2', {}, 'Diagnostics', help('analysis','diagnostics')), h('div', { class: 'plots' }, figs),
       big.length ? h('div', { class: 'msg warning' }, `Studentised residual beyond ±3: ${big.map(p => `run ${p.run} (${num(p.st, 3)})`).join(', ')}. Check those results.`) : null);
   }
-  return h('div', {}, backToDose, controls, olsNote, blockToggle, summary, projPanel, mixPanel, anovaPanel, effectsPanel, adjusted(fit, (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) }), (st) => fitModel(st, formula, { ...(ui.noPosition ? { position: false } : {}) })), surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
+  // a crossed array (issue #85): Taguchi's signal-to-noise ratios before the response model
+  const snPanel = study.design?.kind === 'crossed-array' ? taguchiPanel(ctx, resp, { ui, set }) : null;
+  return h('div', {}, backToDose, controls, snPanel, olsNote, blockToggle, summary, projPanel, mixPanel, anovaPanel, effectsPanel, adjusted(fit, (f) => fitModel(study, f, { ...(ui.noPosition ? { position: false } : {}) }), (st) => fitModel(st, formula, { ...(ui.noPosition ? { position: false } : {}) })), surface(fit), diag, plateAnalysisPanel(study, fit, { noPosition: !!ui.noPosition, setNoPosition: (v) => set({ noPosition: v }) }), confirmPanel(ctx, fit));
 }
 
 // site values on a wafer outline, and against radius (issue #16)

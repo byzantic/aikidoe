@@ -74,6 +74,8 @@
 //                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
 //                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
 //        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
+//        noise factors (a noise sd in the study, or --noise M,N): --crossed gives Taguchi's inner × outer array
+//        [--inner L9] [--outer L4]; a combined array (any other design, noise factors included) usually needs fewer runs
 //        factors with more than two levels: --array gives the smallest orthogonal array that fits (L9, L16,
 //        L18, L25, L27, L32, L36 …) with the columns of least aberration; --array L36 [--columns 1,4,12,…] a given one
 //        every factor at three levels (categorical, or continuous with three levels listed): --runs 9|27|81
@@ -174,6 +176,9 @@
 //        best settings by overall desirability over the fitted models; warns when they lie beyond
 //        the runs (outside their convex hull, or a prediction variance over the largest at a run).
 //        A covariate in --fix ("vcd=0.4"): the best settings for that value of it (else its mean)
+//   sn STUDY [--response R] [--goal larger|smaller|nominal] [--noise M,N]
+//        Taguchi's analysis of a crossed (inner × outer) array: the signal-to-noise ratio, mean and s of each set of
+//        control settings over the noise factors, and the response table (average S/N per level, its range, the best)
 //   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
 //        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
 //        propagation of error and dual-response optimisation (mean on target, minimum s)
@@ -234,6 +239,8 @@ import { createStudy, parseStudy, serializeStudy, StudyError, code, decode, cova
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { fraction3, factorName3 } from '../js/design/threelevel.js';
 import { arrayDesign, orthogonalArray, gwlp, ARRAYS } from '../js/design/arrays.js';
+import { crossedArray } from '../js/design/crossed.js';
+import { crossedSummaries, responseTable } from '../js/model/taguchi.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
 import { codedRuns, codedRow, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
@@ -525,6 +532,15 @@ function cmdDesign({ pos, opt }) {
       ...(centreOpt !== undefined ? { centre: centreOpt } : {}), ...(opt.blocks ? { blocks: opt.blocks === true ? true : int(opt.blocks, 'blocks') } : {}) });
   } else if (opt.bbd) d = boxBehnken(k, { ...(centreOpt !== undefined ? { centre: centreOpt } : {}), blocks: !!opt.blocks });
   else if (opt.pb) d = plackettBurman(k, opt.runs ? { runs: int(opt.runs, 'runs') } : {});
+  else if (opt.crossed) {
+    // Taguchi's inner × outer array (issue #85): noise factors from --noise, or those marked noise in the study
+    if (opt.centre || opt.blocks) fail('a crossed array has no centre points or blocks');
+    const lv = study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels?.length ?? 2));
+    const ids = opt.noise !== undefined ? String(opt.noise).split(',').map(x => x.trim()) : study.factors.filter(f => f.noise).map(f => f.id);
+    for (const id of ids) if (!study.factors.some(f => f.id === id)) fail(`--noise: no factor "${id}"`);
+    if (!ids.length) fail('--crossed: name the noise factors (--noise M,N), or give them a noise sd in the study');
+    d = crossedArray(lv, study.factors.map(f => ids.includes(f.id)), { ...(opt.inner ? { inner: String(opt.inner) } : {}), ...(opt.outer ? { outer: String(opt.outer) } : {}), replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1 });
+  }
   else if (opt.array !== undefined) {
     // an orthogonal array (issue #85): the smallest that fits, or the one named; the columns of least aberration, or those given
     if (opt.centre || opt.blocks) fail('an orthogonal array has no centre points or blocks');
@@ -561,7 +577,11 @@ function cmdDesign({ pos, opt }) {
     const nWP = d.params.wholePlotEffects ? d.params.wholePlotEffects.length : k1Count(study), what = d.params.wholePlotEffects ? 'whole-plot main effects and 2fis' : 'whole-plot main effects';
     if (W - 1 - nWP < 2) out(`note: ${W} whole plots leave ${Math.max(0, W - 1 - nWP)} df for the whole-plot error after the ${what}: too few to test them; more whole plots (--whole-plots) or replicates (--replicates) would help`);
   }
-  if (d.kind === 'orthogonal-array') {
+  if (d.kind === 'crossed-array') {
+    const p = d.params;
+    out(`inner × outer array: ${p.inner} for ${study.factors.filter((_, j) => !p.noise.includes(j)).map(f => f.id).join(', ')} × ${p.outer} for ${p.noise.map(j => study.factors[j].id).join(', ')} = ${p.innerRuns} × ${p.outerRuns} runs`);
+    out('note: a combined array — the noise factors in the same design, with control × noise interactions in the model, then propagation of error (doe robust) — usually needs far fewer runs');
+  } else if (d.kind === 'orthogonal-array') {
     const p = d.params;
     out(`orthogonal array ${p.name}: columns ${p.columns.map(j => j + 1).join(', ')} for ${study.factors.map(f => f.id).join(', ')}; generalised word-length pattern (A3, A4) ${p.gwlp.map(v => num(v, 4)).join(', ')}; ${p.source}  (see: alias ${file})`);
   } else if (d.kind === 'fractional-factorial-3') {
@@ -2317,9 +2337,9 @@ function cmdRecommend({ pos, opt }) {
   const at = r.counts ? `a ${String(r.counts.distribution).includes('binomial') || r.counts.distribution === 'bernoulli' ? 'odds' : 'rate'} ratio of ${typeof r.counts.ratio === 'number' ? r.counts.ratio : JSON.stringify(r.counts.ratio)} (${r.counts.distribution}, baseline ${r.counts.baseline})` : `Δ = ${r.delta}σ`;
   out(`goal: ${r.goal} — ${r.goalText}; model ${r.model} (${r.terms} terms); power at ${at}, α = ${r.alpha}${r.budget ? `; budget ${r.budget} runs` : ''}`);
   const kF = study.factors.length;
-  out(table([{ key: 'rank', label: '#' }, { key: 'label', label: 'design', align: 'left' }, { key: 'runs', label: 'runs' }, { key: 'res', label: 'res.', align: 'left' }, { key: 'P', label: 'P' }, { key: 'dEff', label: 'D-eff %' }, { key: 'pw', label: 'min power' }],
-    r.options.map(o => ({ ...o, rank: o.rank ?? '–', res: o.resolution ? roman(o.resolution) : o.generalisedResolution ? num(o.generalisedResolution, 3) : '', P: o.projectivity && o.projectivity < kF ? `${o.projectivity}${o.projectivityCapped ? '+' : ''}` : '', dEff: o.dEfficiency ?? '', pw: o.minPower ?? '' }))));
-  out('res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial');
+  out(table([{ key: 'rank', label: '#' }, { key: 'label', label: 'design', align: 'left' }, { key: 'runs', label: 'runs' }, { key: 'res', label: 'res.', align: 'left' }, { key: 'P', label: 'P' }, { key: 'dEff', label: 'D-eff %' }, { key: 'r', label: 'max |r|' }, { key: 'pw', label: 'min power' }],
+    r.options.map(o => ({ ...o, rank: o.rank ?? '–', res: o.resolution ? roman(o.resolution) : o.generalisedResolution ? num(o.generalisedResolution, 3) : '', P: o.projectivity && o.projectivity < kF ? `${o.projectivity}${o.projectivityCapped ? '+' : ''}` : '', dEff: o.dEfficiency ?? '', r: o.aliasMax !== undefined ? num(o.aliasMax, 2) : '', pw: o.minPower ?? '' }))));
+  out('res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial; max |r|: the largest correlation between a main effect and a two-factor interaction (1: fully aliased)');
   for (const o of r.options.filter(x => x.rank && x.rank <= 3)) {
     out(`\n${o.rank}. ${o.label} (${o.runs} runs${o.wholePlots ? `, ${o.wholePlots} whole plots` : ''})`);
     for (const x of o.reasons) out(`   + ${x}`);
@@ -2327,6 +2347,24 @@ function cmdRecommend({ pos, opt }) {
   }
   const no = r.options.filter(x => !x.rank);
   if (no.length) out(`\nnot suitable for ${r.model}: ${no.map(o => `${o.label} (${o.warnings[0] ?? 'not estimable'})`).join('; ')}`);
+}
+
+/** Taguchi's analysis of a crossed array: signal-to-noise ratios per inner run, and the response table. */
+function cmdSn({ pos, opt }) {
+  const study = load(pos[0]);
+  const rid = opt.response ? String(opt.response) : study.responses[0]?.id;
+  const noise = opt.noise !== undefined ? String(opt.noise).split(',').map(x => x.trim()) : undefined;
+  let s;
+  try { s = crossedSummaries(study, rid, { ...(opt.goal ? { goal: String(opt.goal) } : {}), ...(noise ? { noise } : {}) }); } catch (e) { fail(e.message); }
+  const t = responseTable(s, study);
+  put({ kind: 'signal-to-noise', response: rid, goal: s.goal, control: s.control, noise: s.noise, runs: s.rows, table: t });
+  out(`${rid}: signal-to-noise ratio, ${s.goalLabel} (dB), over the noise factors ${s.noise.join(', ')}`);
+  out(table([...s.control.map(id => ({ key: `c_${id}`, label: id })), { key: 'n', label: 'n' }, { key: 'mean', label: 'mean' }, { key: 'sd', label: 's' }, { key: 'sn', label: 'S/N' }],
+    s.rows.map(r => ({ ...Object.fromEntries(s.control.map(id => [`c_${id}`, r.settings[id]])), n: r.n, mean: r.mean, sd: r.sd, sn: r.sn }))));
+  out('\nresponse table: the average S/N at each level of each control factor');
+  out(table([{ key: 'factor', label: 'factor', align: 'left' }, { key: 'levels', label: 'level: S/N', align: 'left' }, { key: 'range', label: 'range' }, { key: 'rank', label: 'rank' }, { key: 'best', label: 'best', align: 'left' }],
+    t.map(x => ({ ...x, levels: x.levels.map(l => `${l.level}: ${num(l.sn, 4)}`).join('   ') }))));
+  out('note: the S/N ratio mixes the mean and the spread; check the mean and s too, or fit the response with control × noise interactions and use propagation of error (doe robust)');
 }
 
 function cmdReport({ pos, opt }) {
@@ -2517,7 +2555,7 @@ const roman = (n) => (Number.isFinite(n) ? ['', 'I', 'II', 'III', 'IV', 'V', 'VI
 
 // ---------------------------------------------------------------- main
 
-const COMMANDS = { compare: cmdCompare, equivalence: cmdEquivalence, path: cmdPath, allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
+const COMMANDS = { sn: cmdSn, compare: cmdCompare, equivalence: cmdEquivalence, path: cmdPath, allocate: cmdAllocate, means: cmdMeans, covariate: cmdCovariate, exercise: cmdExercise, report: cmdReport, recommend: cmdRecommend, schema: cmdSchema, 'comb-over': cmdCombOver, simulator: cmdSimulator, simulate: cmdSimulate, tolerance: cmdTolerance, spec: cmdSpec, yield: cmdYield, sensitivity: cmdSensitivity, init: cmdInit, design: cmdDesign, augment: cmdAugment, predict: cmdPredict, power: cmdPower, sites: cmdSites, summary: cmdSummary, gauge: cmdGauge, goal: cmdGoal, optimise: cmdOptimise, robust: cmdRobust, optimize: cmdOptimise, sheet: cmdSheet, plate: cmdPlate, dose: cmdDose, import: cmdImport, fit: cmdFit, alias: cmdAlias, plot: cmdPlot, info: cmdInfo };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

@@ -25,16 +25,16 @@ Ask for the options for screening within a budget of 16 runs:
 ```console
 $ doe recommend reactor.aikidoe.json --goal screen --budget 16 --no-optimal
 goal: screen — find the active factors (main effects); model main (6 terms); power at Δ = 2σ, α = 0.05; budget 16 runs
-#  design                runs  res.  P  D-eff %  min power
--  --------------------  ----  ----  -  -------  ---------
-1  Plackett–Burman 12      12  3.67  3      100     0.8213
-2  2^(5−1) fraction        16  V     4      100     0.9488
-3  Definitive screening    13             80.36     0.7738
-4  2^(5−2) fraction         8  III   2      100     0.3568
-5  Full factorial          32               100     0.9997
-6  Central composite       32             78.68      0.997
-7  Box–Behnken             43             43.87     0.9735
-res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial
+#  design                runs  res.  P  D-eff %  max |r|  min power
+-  --------------------  ----  ----  -  -------  -------  ---------
+1  Plackett–Burman 12      12  3.67  3      100  0.33        0.8213
+2  2^(5−1) fraction        16  V     4      100  0           0.9488
+3  Definitive screening    13             80.36  0           0.7738
+4  2^(5−2) fraction         8  III   2      100  1           0.3568
+5  Full factorial          32               100  0           0.9997
+6  Central composite       32             78.68  0            0.997
+7  Box–Behnken             43             43.87  0           0.9735
+res.: resolution (Plackett–Burman: generalised resolution, between III and IV); P: projectivity — any P factors form a full two-level factorial; max |r|: the largest correlation between a main effect and a two-factor interaction (1: fully aliased)
 
 1. Plackett–Burman 12 (12 runs)
    + estimates every main effect (6 terms) in 12 runs

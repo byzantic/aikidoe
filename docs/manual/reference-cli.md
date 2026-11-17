@@ -86,6 +86,8 @@ Commands
                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
+       noise factors (a noise sd in the study, or --noise M,N): --crossed gives Taguchi's inner × outer array
+       [--inner L9] [--outer L4]; a combined array (any other design, noise factors included) usually needs fewer runs
        factors with more than two levels: --array gives the smallest orthogonal array that fits (L9, L16,
        L18, L25, L27, L32, L36 …) with the columns of least aberration; --array L36 [--columns 1,4,12,…] a given one
        every factor at three levels (categorical, or continuous with three levels listed): --runs 9|27|81
@@ -186,6 +188,9 @@ Commands
        best settings by overall desirability over the fitted models; warns when they lie beyond
        the runs (outside their convex hull, or a prediction variance over the largest at a run).
        A covariate in --fix ("vcd=0.4"): the best settings for that value of it (else its mean)
+  sn STUDY [--response R] [--goal larger|smaller|nominal] [--noise M,N]
+       Taguchi's analysis of a crossed (inner × outer) array: the signal-to-noise ratio, mean and s of each set of
+       control settings over the noise factors, and the response table (average S/N per level, its range, the best)
   robust STUDY --model "y ~ …" [--noise "A=sd"] [--tolerance "C=sd,…"] [--sd-model "y_logsd ~ …"]
        [--goal target|mse|maximize|minimize] [--target T] [--max-sd s] [--fix …] [--at …]
        propagation of error and dual-response optimisation (mean on target, minimum s)
@@ -256,7 +261,7 @@ of tables:
 A failure is `{ "ok": false, "error": { "message": … } }` with a non-zero exit code. Numbers
 that are not finite (NaN, ±∞) are written as `null`. The object for each command is described
 by [schema/cli.schema.json](../../schema/cli.schema.json) (`doe schema --cli` prints it); the
-commands with JSON results are: `alias`, `allocate`, `augment`, `comb-over`, `compare`, `covariate`, `design`, `dose`, `equivalence`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `means`, `optimise`, `path`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `spec`, `summary`, `tolerance`, `yield`.
+commands with JSON results are: `alias`, `allocate`, `augment`, `comb-over`, `compare`, `covariate`, `design`, `dose`, `equivalence`, `exercise`, `fit`, `gauge`, `goal`, `import`, `info`, `init`, `means`, `optimise`, `path`, `plate`, `plot`, `power`, `predict`, `recommend`, `report`, `robust`, `schema`, `sensitivity`, `sheet`, `simulate`, `simulator`, `sites`, `sn`, `spec`, `summary`, `tolerance`, `yield`.
 
 ```console
 $ doe init demo.aikidoe.json --factor A:0:1 --factor B:0:1 --response y --seed 1 --json

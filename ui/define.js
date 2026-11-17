@@ -39,23 +39,30 @@ export function render(ctx) {
         else { o.type = 'continuous'; delete o.levels; o.low = -1; o.high = 1; }
       }), { disabled: locked, 'aria-label': 'type' })),
       cat
-        ? h('td', { colspan: 4 }, h('input', { type: 'text', value: (f.levels ?? []).join(', '), disabled: locked, 'aria-label': 'levels', title: 'levels, separated by commas',
+        ? h('td', { colspan: 5 }, h('input', { type: 'text', value: (f.levels ?? []).join(', '), disabled: locked, 'aria-label': 'levels', title: 'levels, separated by commas',
             onchange: (e) => set(o => { o.levels = e.target.value.split(',').map(s => s.trim()).filter(Boolean); }) }))
         : [h('td', {}, h('input', { class: 'num', value: f.low ?? '', 'aria-label': 'low', onchange: (e) => set(o => numOrDelete(o, 'low', e.target.value)) })),
            h('td', {}, h('input', { class: 'num', value: f.high ?? '', 'aria-label': 'high', onchange: (e) => set(o => numOrDelete(o, 'high', e.target.value)) })),
+           // listed levels (issue #85): three or more settings for orthogonal arrays and three-level fractions
+           h('td', {}, h('input', { class: 'short', value: (f.levels ?? []).join(', '), placeholder: 'low, high', disabled: locked, 'aria-label': 'continuous levels',
+             title: 'optional: the settings to run, separated by commas (e.g. 20, 30, 40 for three levels); blank: low and high',
+             onchange: (e) => set(o => { const v = e.target.value.split(',').map(x => Number(x.trim())).filter(Number.isFinite); if (v.length >= 2) { o.levels = v; o.low = Math.min(...v); o.high = Math.max(...v); } else delete o.levels; }) })),
            h('td', {}, select(['linear', 'log'], f.transform === 'log' ? 'log' : 'linear', (v) => set(o => { if (v === 'log') o.transform = 'log'; else delete o.transform; }), { 'aria-label': 'scale' })),
            // operating limits (#81): where a path of steepest ascent must stop
            h('td', { class: 'limits' }, ['lower', 'upper'].map(k => h('input', { class: 'num', style: 'width:5em', value: f.limits?.[k] ?? '', placeholder: k === 'lower' ? 'min' : 'max', 'aria-label': `limit ${k}`, title: `operating limit: the ${k === 'lower' ? 'lowest' : 'highest'} setting the process can be run at at all (for a path of steepest ascent)`,
              onchange: (e) => set(o => { const v = e.target.value.trim(), L = { ...(o.limits ?? {}) }; if (v === '' || !Number.isFinite(Number(v))) delete L[k]; else L[k] = Number(v); if (Object.keys(L).length) o.limits = L; else delete o.limits; }) })))],
       h('td', { class: 'n' }, cat ? null : h('input', { type: 'checkbox', checked: !!d.mixture?.components.includes(f.id), disabled: locked, 'aria-label': 'mixture component', title: 'a component of a mixture: the components add up to a fixed total (low and high are its bounds)',
         onchange: (e) => update(x => { const c = new Set(x.mixture?.components ?? []); if (e.target.checked) c.add(f.id); else c.delete(f.id); if (c.size) x.mixture = { ...(x.mixture ?? {}), components: x.factors.map(g => g.id).filter(id => c.has(id)) }; else delete x.mixture; }) })),
+      // a noise factor (issue #85): varied in the experiment, not controlled in production
+      h('td', { class: 'n' }, cat ? null : h('input', { type: 'checkbox', checked: !!f.noise, 'aria-label': 'noise factor', title: 'a noise factor: varied in the experiment, but not controlled in production (its sd, half the range unless set on the Optimise step, is used for robust design)',
+        onchange: (e) => set(o => { if (e.target.checked) o.noise = { sd: Math.abs((o.high ?? 1) - (o.low ?? -1)) / 2 }; else delete o.noise; }) })),
       h('td', { class: 'n' }, h('input', { type: 'checkbox', checked: !!f.htc, 'aria-label': 'hard to change', title: 'hard to change: set once per batch / furnace run (whole plot)', onchange: (e) => set(o => { o.htc = e.target.checked; }) })),
       h('td', {}, h('button', { class: 'btn', disabled: locked || d.factors.length < 2, title: 'remove factor', onclick: () => update(x => { const id = x.factors[i].id; x.factors.splice(i, 1); x.constraints = []; if (x.mixture) { x.mixture.components = x.mixture.components.filter(c => c !== id); if (!x.mixture.components.length) delete x.mixture; } }) }, '✕')));
   });
   const factors = h('section', { class: 'panel' }, h('h2', {}, 'Factors', help('concepts','factors-and-coded-units')),
     lockNote,
     h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'type', 'low', 'high', 'scale', 'limits', 'mixture', 'hard to change', ''].map(t => h('th', {}, t)))),
+      h('thead', {}, h('tr', {}, ['id', 'name', 'units', 'type', 'low', 'high', 'levels', 'scale', 'limits', 'mixture', 'noise', 'hard to change', ''].map(t => h('th', {}, t)))),
       h('tbody', {}, fRows))),
     d.mixture ? h('div', { class: 'row small', id: 'mixture-total', style: 'margin-top:6px' },
       h('b', {}, `Mixture: ${d.mixture.components.join(' + ')}`), ' add up to',
