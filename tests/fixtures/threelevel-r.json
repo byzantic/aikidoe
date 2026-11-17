@@ -1,0 +1,252 @@
+{
+  "fixture": "threelevel-r",
+  "generator": "tests/ref/threelevel_r.R",
+  "meta": {
+    "R": "4.3.3",
+    "packages": {
+      "DoE.base": "1.2.5"
+    }
+  },
+  "cases": [
+    {
+      "name": "minimum aberration 9 runs k 3",
+      "input": {
+        "kind": "ma",
+        "runs": 9,
+        "k": 3
+      },
+      "output": {
+        "gwlp": [2]
+      }
+    },
+    {
+      "name": "minimum aberration 9 runs k 4",
+      "input": {
+        "kind": "ma",
+        "runs": 9,
+        "k": 4
+      },
+      "output": {
+        "gwlp": [8, 0]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 4",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 4
+      },
+      "output": {
+        "gwlp": [0, 2]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 5",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 5
+      },
+      "output": {
+        "gwlp": [2, 6, 0]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 6",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 6
+      },
+      "output": {
+        "gwlp": [4, 18, 0, 4]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 7",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 7
+      },
+      "output": {
+        "gwlp": [10, 30, 18, 16, 6]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 8",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 8
+      },
+      "output": {
+        "gwlp": [16, 60, 48, 64, 48, 6]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 9",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 9
+      },
+      "output": {
+        "gwlp": [24, 108, 108, 192, 216, 54, 26]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 10",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 10
+      },
+      "output": {
+        "gwlp": [42, 144, 270, 480, 630, 378, 206, 36]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 11",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 11
+      },
+      "output": {
+        "gwlp": [60, 216, 504, 1092, 1620, 1530, 1034, 432, 72]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 12",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 12
+      },
+      "output": {
+        "gwlp": [80, 324, 864, 2184, 3888, 4590, 4136, 2592, 864, 160]
+      }
+    },
+    {
+      "name": "minimum aberration 27 runs k 13",
+      "input": {
+        "kind": "ma",
+        "runs": 27,
+        "k": 13
+      },
+      "output": {
+        "gwlp": [104, 468, 1404, 4056, 8424, 11934, 13442, 11232, 5616, 2080, 288]
+      }
+    },
+    {
+      "name": "minimum aberration 81 runs k 5",
+      "input": {
+        "kind": "ma",
+        "runs": 81,
+        "k": 5
+      },
+      "output": {
+        "gwlp": [0, 0, 2]
+      }
+    },
+    {
+      "name": "minimum aberration 81 runs k 6",
+      "input": {
+        "kind": "ma",
+        "runs": 81,
+        "k": 6
+      },
+      "output": {
+        "gwlp": [0, 4, 4, 0]
+      }
+    },
+    {
+      "name": "minimum aberration 81 runs k 7",
+      "input": {
+        "kind": "ma",
+        "runs": 81,
+        "k": 7
+      },
+      "output": {
+        "gwlp": [0, 10, 12, 2, 2]
+      }
+    },
+    {
+      "name": "3^(4-1) D=ABC",
+      "input": {
+        "kind": "generators",
+        "m": 3,
+        "generators": [
+          [1, 1, 1]
+        ]
+      },
+      "output": {
+        "gwlp": [0, 2]
+      }
+    },
+    {
+      "name": "3^(4-2) C=AB D=AB2",
+      "input": {
+        "kind": "generators",
+        "m": 2,
+        "generators": [
+          [1, 1],
+          [1, 2]
+        ]
+      },
+      "output": {
+        "gwlp": [8, 0]
+      }
+    },
+    {
+      "name": "3^(5-2) D=AB E=AB2C",
+      "input": {
+        "kind": "generators",
+        "m": 3,
+        "generators": [
+          [1, 1, 0],
+          [1, 2, 1]
+        ]
+      },
+      "output": {
+        "gwlp": [2, 6, 0]
+      }
+    },
+    {
+      "name": "3^(6-3) D=AB E=AC F=BC2",
+      "input": {
+        "kind": "generators",
+        "m": 3,
+        "generators": [
+          [1, 1, 0],
+          [1, 0, 1],
+          [0, 1, 2]
+        ]
+      },
+      "output": {
+        "gwlp": [8, 6, 12, 0]
+      }
+    },
+    {
+      "name": "3^(7-3) E=ABC F=AB2D G=BC2D2",
+      "input": {
+        "kind": "generators",
+        "m": 4,
+        "generators": [
+          [1, 1, 1, 0],
+          [1, 2, 0, 1],
+          [0, 1, 2, 2]
+        ]
+      },
+      "output": {
+        "gwlp": [0, 10, 12, 2, 2]
+      }
+    }
+  ],
+  "tolerance": {
+    "rel": 0,
+    "abs": 1e-06
+  }
+}

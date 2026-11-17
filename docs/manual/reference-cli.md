@@ -86,6 +86,8 @@ Commands
                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
+       every factor at three levels (categorical, or continuous with three levels listed): --runs 9|27|81
+       gives a minimum-aberration 3^(k−p) fraction, --generators "D=ABC,E=AB²C" (or AB2C) your own
        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
        [--whole-plots W] [--eta η (optimal; σ²_wp/σ², default 1)] [--no-split-plot]
        [--sheet FILE.csv] [--html FILE.html]

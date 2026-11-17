@@ -4,6 +4,19 @@ source("tests/ref/fixture.R")
 set.seed(20261105)
 
 hilbert <- function(n) outer(1:n, 1:n, function(i, j) 1 / (i + j - 1))
+# The rows of R are only determined up to sign (a row of R and the column of Q with it can both
+# change sign). For the orthogonal +-1 designs below a Householder pivot can be zero up to
+# rounding, so its sign depends on the BLAS build. Record R with each row's sign fixed: its
+# diagonal >= 0, or, where the diagonal is negligible, its first clearly non-zero entry >= 0.
+# tests/linalg.test.mjs normalises the app's R the same way.
+sign_rows <- function(R) {
+  tiny <- 1e-8 * max(1, abs(R))
+  for (i in seq_len(nrow(R))) {
+    v <- if (i <= ncol(R) && abs(R[i, i]) > tiny) R[i, i] else { nz <- R[i, abs(R[i, ]) > tiny]; if (length(nz)) nz[1] else 1 }
+    if (v < 0) R[i, ] <- -R[i, ]
+  }
+  R
+}
 # 2^(4-1) design, D = ABC, coded ±1
 d <- expand.grid(A = c(-1, 1), B = c(-1, 1), C = c(-1, 1)); d$D <- d$A * d$B * d$C
 mm <- function(f) unname(model.matrix(f, d))
@@ -28,7 +41,7 @@ cases <- lapply(mats, function(c) {
   y <- rnorm(m)
   q <- qr(A)                       # LAPACK = FALSE: dqrdc2, tol 1e-7
   k <- min(m, n); r <- q$rank; piv <- q$pivot
-  R <- qr.R(q, complete = FALSE)   # k x n, pivoted column order
+  R <- sign_rows(qr.R(q, complete = FALSE))   # k x n, pivoted column order, rows' signs fixed
   b <- qr.coef(q, y)               # NA for aliased columns
   cov <- matrix(NA_real_, n, n)
   if (r > 0) { ci <- chol2inv(R[1:r, 1:r, drop = FALSE]); cov[piv[1:r], piv[1:r]] <- ci }

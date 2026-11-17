@@ -157,7 +157,8 @@ export function fractionalFactorial(k, opts = {}) {
 
 // ---------------------------------------------------------------- centre points and replicates
 
-function finish(design, opts) {
+/** Add centre points and replicates to a generated design (used by the other generators too). */
+export function finish(design, opts) {
   let { X, block, runKind } = design;
   const k = design.levels.length;
   const centre = opts.centre ?? 0;

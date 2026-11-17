@@ -8,6 +8,7 @@ import { num } from '../js/format.js';
 import { estimableProjections } from '../js/design/projectivity.js';
 import { spacePanel } from './space.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
+import { factorName3 } from '../js/design/threelevel.js';
 import { plackettBurman, correlationTable, PB_RUNS } from '../js/design/pb.js';
 import { ccd, boxBehnken } from '../js/design/rsm.js';
 import { CATALOGUE } from '../js/design/catalogue.js';
@@ -125,7 +126,7 @@ export function render(ctx) {
     field('seed', h('input', { class: 'num', type: 'number', value: ui.seed ?? study.seed, 'aria-label': 'seed', onchange: (e) => set({ seed: Number(e.target.value) }) })))
     : h('div', { class: 'row' },
     cand.kind === 'lhs' ? field('runs', numIn('lhsRuns', { min: 2, placeholder: String(cand.runs), 'aria-label': 'lhs runs' })) : null,
-    cand.kind !== 'pb' && cand.kind !== 'optimal' && cand.kind !== 'lhs' && !isSP ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
+    cand.kind !== 'pb' && cand.kind !== 'fraction3' && cand.kind !== 'optimal' && cand.kind !== 'lhs' && !isSP ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
     cand.kind === 'sp-frac' ? (() => { const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length; const ch = wholePlotChoices(k1, htc.length - k1, cand.opts.runs);
       return field('whole plots', select(ch.map(W => ({ value: W, label: `${W} of ${cand.opts.runs / W} runs` })), ui.wholePlots ?? defaultWholePlots(k1, htc.length - k1, cand.opts.runs), (v) => set({ wholePlots: Number(v) }), { 'aria-label': 'whole plots' })); })() : null,
     cand.kind === 'sp-optimal' ? optimalOptions(study, ui, set, true) : null,
@@ -224,6 +225,20 @@ function diagnostics(study, d, modelFor) {
     parts.push(h('h3', {}, 'Aliasing'), h('div', { class: 'mono small' }, `generators: ${gen.join(', ')}`), h('div', { class: 'mono small' }, `defining relation: I = ${T.definingRelation(r, ids).slice(0, 8).join(' = ')}${T.definingRelation(r).length > 8 ? ' = …' : ''}`),
       chains.length ? h('details', { open: chains.length <= 12 }, h('summary', {}, `${chains.length} alias chains among main effects and two-factor interactions`), h('div', { class: 'mono small', 'data-aliases': '' }, chains.map(c => h('div', {}, c.effects.join(' = ')))))
         : h('div', { class: 'msg ok' }, 'No aliasing among main effects and two-factor interactions.'));
+  }
+  if (d.kind === 'fractional-factorial-3') {
+    // three levels (issue #85): words over GF(3); A×B splits into the components AB and AB²
+    const p = d.params, key = ids.map((id, j) => `${factorName3(j)} = ${id}`).join(', ');
+    const al = Object.entries(p.aliases.main).filter(([, v]) => v.length);
+    parts.push(h('h3', {}, 'Aliasing', help('designs-factorial', 'three-level-fractions')),
+      h('div', { class: 'mono small' }, `factors: ${key}`),
+      h('div', { class: 'mono small' }, `generators: ${p.generators.join(', ')}`),
+      h('div', { class: 'mono small' }, `defining relation: I = ${p.definingRelation.slice(0, 8).join(' = ')}${p.definingRelation.length > 8 ? ' = …' : ''}`),
+      h('div', { class: 'mono small', 'data-wlp': '' }, `word-length pattern (A3, A4, …): ${p.wlp.slice(2).join(', ')}${p.exhaustive ? '' : ' (low aberration: sequential search)'}`),
+      al.length ? h('details', { open: al.length <= 8 }, h('summary', {}, `main effects aliased with two-factor interaction components (${al.length} of ${ids.length})`),
+        h('div', { class: 'mono small', 'data-aliases': '' }, al.map(([f, v]) => h('div', {}, `${f} = ${v.join(' = ')}`))))
+        : h('div', { class: 'msg ok' }, 'No main effect is aliased with a two-factor interaction.'),
+      h('p', { class: 'muted small' }, 'With three levels, the interaction of two factors (4 df) splits into two components, AB and AB² (2 df each). A main effect aliased with one of them is biased only by that part of the interaction. Each main effect has a linear and a quadratic part.'));
   }
   if (d.params.blockGenerators) parts.push(h('div', { class: 'small' }, `Blocks are confounded with ${[...d.params.confoundedWithBlocks[2], ...d.params.confoundedWithBlocks[3]].join(', ') || 'higher-order interactions only'}.`));
   if (d.kind === 'plackett-burman') {

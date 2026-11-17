@@ -78,6 +78,8 @@ Node ≥ 20 and a clone of https://github.com/byzantic/aikidoe; run `node tools/
    Present two or three options to the user with run counts, what each can estimate, what is
    aliased, and power — [references/decisions.md](references/decisions.md). Agree one.
 4. **Design** and hand over the **run sheet**: `doe design …`, `doe alias`, `doe power`, `doe plot`
+   (every factor at three levels: `doe design --runs 27` gives a minimum-aberration 3^(k−p) fraction,
+   `--generators "D=AB,E=AB2C"` your own; `doe alias` lists main effects aliased with 2fi components AB, AB²)
    (where the runs sit: `--pairs`, `--pv A,B` prediction variance, `--vdg`; SVG files to show the user),
    `doe sheet STUDY --csv sheet.csv` (or `--html`). Tell the user to run it in the given order.
    Runs in the wells of microplates: `doe plate STUDY --control id:role:n … --pipetting FILE.csv`
