@@ -19,6 +19,11 @@ export function defaultFormula(study, response) {
   if (d.kind === 'lhs') return `${response} ~ quadratic`;
   if (d.kind === 'plackett-burman') return `${response} ~ main`;
   if (d.kind === 'fractional-factorial') return `${response} ~ ${d.params.resolution >= 5 ? '2fi' : 'main'}`;
+  if (d.kind === 'fractional-factorial-3') {
+    // three levels: a continuous factor's main effect has a linear and a quadratic part
+    const sq = study.factors.filter(f => f.type === 'continuous').map(f => `I(${f.id}^2)`);
+    return `${response} ~ ${d.params.resolution >= 5 ? '2fi' : 'main'}${sq.length ? ` + ${sq.join(' + ')}` : ''}`;
+  }
   if (d.kind === 'sequential') {
     // the largest standard model the combined runs support (block included)
     const tries = d.params.stages.some(s => s.kind === 'axial') ? ['quadratic', '2fi', 'main'] : ['2fi', 'main'];

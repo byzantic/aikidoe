@@ -7,6 +7,7 @@
 import { num } from '../format.js';
 import { code } from '../study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from './factorial.js';
+import { fraction3, minimumAberration3 } from './threelevel.js';
 import { plackettBurman, PB_RUNS } from './pb.js';
 import { ccd, boxBehnken } from './rsm.js';
 import { CATALOGUE } from './catalogue.js';
@@ -54,6 +55,13 @@ export function candidates(study, { budget } = {}) {
     const e = CATALOGUE[`${k}-${k - q}`];
     if (e) out.push({ id: `frac-${1 << q}`, kind: 'fraction', label: `2^(${k}−${k - q}) fraction`, runs: 1 << q, res: e.resolution,
       note: e.resolution >= 5 ? 'main effects and 2fis clear' : e.resolution === 4 ? 'main effects clear of 2fis; 2fis aliased in pairs' : 'main effects aliased with 2fis (screening)', opts: { runs: 1 << q } });
+  }
+  // every factor at three levels (issue #85): regular 3^(k−p) fractions of minimum aberration
+  if (k >= 3 && levels.every(m => m === 3)) for (let m = 2; m <= 4 && m < k; m++) {
+    if (k > (3 ** m - 1) / 2) continue;
+    const ma = minimumAberration3(k, m), res = ma.wlp.findIndex(a => a > 0) + 1 || Infinity;
+    out.push({ id: `frac3-${3 ** m}`, kind: 'fraction3', label: `3^(${k}−${k - m}) fraction`, runs: 3 ** m, res,
+      note: res >= 5 ? 'three levels; main effects and 2fis clear' : res === 4 ? 'three levels; main effects clear of 2fis' : 'three levels; main effects aliased with 2fi components (screening)', opts: { runs: 3 ** m } });
   }
   if (twoLevel && k >= 2) for (const N of pbSizes(k, { budget })) {
     const gr = generalisedResolution(plackettBurman(k, { runs: N }).X, { max: 4 });
@@ -113,6 +121,7 @@ export function buildCandidate(study, cand, o = {}) {
     case 'full': return fullFactorial(levelsOf(study.factors), common);
     case 'fraction': return fractionalFactorial(study.factors.length, { runs: cand.opts.runs, ...common });
     case 'pb': return plackettBurman(study.factors.length, { runs: cand.opts.runs });
+    case 'fraction3': return fraction3(study.factors.length, { runs: cand.opts.runs, replicates: o.replicates || 1 });
     case 'ccd': return ccd(study.factors.length, { cubeRuns: cand.opts.cubeRuns, alpha: o.alpha === 'number' ? Number(o.alphaValue) : o.alpha || undefined,
       inscribed: !!o.inscribed, ...(o.rsmBlocks ? { blocks: true } : {}), ...(o.centre !== '' && o.centre !== undefined ? { centre: o.rsmBlocks ? [Number(o.centre), Number(o.centreAxial ?? o.centre)] : Number(o.centre) } : {}) });
     case 'bbd': return boxBehnken(study.factors.length, { centre: o.centre === '' || o.centre === undefined ? 3 : Number(o.centre), blocks: !!o.rsmBlocks });

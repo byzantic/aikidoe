@@ -123,6 +123,10 @@ effects, such as a shift per whole plot on the log or logit scale
 **Hierarchy** — a model is hierarchical if every interaction or power comes with the terms it is
 made of.
 
+**Interaction component** — with three-level factors, the interaction of two factors (4 df)
+splits into two parts, AB and AB², of 2 df each; a three-level fraction may alias a main effect
+with one of them. See [three-level fractions](designs-factorial.md#three-level-fractions).
+
 **Kenward–Roger** — a method for standard errors and degrees of freedom of fixed effects in a mixed
 model, accurate in small samples.
 
@@ -245,6 +249,10 @@ within a day, within whole plots), and so the variation it is judged against.
 there, before any run is made. See [prediction variance](concepts.md#prediction-variance).
 
 **Surrogate** — a model fitted to a simulator's runs, used in its place for fast prediction.
+
+**Three-level fraction (3ᵏ⁻ᵖ)** — a fraction of a factorial in which every factor has three
+levels, in 9, 27 or 81 runs; the added factors are sums of base factors modulo 3. See
+[three-level fractions](designs-factorial.md#three-level-fractions).
 
 **Time ratio** — in a model of times to failure, the factor by which every quantile of the life
 (the B10, the median …) is multiplied per coded unit of a factor: exp of its coefficient.

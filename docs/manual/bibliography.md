@@ -46,6 +46,12 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Atkinson, A. C., Donev, A. N. & Tobias, R. D. (2007). *Optimum Experimental Designs, with SAS*.
   Oxford University Press.
 - Goos, P. & Jones, B. (2011). *Optimal Design of Experiments: A Case Study Approach*. Wiley.
+- Wu, C. F. J. & Hamada, M. S. (2009). *Experiments: Planning, Analysis, and Optimization*, 2nd
+  ed. Wiley. (Three-level fractions, interaction components and minimum aberration:
+  [three-level fractions](designs-factorial.md#three-level-fractions).)
+- Grömping, U. (2018). R package DoE.base for factorial experiments. *Journal of Statistical
+  Software* 85(5). (The orthogonal arrays and the generalised word-length pattern against which
+  the three-level fractions are checked.)
 - Venables, W. N. & Ripley, B. D. (2002). *Modern Applied Statistics with S*, 4th ed. Springer.
   (The negative binomial fit of `MASS::glm.nb`, and profile intervals.)
 - Escobar, L. A. & Meeker, W. Q. (1994). Fisher information matrix for the extreme value, normal

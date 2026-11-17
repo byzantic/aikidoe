@@ -24,7 +24,7 @@ The same core (`js/`) runs in the browser UI (`index.html`, `ui/`) and in Node (
 
 ```sh
 npm test                    # all tests/*.test.mjs (Node only; reads the JSON fixtures)
-npm run test:ui             # Playwright: smoke, learn, guide, counts, life, ordinal (Chromium is preinstalled)
+npm run test:ui             # Playwright: smoke, learn, guide, counts, life, ordinal, arrays (Chromium is preinstalled)
 node tools/gen-manual.mjs   # regenerates reference-cli.md, reference-study-format.md and the skill's references
 ```
 

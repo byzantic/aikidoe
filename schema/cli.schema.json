@@ -4214,7 +4214,8 @@
             "plackett-burman",
             "full-factorial",
             "sequential",
-            "definitive-screening"
+            "definitive-screening",
+            "fractional-factorial-3"
           ]
         },
         "aliasChains": {
@@ -4271,6 +4272,32 @@
               "total"
             ]
           }
+        },
+        "mainEffectAliases": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "three-level fractions: each main effect's aliases among two-factor interaction components (AB, AB²)"
+        },
+        "wlp": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "runs": {
+          "type": "integer"
+        },
+        "letters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "three-level fractions: the letter of each factor in the words (A, B, …) and its id"
         }
       }
     },

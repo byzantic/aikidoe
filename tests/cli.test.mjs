@@ -466,6 +466,16 @@ try {
   check('fit --json (Poisson GLM): rate ratios with profile intervals, analysis of deviance', o.kind === 'glm' && o.distribution === 'poisson' && o.coefficients[1].ratio.estimate > 1 && o.coefficients[1].lower < o.coefficients[1].estimate && o.tests.rows.at(-1).term === 'Residuals');
   o = js('fit', 'jc.aikidoe.json', 'germ ~ A + B', '--anova', '2');
   check('fit --json (binomial): odds ratios, type II likelihood-ratio tests', o.kind === 'glm' && o.link === 'logit' && o.tests.type === 2 && Number.isFinite(o.tests.rows[0].chi2));
+  // three-level fractions (issue #85)
+  js('init', 'j3.aikidoe.json', '--factor', 'T=20,30,40', '--factor', 'P=1,2,3', '--factor', 'C=a,b,c', '--factor', 'S=5,10,15', '--factor', 'R=x,y,z', '--response', 'y', '--seed', '3');
+  o = js('design', 'j3.aikidoe.json', '--runs', '27');
+  check('design --runs 27 (three-level factors): a minimum-aberration 3^(5−2)', o.design.kind === 'fractional-factorial-3' && o.design.runs.length === 27 && o.design.params.resolution === 3 && o.design.params.wlp.slice(2, 4).join() === '1,3');
+  o = js('alias', 'j3.aikidoe.json');
+  check('alias --json: words, the pattern and main effects aliased with 2fi components', o.kind === 'fractional-factorial-3' && o.definingRelation.length === 4 && o.letters.A === 'T' && o.mainEffectAliases.D.join() === 'BC');
+  o = js('design', 'j3.aikidoe.json', '--generators', 'D=AB,E=AB2C', '--replicates', '2', '--force');
+  check('design --generators (three-level), replicated', o.design.params.generators.join() === 'D=AB,E=AB²C' && o.design.runs.length === 54);
+  r = run('design', join(dir, 'j3.aikidoe.json'), '--runs', '27', '--centre', '2', '--force');
+  check('design: no centre points for a three-level fraction', r.code === 1 && /no centre points/.test(r.err));
   // times to failure (issue #83): units per run, a censored column, the accelerated-life model
   js('init', 'jl.aikidoe.json', '--factor', 'T:150:200:°C', '--factor', 'J:1:2', '--response', 'life:h@weibull,4', '--seed', '5');
   const dl = js('design', 'jl.aikidoe.json', '--full');

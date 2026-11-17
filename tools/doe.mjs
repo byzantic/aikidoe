@@ -74,6 +74,8 @@
 //                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
 //                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
 //        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
+//        every factor at three levels (categorical, or continuous with three levels listed): --runs 9|27|81
+//        gives a minimum-aberration 3^(k−p) fraction, --generators "D=ABC,E=AB²C" (or AB2C) your own
 //        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
 //        [--whole-plots W] [--eta η (optimal; σ²_wp/σ², default 1)] [--no-split-plot]
 //        [--sheet FILE.csv] [--html FILE.html]
@@ -228,6 +230,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createStudy, parseStudy, serializeStudy, StudyError, code, decode, covariatesWithoutValues } from '../js/study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
+import { fraction3, factorName3 } from '../js/design/threelevel.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
 import { codedRuns, codedRow, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
@@ -519,6 +522,11 @@ function cmdDesign({ pos, opt }) {
       ...(centreOpt !== undefined ? { centre: centreOpt } : {}), ...(opt.blocks ? { blocks: opt.blocks === true ? true : int(opt.blocks, 'blocks') } : {}) });
   } else if (opt.bbd) d = boxBehnken(k, { ...(centreOpt !== undefined ? { centre: centreOpt } : {}), blocks: !!opt.blocks });
   else if (opt.pb) d = plackettBurman(k, opt.runs ? { runs: int(opt.runs, 'runs') } : {});
+  else if ((opt.generators || (opt.runs && !opt.lhs)) && study.factors.every(f => (f.type === 'categorical' ? f.levels.length : f.levels?.length ?? 2) === 3)) {
+    // every factor at three levels (issue #85): a regular 3^(k−p) fraction
+    if (opt.centre || opt.blocks) fail('a three-level fraction has no centre points or blocks (its middle level is already run)');
+    d = fraction3(k, { ...(opt.generators ? { generators: String(opt.generators) } : { runs: int(opt.runs, 'runs') }), replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1 });
+  }
   else if (opt.generators) d = fractionalFactorial(k, { generators: String(opt.generators), ...common });
   else if (opt.runs && !opt.lhs) d = fractionalFactorial(k, { runs: int(opt.runs, 'runs'), ...common });
   else if (opt.full) d = fullFactorial(study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels ? f.levels.length : 2)), common);
@@ -541,7 +549,10 @@ function cmdDesign({ pos, opt }) {
     const nWP = d.params.wholePlotEffects ? d.params.wholePlotEffects.length : k1Count(study), what = d.params.wholePlotEffects ? 'whole-plot main effects and 2fis' : 'whole-plot main effects';
     if (W - 1 - nWP < 2) out(`note: ${W} whole plots leave ${Math.max(0, W - 1 - nWP)} df for the whole-plot error after the ${what}: too few to test them; more whole plots (--whole-plots) or replicates (--replicates) would help`);
   }
-  if (d.params.resolution && !d.wholePlot) {
+  if (d.kind === 'fractional-factorial-3') {
+    const p = d.params, ids = study.factors.map(f => f.id);
+    out(`three-level fraction 3^(${k}−${k - Math.round(Math.log(p.runs) / Math.log(3))}): resolution ${roman(p.resolution)}; generators ${p.generators.join(', ')} (${ids.map((id, j) => `${factorName3(j)} = ${id}`).join(', ')}); ${p.source}  (see: alias ${file})`);
+  } else if (d.params.resolution && !d.wholePlot) {
     const ids = study.factors.map(f => f.id), q = Math.log2(d.params.runs);
     const gens = d.params.generators.map((g, j) => { const [, w] = g.split('='); const neg = w.startsWith('-'); return `${ids[q + j]} = ${neg ? '−' : ''}${maskNames(T.wordToMask(w.replace('-', ''), q), ids)}`; });
     out(`resolution ${roman(d.params.resolution)}; generators ${gens.join(', ')}  (see: alias ${file})`);
@@ -1763,6 +1774,17 @@ function cmdAlias({ pos, opt }) {
     names = study.factors.map(f => f.id);
     const p = study.design?.params;
     if (!p) fail('the study has no design');
+    if (study.design.kind === 'fractional-factorial-3') {
+      const al = Object.entries(p.aliases.main).filter(([, v]) => v.length);
+      put({ kind: 'fractional-factorial-3', runs: p.runs, resolution: p.resolution, generators: p.generators, definingRelation: p.definingRelation, wlp: p.wlp, letters: Object.fromEntries(names.map((id, j) => [factorName3(j), id])), mainEffectAliases: p.aliases.main });
+      out(`three-level fraction: ${p.runs} runs; resolution ${roman(p.resolution)}; factors ${names.map((id, j) => `${factorName3(j)} = ${id}`).join(', ')}`);
+      out(`generators: ${p.generators.join(', ')}`);
+      out(`defining relation: I = ${p.definingRelation.join(' = ')}`);
+      out(`word-length pattern (A3, A4, …): ${p.wlp.slice(2).join(', ')}`);
+      out(al.length ? `main effects aliased with two-factor interaction components:\n${al.map(([f, v]) => `  ${f} = ${v.join(' = ')}`).join('\n')}` : 'no main effect is aliased with a two-factor interaction');
+      out('(a two-factor interaction A×B of three-level factors has two components, AB and AB², of 2 df each)');
+      return;
+    }
     if (study.design.kind === 'split-plot-fraction') {
       put({ kind: 'split-plot-fraction', runs: p.runs, wholePlots: p.wholePlots, resolution: p.resolution, generators: p.generators, definingRelation: p.definingRelation, wlp: p.wlp, aliasChains: p.aliasChains, wholePlotEffects: p.wholePlotEffects });
       out(`split-plot fraction: ${p.runs} runs in ${p.wholePlots} whole plots; whole-plot factors ${p.wholePlotFactors.join(', ')}; resolution ${roman(p.resolution)}`);
