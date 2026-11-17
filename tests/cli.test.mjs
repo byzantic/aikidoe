@@ -198,6 +198,9 @@ try {
   check('goal: sets a response goal', r.code === 0 && /bypr: minimize, target 2, upper 5, weight 2/.test(r.out), r.out + r.err);
   r = run('optimise', 'ccd.aikidoe.json', '--model', 'conv ~ quadratic', '--model', 'bypr ~ T + time + I(T^2)');
   check('optimise: best settings, D, predictions with CIs and d', r.code === 0 && /best settings: T=\d/.test(r.out) && /overall desirability D = 0\.\d/.test(r.out) && /^bypr\s.*min \(2 ← 5\)/m.test(r.out), r.out + r.err);
+  writeFileSync(join(dir, 'ccdg.aikidoe.json'), serializeStudy(EXAMPLES.find(e => e.id === 'ccd-results').build()));
+  r = run('goal', 'ccdg.aikidoe.json', 'conv', '--target', '80', '--lower', '70', '--upper', '90');
+  check('goal --target T alone: the goal is the target', r.code === 0 && /conv: target, lower 70, target 80, upper 90/.test(r.out), r.out + r.err);
   r = run('optimise', 'ccd.aikidoe.json', '--fix', 'T=150');
   check('optimise --fix', r.code === 0 && /held: T=150/.test(r.out) && /best settings: T=150,/.test(r.out), r.out + r.err);
   r = run('optimise', 'ccd.aikidoe.json', '--region', 'sphere');

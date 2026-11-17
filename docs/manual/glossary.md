@@ -239,6 +239,11 @@ changes per coded unit.
 **Relative potency** — how many times less of a test compound gives the same effect as a reference:
 EC50 of the reference ÷ EC50 of the test. See [relative potency](dose-response.md#relative-potency).
 
+**Pseudo-replication** — treating repeated measurements of one run (specimens cut from one batch,
+readings of one wafer) as if they were replicates. The run-to-run variation is then missing from
+the error, and effects look more significant than they are. See the
+[dental composites example](example-flowable.md#one-run-per-formulation).
+
 **Replicate** — an independent repeat of a run, set up again from scratch (not a repeated
 measurement of the same run).
 

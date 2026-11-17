@@ -1,0 +1,785 @@
+{
+  "aikidoe": 1,
+  "name": "Self-adhesive flowable composite",
+  "description": "Data: Alves, Alves, Silva & Delgado (2026), Dental Materials, doi:10.1016/j.dental.2026.07.012, Table 3: the mean of each formulation (one batch each). Viscosity was measured cone-plate for low filler and parallel-plate for high filler; lvisc is its log10. See the manual’s worked example.",
+  "seed": 2026,
+  "factors": [
+    {
+      "id": "monomer",
+      "name": "Acidic monomer",
+      "type": "categorical",
+      "htc": false,
+      "levels": [
+        "HEMA",
+        "MDP"
+      ]
+    },
+    {
+      "id": "mol",
+      "name": "Acidic monomer content",
+      "type": "continuous",
+      "units": "mol%",
+      "htc": false,
+      "low": 5,
+      "high": 25,
+      "transform": "none"
+    },
+    {
+      "id": "PL",
+      "name": "Powder/liquid ratio",
+      "type": "continuous",
+      "htc": false,
+      "low": 2.5,
+      "high": 3.2,
+      "transform": "none"
+    },
+    {
+      "id": "filler",
+      "name": "Filler mix",
+      "type": "categorical",
+      "htc": false,
+      "levels": [
+        "FL",
+        "FH"
+      ]
+    }
+  ],
+  "constraints": [],
+  "responses": [
+    {
+      "id": "SBS",
+      "name": "Shear bond strength",
+      "units": "MPa",
+      "goal": "maximize",
+      "target": 6,
+      "lower": 1,
+      "levels": [
+        "run"
+      ]
+    },
+    {
+      "id": "DC40",
+      "name": "Degree of conversion, 40 s",
+      "units": "%",
+      "goal": "maximize",
+      "target": 85,
+      "lower": 60,
+      "levels": [
+        "run"
+      ]
+    },
+    {
+      "id": "Wsp",
+      "name": "Water sorption",
+      "units": "µg/mm³",
+      "goal": "none",
+      "levels": [
+        "run"
+      ]
+    },
+    {
+      "id": "Wsl",
+      "name": "Water solubility",
+      "units": "µg/mm³",
+      "goal": "target",
+      "target": 0,
+      "lower": -6,
+      "upper": 2,
+      "levels": [
+        "run"
+      ]
+    },
+    {
+      "id": "visc",
+      "name": "Viscosity",
+      "units": "mPa·s",
+      "goal": "none",
+      "levels": [
+        "run"
+      ]
+    },
+    {
+      "id": "lvisc",
+      "name": "log10 viscosity",
+      "units": "log10 mPa·s",
+      "goal": "none",
+      "levels": [
+        "run"
+      ]
+    }
+  ],
+  "design": {
+    "kind": "full-factorial",
+    "params": {
+      "levels": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "seed": 2026
+    },
+    "randomisation": "complete",
+    "runs": [
+      {
+        "run": 1,
+        "order": 10,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 5,
+          "PL": 2.5,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 2,
+        "order": 11,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 5,
+          "PL": 2.5,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 3,
+        "order": 14,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 25,
+          "PL": 2.5,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 4,
+        "order": 3,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 25,
+          "PL": 2.5,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 5,
+        "order": 6,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 5,
+          "PL": 3.2,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 6,
+        "order": 4,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 5,
+          "PL": 3.2,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 7,
+        "order": 12,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 25,
+          "PL": 3.2,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 8,
+        "order": 1,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 25,
+          "PL": 3.2,
+          "filler": "FL"
+        }
+      },
+      {
+        "run": 9,
+        "order": 15,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 5,
+          "PL": 2.5,
+          "filler": "FH"
+        }
+      },
+      {
+        "run": 10,
+        "order": 2,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 5,
+          "PL": 2.5,
+          "filler": "FH"
+        }
+      },
+      {
+        "run": 11,
+        "order": 9,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 25,
+          "PL": 2.5,
+          "filler": "FH"
+        }
+      },
+      {
+        "run": 12,
+        "order": 8,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 25,
+          "PL": 2.5,
+          "filler": "FH"
+        }
+      },
+      {
+        "run": 13,
+        "order": 7,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 5,
+          "PL": 3.2,
+          "filler": "FH"
+        }
+      },
+      {
+        "run": 14,
+        "order": 13,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 5,
+          "PL": 3.2,
+          "filler": "FH"
+        }
+      },
+      {
+        "run": 15,
+        "order": 16,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "HEMA",
+          "mol": 25,
+          "PL": 3.2,
+          "filler": "FH"
+        }
+      },
+      {
+        "run": 16,
+        "order": 5,
+        "kind": "factorial",
+        "settings": {
+          "monomer": "MDP",
+          "mol": 25,
+          "PL": 3.2,
+          "filler": "FH"
+        }
+      }
+    ]
+  },
+  "observations": [
+    {
+      "run": 1,
+      "response": "SBS",
+      "value": 0.62
+    },
+    {
+      "run": 1,
+      "response": "DC40",
+      "value": 89.93
+    },
+    {
+      "run": 1,
+      "response": "Wsp",
+      "value": 12.17
+    },
+    {
+      "run": 1,
+      "response": "Wsl",
+      "value": 0.03
+    },
+    {
+      "run": 1,
+      "response": "visc",
+      "value": 13107.81
+    },
+    {
+      "run": 1,
+      "response": "lvisc",
+      "value": 4.118
+    },
+    {
+      "run": 2,
+      "response": "SBS",
+      "value": 1.94
+    },
+    {
+      "run": 2,
+      "response": "DC40",
+      "value": 63.43
+    },
+    {
+      "run": 2,
+      "response": "Wsp",
+      "value": 12.16
+    },
+    {
+      "run": 2,
+      "response": "Wsl",
+      "value": -0.92
+    },
+    {
+      "run": 2,
+      "response": "visc",
+      "value": 30827.95
+    },
+    {
+      "run": 2,
+      "response": "lvisc",
+      "value": 4.489
+    },
+    {
+      "run": 3,
+      "response": "SBS",
+      "value": 0.44
+    },
+    {
+      "run": 3,
+      "response": "DC40",
+      "value": 83.6
+    },
+    {
+      "run": 3,
+      "response": "Wsp",
+      "value": 12.3
+    },
+    {
+      "run": 3,
+      "response": "Wsl",
+      "value": -3.32
+    },
+    {
+      "run": 3,
+      "response": "visc",
+      "value": 10524.72
+    },
+    {
+      "run": 3,
+      "response": "lvisc",
+      "value": 4.022
+    },
+    {
+      "run": 4,
+      "response": "SBS",
+      "value": 5.38
+    },
+    {
+      "run": 4,
+      "response": "DC40",
+      "value": 72.1
+    },
+    {
+      "run": 4,
+      "response": "Wsp",
+      "value": 13.84
+    },
+    {
+      "run": 4,
+      "response": "Wsl",
+      "value": -8.18
+    },
+    {
+      "run": 4,
+      "response": "visc",
+      "value": 57451.14
+    },
+    {
+      "run": 4,
+      "response": "lvisc",
+      "value": 4.759
+    },
+    {
+      "run": 5,
+      "response": "SBS",
+      "value": 0.54
+    },
+    {
+      "run": 5,
+      "response": "DC40",
+      "value": 87
+    },
+    {
+      "run": 5,
+      "response": "Wsp",
+      "value": 5.86
+    },
+    {
+      "run": 5,
+      "response": "Wsl",
+      "value": -6.15
+    },
+    {
+      "run": 5,
+      "response": "visc",
+      "value": 50572.08
+    },
+    {
+      "run": 5,
+      "response": "lvisc",
+      "value": 4.704
+    },
+    {
+      "run": 6,
+      "response": "SBS",
+      "value": 1.6
+    },
+    {
+      "run": 6,
+      "response": "DC40",
+      "value": 59.9
+    },
+    {
+      "run": 6,
+      "response": "Wsp",
+      "value": 11.09
+    },
+    {
+      "run": 6,
+      "response": "Wsl",
+      "value": -1.43
+    },
+    {
+      "run": 6,
+      "response": "visc",
+      "value": 149986.78
+    },
+    {
+      "run": 6,
+      "response": "lvisc",
+      "value": 5.176
+    },
+    {
+      "run": 7,
+      "response": "SBS",
+      "value": 1.8
+    },
+    {
+      "run": 7,
+      "response": "DC40",
+      "value": 82.2
+    },
+    {
+      "run": 7,
+      "response": "Wsp",
+      "value": 12.33
+    },
+    {
+      "run": 7,
+      "response": "Wsl",
+      "value": -3.47
+    },
+    {
+      "run": 7,
+      "response": "visc",
+      "value": 46194.96
+    },
+    {
+      "run": 7,
+      "response": "lvisc",
+      "value": 4.665
+    },
+    {
+      "run": 8,
+      "response": "SBS",
+      "value": 5.68
+    },
+    {
+      "run": 8,
+      "response": "DC40",
+      "value": 69.83
+    },
+    {
+      "run": 8,
+      "response": "Wsp",
+      "value": 11.54
+    },
+    {
+      "run": 8,
+      "response": "Wsl",
+      "value": -7.32
+    },
+    {
+      "run": 8,
+      "response": "visc",
+      "value": 301766.3
+    },
+    {
+      "run": 8,
+      "response": "lvisc",
+      "value": 5.48
+    },
+    {
+      "run": 9,
+      "response": "SBS",
+      "value": 0.58
+    },
+    {
+      "run": 9,
+      "response": "DC40",
+      "value": 85.63
+    },
+    {
+      "run": 9,
+      "response": "Wsp",
+      "value": 12.69
+    },
+    {
+      "run": 9,
+      "response": "Wsl",
+      "value": -0.17
+    },
+    {
+      "run": 9,
+      "response": "visc",
+      "value": 299910.25
+    },
+    {
+      "run": 9,
+      "response": "lvisc",
+      "value": 5.477
+    },
+    {
+      "run": 10,
+      "response": "SBS",
+      "value": 0.78
+    },
+    {
+      "run": 10,
+      "response": "DC40",
+      "value": 62.13
+    },
+    {
+      "run": 10,
+      "response": "Wsp",
+      "value": 14.5
+    },
+    {
+      "run": 10,
+      "response": "Wsl",
+      "value": 1.38
+    },
+    {
+      "run": 10,
+      "response": "visc",
+      "value": 20309.78
+    },
+    {
+      "run": 10,
+      "response": "lvisc",
+      "value": 4.308
+    },
+    {
+      "run": 11,
+      "response": "SBS",
+      "value": 1.64
+    },
+    {
+      "run": 11,
+      "response": "DC40",
+      "value": 86.63
+    },
+    {
+      "run": 11,
+      "response": "Wsp",
+      "value": 10.1
+    },
+    {
+      "run": 11,
+      "response": "Wsl",
+      "value": -5.56
+    },
+    {
+      "run": 11,
+      "response": "visc",
+      "value": 128740.13
+    },
+    {
+      "run": 11,
+      "response": "lvisc",
+      "value": 5.11
+    },
+    {
+      "run": 12,
+      "response": "SBS",
+      "value": 7.18
+    },
+    {
+      "run": 12,
+      "response": "DC40",
+      "value": 78.93
+    },
+    {
+      "run": 12,
+      "response": "Wsp",
+      "value": 11.71
+    },
+    {
+      "run": 12,
+      "response": "Wsl",
+      "value": -9.36
+    },
+    {
+      "run": 12,
+      "response": "visc",
+      "value": 113995.53
+    },
+    {
+      "run": 12,
+      "response": "lvisc",
+      "value": 5.057
+    },
+    {
+      "run": 13,
+      "response": "SBS",
+      "value": 1.54
+    },
+    {
+      "run": 13,
+      "response": "DC40",
+      "value": 86.2
+    },
+    {
+      "run": 13,
+      "response": "Wsp",
+      "value": 11.83
+    },
+    {
+      "run": 13,
+      "response": "Wsl",
+      "value": -0.33
+    },
+    {
+      "run": 13,
+      "response": "visc",
+      "value": 4865.05
+    },
+    {
+      "run": 13,
+      "response": "lvisc",
+      "value": 3.687
+    },
+    {
+      "run": 14,
+      "response": "SBS",
+      "value": 1.74
+    },
+    {
+      "run": 14,
+      "response": "DC40",
+      "value": 67.63
+    },
+    {
+      "run": 14,
+      "response": "Wsp",
+      "value": 8.72
+    },
+    {
+      "run": 14,
+      "response": "Wsl",
+      "value": -1.97
+    },
+    {
+      "run": 14,
+      "response": "visc",
+      "value": 331036.16
+    },
+    {
+      "run": 14,
+      "response": "lvisc",
+      "value": 5.52
+    },
+    {
+      "run": 15,
+      "response": "SBS",
+      "value": 0.26
+    },
+    {
+      "run": 15,
+      "response": "DC40",
+      "value": 88.33
+    },
+    {
+      "run": 15,
+      "response": "Wsp",
+      "value": 16.25
+    },
+    {
+      "run": 15,
+      "response": "Wsl",
+      "value": 0.67
+    },
+    {
+      "run": 15,
+      "response": "visc",
+      "value": 108.46
+    },
+    {
+      "run": 15,
+      "response": "lvisc",
+      "value": 2.035
+    },
+    {
+      "run": 16,
+      "response": "SBS",
+      "value": 3.42
+    },
+    {
+      "run": 16,
+      "response": "DC40",
+      "value": 54.43
+    },
+    {
+      "run": 16,
+      "response": "Wsp",
+      "value": 12.67
+    },
+    {
+      "run": 16,
+      "response": "Wsl",
+      "value": -4.34
+    },
+    {
+      "run": 16,
+      "response": "visc",
+      "value": 821262.07
+    },
+    {
+      "run": 16,
+      "response": "lvisc",
+      "value": 5.914
+    }
+  ],
+  "history": []
+}

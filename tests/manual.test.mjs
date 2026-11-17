@@ -10,7 +10,7 @@ import { MANUAL, IMG, referenceCli, referenceStudyFormat, runPage, outputMatches
 import { EXAMPLES } from '../ui/examples.js';
 import { serializeStudy } from '../js/study.js';
 import { fitModel } from '../js/model/fit.js';
-import { twoLevelEffects } from '../js/model/ols.js';
+import { twoLevelEffects, lenth } from '../js/model/ols.js';
 import { gaugeRR } from '../js/model/msa.js';
 import { near } from './lib/check.mjs';
 
@@ -111,8 +111,23 @@ section('worked examples against their published values');
   const g = gaugeRR(fx.input.rows, { design: 'crossed', tolerance: 1.1 });
   near('gauge: %contribution and %study variation of total gauge R&R, ndc (SixSigma ss.rr)', [g.components[0].contribution, g.pctGRR, g.ndc], [fx.output.contrib[0], fx.output.studyVar[0][2], fx.output.ncat], { abs: 0.005 });
   check('the gauge page shows the same data as the SixSigma fixture', fx.input.rows.every(r => pages['example-gauge'].includes(`${r.part.replace(' #', '')},${r.operator.replace(' #', '')},${r.value}`)));
+  // Alves et al. (2026) Table 3: the effects quoted on the page, against plain ±1 contrasts of the means
+  {
+    const st = EXAMPLES.find(e => e.id === 'dental-flowable').build();
+    const val = (id) => st.design.runs.map(r => st.observations.find(o => o.run === r.run && o.response === id).value);
+    const sign = (r, f) => (r.settings[f] === st.factors.find(x => x.id === f).levels?.[1] || r.settings[f] === st.factors.find(x => x.id === f).high ? 1 : -1);
+    const contrast = (id, fs) => { const y = val(id); return st.design.runs.reduce((a, r, i) => a + fs.reduce((p, f) => p * sign(r, f), 1) * y[i], 0) / 8; };
+    const eff = (id) => Object.fromEntries(twoLevelEffects(fitModel(st, `${id} ~ monomer*mol*PL*filler`)).map(e => [e.name, e.effect]));
+    const sbs = eff('SBS'), dc = eff('DC40'), wsl = eff('Wsl');
+    near('flowable: SBS monomer, mol, monomer:mol, filler effects', [sbs['monomer[MDP]'], sbs.mol, sbs['monomer[MDP]:mol'], sbs['filler[FH]']],
+      [contrast('SBS', ['monomer']), contrast('SBS', ['mol']), contrast('SBS', ['monomer', 'mol']), contrast('SBS', ['filler'])], { abs: 1e-9 });
+    near('flowable: DC40 monomer and Wsl mol effects', [dc['monomer[MDP]'], wsl.mol], [contrast('DC40', ['monomer']), contrast('Wsl', ['mol'])], { abs: 1e-9 });
+    const L = (id) => lenth(twoLevelEffects(fitModel(st, `${id} ~ monomer*mol*PL*filler`)).map(e => e.effect));
+    const ld = L('DC40'), lw = L('Wsp'), wsp = Object.values(eff('Wsp')).map(Math.abs);
+    near('flowable: the page\'s DC40 effect and ME, Wsp largest effect and ME', [dc['monomer[MDP]'], ld.me, Math.max(...wsp), lw.me], [-20.1, 11.8, 2.4, 3.8], { abs: 0.05 });
+  }
   // the example study files are the app's examples
-  for (const [file, id] of [['reactor-bhh', 'reactor-bhh'], ['furnace-anneal', 'anneal-results'], ['conversion-ccd', 'ccd-results'], ['titre-covariate', 'titre-covariate'], ['media-compare', 'media-compare'], ['interconnect-life', 'interconnect-life'], ['coating-panel', 'coating-panel'], ['coating-latin', 'coating-latin'], ['enzyme-bibd', 'enzyme-bibd'], ['diet-crossover', 'diet-crossover'], ['method-transfer', 'method-transfer'], ['reaction-ascent', 'reaction-ascent'], ['reaction-path', 'reaction-path']])
+  for (const [file, id] of [['reactor-bhh', 'reactor-bhh'], ['furnace-anneal', 'anneal-results'], ['conversion-ccd', 'ccd-results'], ['titre-covariate', 'titre-covariate'], ['media-compare', 'media-compare'], ['interconnect-life', 'interconnect-life'], ['coating-panel', 'coating-panel'], ['coating-latin', 'coating-latin'], ['enzyme-bibd', 'enzyme-bibd'], ['diet-crossover', 'diet-crossover'], ['method-transfer', 'method-transfer'], ['reaction-ascent', 'reaction-ascent'], ['reaction-path', 'reaction-path'], ['dental-flowable', 'dental-flowable']])
     check(`examples/${file}.aikidoe.json is the app's ${id} example`, readFileSync(join(ROOT, 'examples', `${file}.aikidoe.json`), 'utf8') === serializeStudy(EXAMPLES.find(e => e.id === id).build()));
 }
 

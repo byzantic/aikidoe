@@ -85,6 +85,10 @@ Books for learning and reference, and the papers behind specific methods in aiki
 
 ## Papers
 
+- Alves, M., Alves, J., Silva, F. & Delgado, A. H. (2026). Design of Experiments (DOE) approach for
+  multi-response optimization of experimental self-adhesive flowable resin composites. *Dental
+  Materials*. doi:10.1016/j.dental.2026.07.012. (The data of the
+  [dental composites example](example-flowable.md), from its Table 3.)
 - Bingham, D. & Sitter, R. R. (1999). Minimum-aberration two-level fractional factorial split-plot
   designs. *Technometrics* 41, 62–70.
 - Box, G. E. P. & Draper, N. R. (2007). *Response Surfaces, Mixtures, and Ridge Analyses*, 2nd

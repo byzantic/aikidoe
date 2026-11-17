@@ -184,6 +184,7 @@ Commands
   power … [--response R [--sigma-process σp]]   σ from the response's gauge study: √(σp² + σ_meas²)
   goal STUDY RESPONSE (--maximize|--minimize|--target|--range|--none) [--lower L] [--target T] [--upper U]
        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
+       (--target T with no other goal: the goal is to hit T)
   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
        best settings by overall desirability over the fitted models; warns when they lie beyond
        the runs (outside their convex hull, or a prediction variance over the largest at a run).
