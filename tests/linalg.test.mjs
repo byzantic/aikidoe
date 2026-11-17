@@ -11,6 +11,12 @@ const sub = (A, B) => A.map((r, i) => r.map((v, j) => v - B[i][j]));
 const relErr = (A, B) => maxAbs(sub(A, B)) / Math.max(maxAbs(B), 1e-300);
 const permuteCols = (A, p) => A.map(r => p.map(j => r[j]));
 const ill = (name) => name.includes('Hilbert');
+// each row of R with its sign fixed, as tests/ref/linalg_qr.R records it: diagonal ≥ 0, or where
+// the diagonal is negligible the first clearly non-zero entry ≥ 0 (rows of R are unique only up to sign)
+const signRows = (R) => {
+  const tiny = 1e-8 * Math.max(1, maxAbs(R));
+  return R.map((r, i) => { const v = i < r.length && Math.abs(r[i]) > tiny ? r[i] : r.find(x => Math.abs(x) > tiny) ?? 1; return v < 0 ? r.map(x => -x) : r; });
+};
 
 // ------------------------------------------------------------ QR vs R
 section('qr (limited pivoting) vs R qr()');
@@ -25,7 +31,7 @@ for (const c of loadFixture('linalg-qr').cases) {
     relErr(la.matmul(Q, R), permuteCols(A, f.perm)).toExponential(2));
   check(`${c.name}: QᵀQ = I`, maxAbs(sub(la.crossprod(Q), la.eye(Q[0].length))) < 1e-14);
   if (ill(c.name)) continue;
-  near(`${c.name}: R`, R, o.R, TOL);
+  near(`${c.name}: R (rows' signs fixed)`, signRows(R), o.R, TOL);
   near(`${c.name}: coefficients (NaN when aliased)`, f.coef(y), nullToNaN(o.coef), TOL);
   near(`${c.name}: fitted`, f.fitted(y), o.fitted, TOL);
   near(`${c.name}: (XᵀX)⁻¹`, f.unscaledCov(), nullToNaN(o.covUnscaled), TOL);
