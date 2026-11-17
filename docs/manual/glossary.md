@@ -4,6 +4,11 @@
 current, more stress), so units fail within the test; a model of how the life depends on the
 stress then predicts the life in use. See [times to failure](analysis.md#times-to-failure).
 
+**Alias correlation** — the correlation between a main-effect column and a two-factor interaction
+column: 1 when they are aliased, 0 when they are clear, in between (1/3 for the 12-run
+Plackett–Burman) when an interaction is spread over several main effects. The recommender shows
+the largest as max |r|.
+
 **Alias** — two effects a fraction cannot tell apart; their estimates are the same combination of
 the runs. See [aliasing and resolution](concepts.md#aliasing-and-resolution).
 
@@ -42,6 +47,10 @@ or treating the end of the test as a failure.
 
 **Coded units** — each continuous factor scaled so its range runs from −1 to +1.
 
+**Combined array** — control and noise factors in one design, analysed with a model that has
+control × noise interactions; usually far fewer runs than an inner × outer array. See
+[inner and outer arrays](optimisation.md#inner-and-outer-arrays).
+
 **Compact letter display** — a letter beside each level's mean; levels that share a letter are
 not shown to differ by the comparisons. See [comparing treatments](analysis.md#comparing-treatments).
 
@@ -53,6 +62,10 @@ the new media minus the standard". See [comparing treatments](analysis.md#compar
 **Covariate** — a variable measured at each run but not set (a starting weight, the room
 temperature). In the model it explains part of the scatter, and the factors' effects are compared
 at the same value of it. See [Covariates](analysis.md#covariates).
+
+**Crossed array (inner × outer)** — Taguchi's design for robustness: an inner array of control
+factors, each run tried at every condition of an outer array of noise factors. See
+[inner and outer arrays](optimisation.md#inner-and-outer-arrays).
 
 **Crossover design** — each subject (an animal, a volunteer, a cell line) receives every
 treatment in turn, one per period, so the treatments are compared within subjects.
@@ -239,6 +252,10 @@ terms): Σ βᵢ zᵢ, plus blending terms βᵢⱼ zᵢ zⱼ (quadratic) and so
 
 **Separation** — a factor setting giving only successes (or only failures), so the fitted odds
 there are infinite; Firth's penalised likelihood gives finite estimates.
+
+**Signal-to-noise ratio (S/N)** — Taguchi's summary of the results at one set of control settings
+over the noise conditions, in dB: larger, smaller or nominal the best; the higher, the more
+robust. See [inner and outer arrays](optimisation.md#inner-and-outer-arrays).
 
 **Split-plot** — a design in which hard-to-change factors are set once per whole plot and the
 others vary within it.

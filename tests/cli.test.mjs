@@ -466,6 +466,18 @@ try {
   check('fit --json (Poisson GLM): rate ratios with profile intervals, analysis of deviance', o.kind === 'glm' && o.distribution === 'poisson' && o.coefficients[1].ratio.estimate > 1 && o.coefficients[1].lower < o.coefficients[1].estimate && o.tests.rows.at(-1).term === 'Residuals');
   o = js('fit', 'jc.aikidoe.json', 'germ ~ A + B', '--anova', '2');
   check('fit --json (binomial): odds ratios, type II likelihood-ratio tests', o.kind === 'glm' && o.link === 'logit' && o.tests.type === 2 && Number.isFinite(o.tests.rows[0].chi2));
+  // inner × outer arrays and Taguchi's analysis (issue #85, phase 3)
+  js('init', 'jx.aikidoe.json', '--factor', 'A=0,1,2', '--factor', 'B=0,1,2', '--factor', 'C=0,1,2', '--factor', 'M:-1:1', '--factor', 'N:-1:1', '--response', 'y', '--seed', '3');
+  o = js('design', 'jx.aikidoe.json', '--crossed', '--noise', 'M,N');
+  check('design --crossed: L9 × 2² = 36 runs, the noise factors kept', o.design.kind === 'crossed-array' && o.design.runs.length === 36 && o.design.params.noise.join() === '3,4' && o.design.params.inner === 'L9 (3^4)');
+  writeFileSync(join(dir, 'jx.csv'), 'run,y\n' + o.design.runs.map(x => `${x.run},${(20 + 2 * x.settings.A + x.settings.M * (1.5 - 0.6 * x.settings.C) + 0.8 * x.settings.N + 0.1 * Math.sin(x.run)).toFixed(3)}`).join('\n') + '\n');
+  js('import', 'jx.aikidoe.json', 'jx.csv');
+  o = js('sn', 'jx.aikidoe.json', '--goal', 'nominal');
+  check('sn --json: nine inner runs of four results, C the most important for S/N', o.kind === 'signal-to-noise' && o.runs.length === 9 && o.runs.every(x => x.n === 4) && o.table.find(t => t.factor === 'C').rank === 1 && String(o.table.find(t => t.factor === 'C').best) === '2');
+  o = js('recommend', 'jx.aikidoe.json', '--no-optimal');
+  check('recommend --json: the largest alias correlation of each option', o.options.filter(x => x.estimable).every(x => typeof x.aliasMax === 'number'));
+  r = run('design', join(dir, 'jx.aikidoe.json'), '--crossed', '--force');
+  check('design --crossed: noise factors needed', r.code === 1 && /name the noise factors/.test(r.err));
   // orthogonal arrays (issue #85, phase 2)
   js('init', 'ja.aikidoe.json', '--factor', 'cat=a,b', '--factor', 'T=20,30,40', '--factor', 'P=1,2,3', '--factor', 'C=x,y,z', '--factor', 'S=5,10,15', '--response', 'y', '--seed', '3');
   o = js('design', 'ja.aikidoe.json', '--array');

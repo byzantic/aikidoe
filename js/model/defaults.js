@@ -19,6 +19,13 @@ export function defaultFormula(study, response) {
   if (d.kind === 'lhs') return `${response} ~ quadratic`;
   if (d.kind === 'plackett-burman') return `${response} ~ main`;
   if (d.kind === 'fractional-factorial') return `${response} ~ ${d.params.resolution >= 5 ? '2fi' : 'main'}`;
+  if (d.kind === 'crossed-array') {
+    // the response-model approach: main effects and every control × noise interaction (plus the
+    // quadratic parts of control factors at three or more levels)
+    const nz = (d.params.noise ?? []).map(j => study.factors[j].id), ctl = study.factors.filter(f => !nz.includes(f.id));
+    const sq = ctl.filter(f => f.type === 'continuous' && (f.levels?.length ?? 2) > 2).map(f => `I(${f.id}^2)`);
+    return `${response} ~ ${study.factors.map(f => f.id).join(' + ')} + (${ctl.map(f => f.id).join(' + ')}):(${nz.join(' + ')})${sq.length ? ` + ${sq.join(' + ')}` : ''}`;
+  }
   if (d.kind === 'orthogonal-array') {
     // main effects; a continuous factor at three or more levels has a quadratic part too
     const sq = study.factors.filter(f => f.type === 'continuous' && (f.levels?.length ?? 2) > 2).map(f => `I(${f.id}^2)`);

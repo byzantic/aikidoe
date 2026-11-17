@@ -107,3 +107,8 @@ before acting.
 - Report effects with confidence intervals, not only p-values; choosing the model from the same data
   makes intervals optimistic.
 - Confirm with new runs at the settings you will use before acting on a prediction.
+
+- Robust settings: mark the noise factors, then prefer a combined array (noise factors in an
+  ordinary design, control × noise interactions in the model, robust design on the Optimise step)
+  to an inner × outer array, which costs inner × outer runs
+  ([inner and outer arrays](optimisation.md#inner-and-outer-arrays)).

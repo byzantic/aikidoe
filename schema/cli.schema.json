@@ -760,6 +760,25 @@
       "then": {
         "$ref": "#/$defs/path"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "command": {
+            "const": "sn"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/sn"
+      }
     }
   ],
   "$defs": {
@@ -5153,6 +5172,10 @@
               "quadratic3": {
                 "type": "number",
                 "description": "definitive screening: share of the 3-factor sets whose full quadratic is estimable"
+              },
+              "aliasMax": {
+                "type": "number",
+                "description": "the largest |correlation| between a main-effect column and a two-factor interaction column (1: fully aliased; 0: clear)"
               }
             }
           }
@@ -6545,6 +6568,156 @@
           }
         }
       ]
+    },
+    "sn": {
+      "type": "object",
+      "description": "doe sn (issue #85): Taguchi's analysis of a crossed array — the signal-to-noise ratio, mean and s of each set of control settings over the noise factors, and the response table",
+      "required": [
+        "kind",
+        "response",
+        "goal",
+        "control",
+        "noise",
+        "runs",
+        "table"
+      ],
+      "properties": {
+        "kind": {
+          "const": "signal-to-noise"
+        },
+        "response": {
+          "type": "string"
+        },
+        "goal": {
+          "enum": [
+            "larger",
+            "smaller",
+            "nominal"
+          ]
+        },
+        "control": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "noise": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "settings",
+              "runs",
+              "n",
+              "mean",
+              "sd",
+              "sn"
+            ],
+            "properties": {
+              "settings": {
+                "type": "object"
+              },
+              "runs": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "n": {
+                "type": "integer"
+              },
+              "mean": {
+                "type": "number"
+              },
+              "sd": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "logSd": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "sn": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "table": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "factor",
+              "levels",
+              "range",
+              "best",
+              "rank"
+            ],
+            "properties": {
+              "factor": {
+                "type": "string"
+              },
+              "levels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "level",
+                    "n",
+                    "sn",
+                    "mean"
+                  ],
+                  "properties": {
+                    "level": {},
+                    "n": {
+                      "type": "integer"
+                    },
+                    "sn": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "mean": {
+                      "type": "number"
+                    },
+                    "logSd": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "range": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "best": {},
+              "rank": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

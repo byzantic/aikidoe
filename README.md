@@ -24,7 +24,7 @@ npm run ui        # → http://localhost:8080/
 ```
 
 Four steps, each usable on its own: **Define** factors, responses, constraints and drop-in
-sites; **Design** — compare candidate designs (two- and three-level fractions, orthogonal arrays such as L18 and L36, Plackett–Burman, full factorial,
+sites; **Design** — compare candidate designs (two- and three-level fractions, orthogonal arrays such as L18 and L36, Taguchi inner × outer arrays, Plackett–Burman, full factorial,
 central composite, Box–Behnken, definitive screening, optimal) with their aliasing,
 projectivity, where the runs sit (every pair of factors, prediction variance over any two,
 variance dispersion; the fitted response over any two factors with its stationary point; `doe plot`

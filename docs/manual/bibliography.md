@@ -41,6 +41,13 @@ Books for learning and reference, and the papers behind specific methods in aiki
   (The multivariate t behind Dunnett's method and contrasts, and singular sets of contrasts.)
 - Montgomery, D. C. & Runger, G. C. (2018). *Applied Statistics and Probability for Engineers*,
   7th ed. Wiley.
+- Box, G. E. P. (1988). Signal-to-noise ratios, performance criteria, and transformations.
+  *Technometrics* 30, 1–17. (Why an S/N ratio mixes the mean and the spread.)
+- Shoemaker, A. C., Tsui, K. L. & Wu, C. F. J. (1991). Economical experimentation methods for robust
+  design. *Technometrics* 33, 415–427. (Combined arrays and the response-model approach:
+  [inner and outer arrays](optimisation.md#inner-and-outer-arrays).)
+- Taguchi, G. (1987). *System of Experimental Design*. UNIPUB/Kraus. (Inner and outer arrays,
+  signal-to-noise ratios.)
 - Myers, R. H., Montgomery, D. C. & Anderson-Cook, C. M. (2016). *Response Surface Methodology*,
   4th ed. Wiley.
 - Atkinson, A. C., Donev, A. N. & Tobias, R. D. (2007). *Optimum Experimental Designs, with SAS*.

@@ -58,6 +58,33 @@ try {
   const st1 = await page.evaluate(() => JSON.parse(JSON.stringify(window.aikidoe.state.doc)));
   check('the design created: 18 runs, the catalyst at both levels 9 times', st1.design.kind === 'orthogonal-array' && st1.design.runs.length === 18 && st1.design.runs.filter(r => r.settings.catalyst === 'A').length === 9);
 
+  section('Define: listed levels and noise factors; Design: the inner × outer array');
+  const s2 = createStudy({ name: 'Coating', seed: 7, factors: [
+    { id: 'temp', low: 120, high: 160 }, { id: 'time', low: 10, high: 30 }, { id: 'primer', type: 'categorical', levels: ['none', 'thin', 'thick'] },
+    { id: 'humidity', low: 30, high: 70 }, { id: 'lot', low: 1, high: 2 }], responses: [{ id: 'thickness', goal: 'target', target: 55 }] });
+  await page.evaluate((d) => window.aikidoe.setDoc(d), JSON.parse(JSON.stringify(s2))); await settle();
+  await page.click('[data-step="define"]'); await settle();
+  for (const id of ['temp', 'time']) { await page.fill(`tr[data-factor="${id}"] input[aria-label="continuous levels"]`, id === 'temp' ? '120, 140, 160' : '10, 20, 30'); await page.keyboard.press('Tab'); await settle(); }
+  for (const id of ['humidity', 'lot']) { await page.check(`tr[data-factor="${id}"] input[aria-label="noise factor"]`); await settle(); }
+  let doc = (await state()).doc;
+  check('three listed levels for temp and time; humidity and lot noise (sd half the range)', doc.factors[0].levels.join() === '120,140,160' && doc.factors[1].levels.length === 3 && doc.factors[3].noise?.sd === 20 && doc.factors[4].noise?.sd === 0.5);
+  await page.click('[data-step="design"]'); await settle();
+  check('an inner × outer candidate: L9 × 2²', /Inner × outer: L9 \(3\^4\) × full factorial 2×2/.test(await page.textContent('tr[data-design="crossed"]')));
+  await page.click('tr[data-design="crossed"]'); await settle();
+  check('the crossed array explained, with the advice on combined arrays', /L9 \(3\^4\) for temp, time, primer × full factorial 2×2 for humidity, lot = 9 × 4 runs/.test(await page.textContent('[data-crossed]')) && /combined array/.test(await page.textContent('main')));
+  await page.click('#recommend button'); await page.waitForTimeout(1500); await settle();
+  check('the recommender: a max |r| column', /max \|r\|/.test(await page.textContent('main')));
+  await page.click('tr[data-design="crossed"]'); await settle();
+  await page.click('#create-design'); await settle();
+  doc = (await state()).doc;
+  const L = { none: 0, thin: 1, thick: 2 };
+  const obs = doc.design.runs.map(r => ({ run: r.run, response: 'thickness', value: 50 + (r.settings.temp - 140) / 10 + ((r.settings.humidity - 50) / 20) * (4 - 1.8 * L[r.settings.primer]) + (r.settings.lot === 2 ? 1 : -1) * 1.2 + 0.1 * Math.sin(r.run) }));
+  await page.evaluate((o) => { const d = JSON.parse(JSON.stringify(window.aikidoe.state.doc)); d.observations = o; window.aikidoe.setDoc(d); }, obs); await settle();
+  await page.click('[data-step="analyse"]'); await settle();
+  check('Analyse: the S/N table, nominal the best from the target, primer first with thick best', /nominal the best/.test(await page.textContent('#taguchi')) && /1/.test(await page.textContent('tr[data-sn-factor="primer"] td:nth-child(4)')) && /thick/.test(await page.textContent('tr[data-sn-factor="primer"] .sig')));
+  check('… and the response model with control × noise interactions below it', /primer:humidity|humidity:primer/.test(await page.inputValue('#formula')) || /primer.*humidity/.test(await page.inputValue('#formula')));
+  await shot('arrays-taguchi');
+
   section('no page errors');
   check('no page errors', !errors.length, errors.join('\n'));
 } finally {

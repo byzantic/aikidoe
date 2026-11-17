@@ -97,6 +97,7 @@ export function render(ctx) {
       { key: 'label', label: 'design' }, { key: 'runs', label: 'runs', cls: 'n', fmt: (v, r) => recOf(r.id)?.runs ?? v },
       { key: 'res', label: 'resolution', fmt: (v, r) => (r.kind === 'pb' && r.gres !== null ? h('span', { title: 'generalised resolution (Deng & Tang): between III and IV — main effects only partially aliased with 2fis' }, num(r.gres, 3)) : ['ccd', 'bbd', 'dsd', 'optimal', 'sp-optimal', 'sp-full', 'lhs', 'rcbd', 'latin', 'bibd', 'crossover'].includes(r.kind) ? (r.kind === 'sp-full' ? roman(Infinity) : '—') : roman(v)) },
       ...(rec ? [{ key: 'proj', label: 'P', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return h('span', { title: 'projectivity: any P factors form a full two-level factorial' }, o?.projectivity != null && o.projectivity < study.factors.length ? `${o.projectivity}${o.projectivityCapped ? '+' : ''}` : '—'); } }] : []),
+      ...(rec ? [{ key: 'ar', label: 'max |r|', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return h('span', { title: 'alias correlation: the largest correlation between a main effect and a two-factor interaction (1: fully aliased; 0: clear)' }, o?.aliasMax != null ? num(o.aliasMax, 2) : '—'); } }] : []),
       ...(rec ? [{ key: 'pw', label: 'min power', cls: 'n', fmt: (_, r) => { const o = recOf(r.id); return o?.minPower != null ? num(o.minPower, 2) : '—'; } }] : []),
       { key: 'note', label: '', fmt: (v, r) => { const o = recOf(r.id); if (!o) return v; return h('div', { class: 'small', 'data-reasons': r.id }, o.reasons.length ? h('div', {}, o.reasons.join('; ')) : null, o.warnings.length ? h('div', { class: 'warn-text' }, o.warnings.join('; ')) : null); } },
     ], rows, { rowAttrs: (r) => ({ class: `click ${r.id === cand.id ? 'sel' : ''} ${rec && !recOf(r.id)?.rank ? 'muted' : ''}`, 'data-design': r.id, onclick: () => {
@@ -225,6 +226,13 @@ function diagnostics(study, d, modelFor) {
     parts.push(h('h3', {}, 'Aliasing'), h('div', { class: 'mono small' }, `generators: ${gen.join(', ')}`), h('div', { class: 'mono small' }, `defining relation: I = ${T.definingRelation(r, ids).slice(0, 8).join(' = ')}${T.definingRelation(r).length > 8 ? ' = …' : ''}`),
       chains.length ? h('details', { open: chains.length <= 12 }, h('summary', {}, `${chains.length} alias chains among main effects and two-factor interactions`), h('div', { class: 'mono small', 'data-aliases': '' }, chains.map(c => h('div', {}, c.effects.join(' = ')))))
         : h('div', { class: 'msg ok' }, 'No aliasing among main effects and two-factor interactions.'));
+  }
+  if (d.kind === 'crossed-array') {
+    // Taguchi's inner × outer array (issue #85)
+    const p = d.params, nz = p.noise.map(j => ids[j]), ctl = ids.filter((_, j) => !p.noise.includes(j));
+    parts.push(h('h3', {}, 'Inner × outer', help('optimisation', 'inner-and-outer-arrays')),
+      h('div', { class: 'mono small', 'data-crossed': '' }, `${p.inner} for ${ctl.join(', ')} × ${p.outer} for ${nz.join(', ')} = ${p.innerRuns} × ${p.outerRuns} runs`),
+      h('div', { class: 'msg' }, `Every control setting is tried at every noise condition, so each gives a mean and a spread (signal-to-noise ratios on the Analyse step). A combined array — the noise factors in one of the other designs, with control × noise interactions in the model, then robust design on the Optimise step — usually answers the same question in far fewer runs than ${p.innerRuns * p.outerRuns}.`));
   }
   if (d.kind === 'orthogonal-array') {
     // orthogonal arrays (issue #85): main effects orthogonal; the GWLP measures their tangle with interactions
