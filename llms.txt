@@ -25,6 +25,7 @@ An agent helping a user plan or analyse an experiment should load the skill firs
 - [Concepts](docs/manual/concepts.md)
 - [Analysis](docs/manual/analysis.md) — includes counts and proportions (Poisson, negative binomial, binomial GLMs; overdispersion, separation, Firth; random whole-plot, block or run effects, nested if need be, with model reduction) and times to failure (Weibull and log-normal accelerated-life models with right censoring, time ratios, B10 life, probability plot, power with censoring) and ordinal scores (proportional-odds models, the test of proportional odds, category probabilities, power)
 - [Worked example: a 2⁵⁻¹ screening experiment](docs/manual/example-screening.md)
+- [Worked example: reanalysing a published 2⁴](docs/manual/example-flowable.md): formulation means (one batch each, specimens are repeated measurements) with Lenth's method, log viscosity, desirability with solubility on target (`doe goal … --target 0`)
 
 ## Optional
 

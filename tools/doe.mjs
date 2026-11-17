@@ -172,6 +172,7 @@
 //   power … [--response R [--sigma-process σp]]   σ from the response's gauge study: √(σp² + σ_meas²)
 //   goal STUDY RESPONSE (--maximize|--minimize|--target|--range|--none) [--lower L] [--target T] [--upper U]
 //        [--weight s | --weight s1,s2] [--importance r]       desirability goal of a response
+//        (--target T with no other goal: the goal is to hit T)
 //   optimise STUDY [--model "y ~ …" …] [--region cube|sphere] [--radius r] [--fix "A=1,…"] [--ols]
 //        best settings by overall desirability over the fitted models; warns when they lie beyond
 //        the runs (outside their convex hull, or a prediction variance over the largest at a run).
@@ -2082,6 +2083,8 @@ function cmdGoal({ pos, opt }) {
   if (i < 0) fail(`no response "${rid}"`);
   const r = { ...study.responses[i] };
   const goal = ['maximize', 'minimize', 'target', 'range', 'none'].filter(g => opt[g] === true);
+  // --target T on its own is the goal "target" with its value (not only a value for another goal)
+  if (!goal.length && opt.target !== undefined) goal.push('target');
   if (goal.length > 1) fail('give one goal');
   if (goal.length) r.goal = goal[0];
   for (const k of ['lower', 'upper', 'importance']) if (opt[k] !== undefined) r[k] = Number(opt[k]);

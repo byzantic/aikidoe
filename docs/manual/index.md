@@ -56,6 +56,7 @@ Each is executable: its commands are run by the test suite and the numbers check
 - [Furnace split-plot with drop-in sites](example-furnace.md)
 - [Gauge R&R](example-gauge.md) — a published data set
 - [Coupler yield with comb-over](example-coupler.md)
+- [Reanalysing a published 2⁴](example-flowable.md) — dental composites: one batch per formulation, Lenth's method, a log scale and a desirability goal on target
 
 ## Reference
 

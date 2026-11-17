@@ -45,6 +45,27 @@ export const EXAMPLES = [
       const y = [56, 53, 63, 65, 53, 55, 67, 61, 69, 45, 78, 93, 49, 60, 95, 82];        // standard order, feed fastest
       return createStudy({ ...s, design, observations: design.runs.map(r => ({ run: r.run, response: 'yield', value: y[r.run - 1] })) });
     } },
+  { id: 'dental-flowable', title: 'Dental composites: a published 2⁴ reanalysed', step: 'analyse',
+    blurb: 'Sixteen experimental flowable composites (Alves et al., Dental Materials 2026): acidic monomer, its amount, powder/liquid ratio and filler, with bond strength, conversion, water sorption and solubility, and viscosity. One batch per formulation, so the formulation means are analysed with Lenth’s method. Real data.',
+    build: () => {
+      const s = createStudy({ aikidoe: FORMAT_VERSION, name: 'Self-adhesive flowable composite', seed: 2026,
+        description: 'Data: Alves, Alves, Silva & Delgado (2026), Dental Materials, doi:10.1016/j.dental.2026.07.012, Table 3: the mean of each formulation (one batch each). Viscosity was measured cone-plate for low filler and parallel-plate for high filler; lvisc is its log10. See the manual’s worked example.',
+        factors: [{ id: 'monomer', name: 'Acidic monomer', type: 'categorical', levels: ['HEMA', 'MDP'] }, { id: 'mol', name: 'Acidic monomer content', units: 'mol%', low: 5, high: 25 },
+          { id: 'PL', name: 'Powder/liquid ratio', low: 2.5, high: 3.2 }, { id: 'filler', name: 'Filler mix', type: 'categorical', levels: ['FL', 'FH'] }],
+        responses: [{ id: 'SBS', name: 'Shear bond strength', units: 'MPa', goal: 'maximize', lower: 1, target: 6 },
+          { id: 'DC40', name: 'Degree of conversion, 40 s', units: '%', goal: 'maximize', lower: 60, target: 85 },
+          { id: 'Wsp', name: 'Water sorption', units: 'µg/mm³' }, { id: 'Wsl', name: 'Water solubility', units: 'µg/mm³', goal: 'target', lower: -6, target: 0, upper: 2 },
+          { id: 'visc', name: 'Viscosity', units: 'mPa·s' }, { id: 'lvisc', name: 'log10 viscosity', units: 'log10 mPa·s' }] });
+      const design = toStudyDesign(s, fullFactorial([2, 2, 2, 2]), { seed: 2026 });
+      // standard order, monomer fastest: SBS, DC40, Wsp, Wsl, visc (Table 3)
+      const y = [[0.62, 89.93, 12.17, 0.03, 13107.81], [1.94, 63.43, 12.16, -0.92, 30827.95], [0.44, 83.6, 12.3, -3.32, 10524.72], [5.38, 72.1, 13.84, -8.18, 57451.14],
+        [0.54, 87, 5.86, -6.15, 50572.08], [1.6, 59.9, 11.09, -1.43, 149986.78], [1.8, 82.2, 12.33, -3.47, 46194.96], [5.68, 69.83, 11.54, -7.32, 301766.3],
+        [0.58, 85.63, 12.69, -0.17, 299910.25], [0.78, 62.13, 14.5, 1.38, 20309.78], [1.64, 86.63, 10.1, -5.56, 128740.13], [7.18, 78.93, 11.71, -9.36, 113995.53],
+        [1.54, 86.2, 11.83, -0.33, 4865.05], [1.74, 67.63, 8.72, -1.97, 331036.16], [0.26, 88.33, 16.25, 0.67, 108.46], [3.42, 54.43, 12.67, -4.34, 821262.07]];
+      const ids = ['SBS', 'DC40', 'Wsp', 'Wsl', 'visc'];
+      return createStudy({ ...s, design, observations: design.runs.flatMap(r => { const v = y[r.run - 1];
+        return [...ids.map((id, i) => ({ run: r.run, response: id, value: v[i] })), { run: r.run, response: 'lvisc', value: Math.round(Math.log10(v[4]) * 1000) / 1000 }]; }) });
+    } },
   { id: 'reactor-results', title: 'Reactor screening: with results', step: 'analyse',
     blurb: 'A 2^(5−1) fraction with simulated yields; Lenth’s method picks out the active effects.',
     build: () => {

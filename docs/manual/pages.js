@@ -25,6 +25,7 @@ export const PAGES = [
   { id: 'example-furnace', title: 'Worked example: furnace split-plot with drop-in sites', part: 'Worked examples' },
   { id: 'example-gauge', title: 'Worked example: gauge R&R', part: 'Worked examples' },
   { id: 'example-coupler', title: 'Worked example: coupler yield with comb-over', part: 'Worked examples' },
+  { id: 'example-flowable', title: 'Worked example: reanalysing a published 2⁴ (dental composites)', part: 'Worked examples' },
   { id: 'reference-cli', title: 'Command line', part: 'Reference' },
   { id: 'reference-study-format', title: 'Study file format', part: 'Reference' },
   { id: 'reference-formulas', title: 'Formula syntax', part: 'Reference' },
