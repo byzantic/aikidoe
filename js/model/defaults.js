@@ -19,6 +19,11 @@ export function defaultFormula(study, response) {
   if (d.kind === 'lhs') return `${response} ~ quadratic`;
   if (d.kind === 'plackett-burman') return `${response} ~ main`;
   if (d.kind === 'fractional-factorial') return `${response} ~ ${d.params.resolution >= 5 ? '2fi' : 'main'}`;
+  if (d.kind === 'orthogonal-array') {
+    // main effects; a continuous factor at three or more levels has a quadratic part too
+    const sq = study.factors.filter(f => f.type === 'continuous' && (f.levels?.length ?? 2) > 2).map(f => `I(${f.id}^2)`);
+    return `${response} ~ main${sq.length ? ` + ${sq.join(' + ')}` : ''}`;
+  }
   if (d.kind === 'fractional-factorial-3') {
     // three levels: a continuous factor's main effect has a linear and a quadratic part
     const sq = study.factors.filter(f => f.type === 'continuous').map(f => `I(${f.id}^2)`);

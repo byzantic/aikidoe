@@ -46,6 +46,12 @@ Books for learning and reference, and the papers behind specific methods in aiki
 - Atkinson, A. C., Donev, A. N. & Tobias, R. D. (2007). *Optimum Experimental Designs, with SAS*.
   Oxford University Press.
 - Goos, P. & Jones, B. (2011). *Optimal Design of Experiments: A Case Study Approach*. Wiley.
+- Hedayat, A. S., Sloane, N. J. A. & Stufken, J. (1999). *Orthogonal Arrays: Theory and
+  Applications*. Springer. (Regular arrays over finite fields, difference matrices and expansive
+  replacement, by which the arrays are built: [orthogonal arrays](designs-factorial.md#orthogonal-arrays).)
+- Xu, H. & Wu, C. F. J. (2001). Generalized minimum aberration for asymmetrical fractional
+  factorial designs. *Annals of Statistics* 29, 1066–1077. (The generalised word-length pattern,
+  and its computation from the distances between runs.)
 - Wu, C. F. J. & Hamada, M. S. (2009). *Experiments: Planning, Analysis, and Optimization*, 2nd
   ed. Wiley. (Three-level fractions, interaction components and minimum aberration:
   [three-level fractions](designs-factorial.md#three-level-fractions).)

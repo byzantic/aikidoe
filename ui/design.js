@@ -126,7 +126,7 @@ export function render(ctx) {
     field('seed', h('input', { class: 'num', type: 'number', value: ui.seed ?? study.seed, 'aria-label': 'seed', onchange: (e) => set({ seed: Number(e.target.value) }) })))
     : h('div', { class: 'row' },
     cand.kind === 'lhs' ? field('runs', numIn('lhsRuns', { min: 2, placeholder: String(cand.runs), 'aria-label': 'lhs runs' })) : null,
-    cand.kind !== 'pb' && cand.kind !== 'fraction3' && cand.kind !== 'optimal' && cand.kind !== 'lhs' && !isSP ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
+    cand.kind !== 'pb' && cand.kind !== 'fraction3' && cand.kind !== 'array' && cand.kind !== 'optimal' && cand.kind !== 'lhs' && !isSP ? field('centre points', numIn('centre', { placeholder: isRSM ? 'auto' : '0', 'aria-label': 'centre points' })) : null,
     cand.kind === 'sp-frac' ? (() => { const htc = study.factors.map(x => !!x.htc), k1 = htc.filter(Boolean).length; const ch = wholePlotChoices(k1, htc.length - k1, cand.opts.runs);
       return field('whole plots', select(ch.map(W => ({ value: W, label: `${W} of ${cand.opts.runs / W} runs` })), ui.wholePlots ?? defaultWholePlots(k1, htc.length - k1, cand.opts.runs), (v) => set({ wholePlots: Number(v) }), { 'aria-label': 'whole plots' })); })() : null,
     cand.kind === 'sp-optimal' ? optimalOptions(study, ui, set, true) : null,
@@ -225,6 +225,16 @@ function diagnostics(study, d, modelFor) {
     parts.push(h('h3', {}, 'Aliasing'), h('div', { class: 'mono small' }, `generators: ${gen.join(', ')}`), h('div', { class: 'mono small' }, `defining relation: I = ${T.definingRelation(r, ids).slice(0, 8).join(' = ')}${T.definingRelation(r).length > 8 ? ' = …' : ''}`),
       chains.length ? h('details', { open: chains.length <= 12 }, h('summary', {}, `${chains.length} alias chains among main effects and two-factor interactions`), h('div', { class: 'mono small', 'data-aliases': '' }, chains.map(c => h('div', {}, c.effects.join(' = ')))))
         : h('div', { class: 'msg ok' }, 'No aliasing among main effects and two-factor interactions.'));
+  }
+  if (d.kind === 'orthogonal-array') {
+    // orthogonal arrays (issue #85): main effects orthogonal; the GWLP measures their tangle with interactions
+    const p = d.params;
+    parts.push(h('h3', {}, 'Aliasing', help('designs-factorial', 'orthogonal-arrays')),
+      h('div', { class: 'mono small', 'data-array': '' }, `${p.name}: columns ${p.columns.map(j => j + 1).join(', ')} for ${ids.join(', ')}`),
+      h('div', { class: 'mono small', 'data-wlp': '' }, `generalised word-length pattern (A3, A4): ${p.gwlp.map(v => num(v, 4)).join(', ')}${p.exhaustive ? '' : ' (columns chosen one by one)'}`),
+      h('p', { class: 'muted small' }, p.gwlp[0] > 1e-9
+        ? 'Every pair of factors appears in all combinations equally often, so main effects are estimated independently of each other. Interactions are not: A3 > 0 means some main effects are partly tangled with two-factor interactions (in arrays such as L18 and L36, spread thinly over many of them rather than confounded with one). Use the design to find the important factors, assuming interactions are small; then confirm.'
+        : 'Every pair of factors appears in all combinations equally often, and A3 = 0: no main effect is tangled with a two-factor interaction.'));
   }
   if (d.kind === 'fractional-factorial-3') {
     // three levels (issue #85): words over GF(3); A×B splits into the components AB and AB²

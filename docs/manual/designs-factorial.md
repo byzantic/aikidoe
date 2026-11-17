@@ -109,6 +109,54 @@ the alias list: put the factors whose interactions you expect to matter where th
 with main effects. The default model on the Analyse step is the main effects, with the quadratic
 part of each continuous factor.
 
+## Orthogonal arrays
+
+With factors at different numbers of levels (a two-level catalyst, a three-level temperature, a
+four-level supplier), a full factorial is often too big, and a regular fraction may not exist. An
+**orthogonal array** (OA) is a table of runs in which every two columns contain every combination
+of their levels equally often. The main effects are then estimated independently of each other:
+the classical Taguchi tables L9, L16, L18, L27 and L36 are of this kind. aikidoe has:
+
+| array | runs | columns |
+|---|---|---|
+| L9, L27, L81 | 9, 27, 81 | 3⁴, 3¹³, 3⁴⁰ |
+| L8, L12, L16, L20, L24, L32 | 8 … 32 | two-level only |
+| L16 | 16 | 4⁵, 2³4⁴, 2⁶4³, 2⁹4², 2¹²4 |
+| L18 | 18 | 2 3⁷, 3⁶6 |
+| L25 | 25 | 5⁶ |
+| L32 | 32 | 2 4⁹ |
+| L36 | 36 | 2¹¹3¹², 2²3¹³, 3¹³4 |
+
+The arrays are built by standard methods: regular arrays over finite fields, difference matrices,
+and replacing one many-level column by several with fewer levels. Each one is checked for
+orthogonality, and its word-length pattern is checked against R's `DoE.base`. A factor is put
+only on a column with its own number of levels.
+
+When an array has more columns than factors, the choice of columns matters. It decides how the
+main effects are tangled with interactions, which is measured by the **generalised word-length
+pattern** (A3, A4, …; Xu & Wu 2001). A3 = 0 means no main effect is tangled with a two-factor
+interaction. aikidoe gives the factors the columns with the smallest A3, then the smallest A4,
+by a complete search where that takes a moment and column by column otherwise. With
+`doe design --array L36 --columns …` you choose the array and its columns yourself.
+
+```console
+$ doe init mixed.aikidoe.json --factor "catalyst=A,B" --factor "temp=low,mid,high" --factor "time=short,mid,long" --factor "solvent=water,ethanol,acetone" --factor "stir=none,slow,fast" --response y --seed 5
+created mixed.aikidoe.json: 5 factors, 1 responses, seed 5
+$ doe design mixed.aikidoe.json --array
+mixed.aikidoe.json: orthogonal-array, 18 runs, randomisation complete, seed 5
+orthogonal array L18 (2 3^7): columns 1, 2, 3, 6, 7 for catalyst, temp, time, solvent, stir; generalised word-length pattern (A3, A4) 3.5, 4.5; columns of least aberration (complete search)  (see: alias mixed.aikidoe.json)
+$ doe alias mixed.aikidoe.json
+orthogonal array L18 (2 3^7): columns 1, 2, 3, 6, 7 for catalyst, temp, time, solvent, stir
+generalised word-length pattern (A1 … A5): 0, 0, 3.5, 4.5, 0
+main effects are orthogonal to each other but partly aliased with two-factor interactions (A3 > 0); in a non-regular array this aliasing is spread thinly over many interactions
+```
+
+L18 and L36 are **non-regular**. An interaction is not confounded with one main effect but spread
+thinly over many of them. So an array of this kind is good for finding the few important factors,
+provided interactions are modest, and poor for estimating interactions. The recommender lists the
+arrays that fit, with an optimal design of the same size for comparison. The default model is the
+main effects, with the quadratic part of each continuous factor at three or more levels.
+
 ## Diagnostics
 
 For any regular fraction aikidoe shows the aliasing; for every design, the power of each model
@@ -119,4 +167,5 @@ a model that uses every degree of freedom, there is no error estimate: judge the
 ## References
 
 Box, Hunter & Hunter (2005), chapters 5–6; Montgomery (2017), chapters 6–8; minimum aberration:
-Fries & Hunter (1980); three-level fractions: Wu & Hamada (2009), chapter 6. See the [bibliography](bibliography.md).
+Fries & Hunter (1980); three-level fractions: Wu & Hamada (2009), chapter 6; orthogonal arrays: Hedayat, Sloane &
+Stufken (1999), Wu & Hamada (2009), chapters 7–8; generalised word-length pattern: Xu & Wu (2001). See the [bibliography](bibliography.md).

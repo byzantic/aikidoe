@@ -74,6 +74,8 @@
 //                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
 //                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
 //        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
+//        factors with more than two levels: --array gives the smallest orthogonal array that fits (L9, L16,
+//        L18, L25, L27, L32, L36 …) with the columns of least aberration; --array L36 [--columns 1,4,12,…] a given one
 //        every factor at three levels (categorical, or continuous with three levels listed): --runs 9|27|81
 //        gives a minimum-aberration 3^(k−p) fraction, --generators "D=ABC,E=AB²C" (or AB2C) your own
 //        with hard-to-change factors (!): split-plot for --full, --runs and --optimal
@@ -231,6 +233,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createStudy, parseStudy, serializeStudy, StudyError, code, decode, covariatesWithoutValues } from '../js/study.js';
 import { fullFactorial, fractionalFactorial, toStudyDesign } from '../js/design/factorial.js';
 import { fraction3, factorName3 } from '../js/design/threelevel.js';
+import { arrayDesign, orthogonalArray, gwlp, ARRAYS } from '../js/design/arrays.js';
 import { plackettBurman, correlationTable } from '../js/design/pb.js';
 import { projectivity, generalisedResolution, estimableProjections } from '../js/design/projectivity.js';
 import { codedRuns, codedRow, spvSlice, spvFunction, vdg, feasibleSlice, beyondRuns } from '../js/design/space.js';
@@ -522,6 +525,15 @@ function cmdDesign({ pos, opt }) {
       ...(centreOpt !== undefined ? { centre: centreOpt } : {}), ...(opt.blocks ? { blocks: opt.blocks === true ? true : int(opt.blocks, 'blocks') } : {}) });
   } else if (opt.bbd) d = boxBehnken(k, { ...(centreOpt !== undefined ? { centre: centreOpt } : {}), blocks: !!opt.blocks });
   else if (opt.pb) d = plackettBurman(k, opt.runs ? { runs: int(opt.runs, 'runs') } : {});
+  else if (opt.array !== undefined) {
+    // an orthogonal array (issue #85): the smallest that fits, or the one named; the columns of least aberration, or those given
+    if (opt.centre || opt.blocks) fail('an orthogonal array has no centre points or blocks');
+    const lv = study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels?.length ?? 2));
+    const id = opt.array === true || opt.array === '' ? undefined : String(opt.array);
+    const cols = opt.columns !== undefined ? String(opt.columns).split(',').map(x => int(x.trim(), 'columns') - 1) : undefined;
+    if (cols && !id) fail('--columns: name the array too (--array L18 --columns 1,2,3)');
+    d = arrayDesign(lv, { array: id, columns: cols, replicates: opt.replicates ? int(opt.replicates, 'replicates') : 1 });
+  }
   else if ((opt.generators || (opt.runs && !opt.lhs)) && study.factors.every(f => (f.type === 'categorical' ? f.levels.length : f.levels?.length ?? 2) === 3)) {
     // every factor at three levels (issue #85): a regular 3^(k−p) fraction
     if (opt.centre || opt.blocks) fail('a three-level fraction has no centre points or blocks (its middle level is already run)');
@@ -549,7 +561,10 @@ function cmdDesign({ pos, opt }) {
     const nWP = d.params.wholePlotEffects ? d.params.wholePlotEffects.length : k1Count(study), what = d.params.wholePlotEffects ? 'whole-plot main effects and 2fis' : 'whole-plot main effects';
     if (W - 1 - nWP < 2) out(`note: ${W} whole plots leave ${Math.max(0, W - 1 - nWP)} df for the whole-plot error after the ${what}: too few to test them; more whole plots (--whole-plots) or replicates (--replicates) would help`);
   }
-  if (d.kind === 'fractional-factorial-3') {
+  if (d.kind === 'orthogonal-array') {
+    const p = d.params;
+    out(`orthogonal array ${p.name}: columns ${p.columns.map(j => j + 1).join(', ')} for ${study.factors.map(f => f.id).join(', ')}; generalised word-length pattern (A3, A4) ${p.gwlp.map(v => num(v, 4)).join(', ')}; ${p.source}  (see: alias ${file})`);
+  } else if (d.kind === 'fractional-factorial-3') {
     const p = d.params, ids = study.factors.map(f => f.id);
     out(`three-level fraction 3^(${k}−${k - Math.round(Math.log(p.runs) / Math.log(3))}): resolution ${roman(p.resolution)}; generators ${p.generators.join(', ')} (${ids.map((id, j) => `${factorName3(j)} = ${id}`).join(', ')}); ${p.source}  (see: alias ${file})`);
   } else if (d.params.resolution && !d.wholePlot) {
@@ -1774,6 +1789,15 @@ function cmdAlias({ pos, opt }) {
     names = study.factors.map(f => f.id);
     const p = study.design?.params;
     if (!p) fail('the study has no design');
+    if (study.design.kind === 'orthogonal-array') {
+      const ids = study.factors.map(f => f.id), lv = study.factors.map(f => (f.type === 'categorical' ? f.levels.length : f.levels?.length ?? 2));
+      const A = orthogonalArray(p.array), X = A.X.map(r => p.columns.map(j => r[j])), full = gwlp(X, lv, Math.min(6, lv.length));
+      put({ kind: 'orthogonal-array', array: p.array, name: p.name, runs: p.runs, columns: p.columns.map(j => j + 1), factors: ids.length, gwlp: full });
+      out(`orthogonal array ${p.name}: columns ${p.columns.map(j => j + 1).join(', ')} for ${ids.join(', ')}`);
+      out(`generalised word-length pattern (A1 … A${full.length}): ${full.map(v => num(v, 4)).join(', ')}`);
+      out(full[2] > 1e-9 ? 'main effects are orthogonal to each other but partly aliased with two-factor interactions (A3 > 0); in a non-regular array this aliasing is spread thinly over many interactions' : 'no main effect is aliased with a two-factor interaction (A3 = 0)');
+      return;
+    }
     if (study.design.kind === 'fractional-factorial-3') {
       const al = Object.entries(p.aliases.main).filter(([, v]) => v.length);
       put({ kind: 'fractional-factorial-3', runs: p.runs, resolution: p.resolution, generators: p.generators, definingRelation: p.definingRelation, wlp: p.wlp, letters: Object.fromEntries(names.map((id, j) => [factorName3(j), id])), mainEffectAliases: p.aliases.main });

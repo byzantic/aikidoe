@@ -466,6 +466,16 @@ try {
   check('fit --json (Poisson GLM): rate ratios with profile intervals, analysis of deviance', o.kind === 'glm' && o.distribution === 'poisson' && o.coefficients[1].ratio.estimate > 1 && o.coefficients[1].lower < o.coefficients[1].estimate && o.tests.rows.at(-1).term === 'Residuals');
   o = js('fit', 'jc.aikidoe.json', 'germ ~ A + B', '--anova', '2');
   check('fit --json (binomial): odds ratios, type II likelihood-ratio tests', o.kind === 'glm' && o.link === 'logit' && o.tests.type === 2 && Number.isFinite(o.tests.rows[0].chi2));
+  // orthogonal arrays (issue #85, phase 2)
+  js('init', 'ja.aikidoe.json', '--factor', 'cat=a,b', '--factor', 'T=20,30,40', '--factor', 'P=1,2,3', '--factor', 'C=x,y,z', '--factor', 'S=5,10,15', '--response', 'y', '--seed', '3');
+  o = js('design', 'ja.aikidoe.json', '--array');
+  check('design --array: the smallest array that fits (L18), columns of least aberration', o.design.kind === 'orthogonal-array' && o.design.runs.length === 18 && o.design.params.name === 'L18 (2 3^7)' && o.design.params.exhaustive);
+  o = js('alias', 'ja.aikidoe.json');
+  check('alias --json (orthogonal array): the GWLP', o.kind === 'orthogonal-array' && o.runs === 18 && Math.abs(o.gwlp[2] - 3.5) < 1e-9 && o.columns.length === 5);
+  o = js('design', 'ja.aikidoe.json', '--array', 'L36', '--columns', '1,13,14,20,23', '--force');
+  check('design --array L36 --columns: the columns given (1-based)', o.design.params.columns.join() === '0,12,13,19,22' && o.design.runs.length === 36);
+  r = run('design', join(dir, 'ja.aikidoe.json'), '--array', 'L36', '--columns', '13,1,14,20,23', '--force');
+  check('design --columns: a two-level factor on a three-level column is refused', r.code === 1 && /column 13 of L36 \(2\^11 3\^12\) has 3 levels; factor 1 has 2/.test(r.err));
   // three-level fractions (issue #85)
   js('init', 'j3.aikidoe.json', '--factor', 'T=20,30,40', '--factor', 'P=1,2,3', '--factor', 'C=a,b,c', '--factor', 'S=5,10,15', '--factor', 'R=x,y,z', '--response', 'y', '--seed', '3');
   o = js('design', 'j3.aikidoe.json', '--runs', '27');
