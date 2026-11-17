@@ -42,6 +42,22 @@ try {
   const st = await page.evaluate(() => JSON.parse(JSON.stringify(window.aikidoe.state.doc)));
   check('the design created: 27 runs at the listed levels', st.design.kind === 'fractional-factorial-3' && st.design.runs.length === 27 && st.design.runs.every(r => [20, 40, 60].includes(r.settings.temp) && ['none', 'slow', 'fast'].includes(r.settings.stir)));
 
+  section('Design: an orthogonal array for factors at two and three levels');
+  const s1 = createStudy({ name: 'Mixed', seed: 6, factors: [
+    { id: 'catalyst', type: 'categorical', levels: ['A', 'B'] }, { id: 'temp', low: 20, high: 60, levels: [20, 40, 60] },
+    { id: 'time', low: 10, high: 30, levels: [10, 20, 30] }, { id: 'solvent', type: 'categorical', levels: ['water', 'ethanol', 'acetone'] }, { id: 'stir', type: 'categorical', levels: ['none', 'slow', 'fast'] }],
+    responses: [{ id: 'y' }] });
+  await page.evaluate((d) => window.aikidoe.setDoc(d), JSON.parse(JSON.stringify(s1))); await settle();
+  await page.click('[data-step="design"]'); await settle();
+  check('an L18 offered', await page.locator('tr[data-design="oa-L18"]').count() === 1 && /Orthogonal array L18 \(2 3\^7\)/.test(await page.textContent('tr[data-design="oa-L18"]')));
+  await page.click('tr[data-design="oa-L18"]'); await settle();
+  check('the array, its columns and the GWLP, with what A3 > 0 means', /L18 \(2 3\^7\): columns 1, 2, 3, 6, 7 for catalyst, temp, time, solvent, stir/.test(await page.textContent('[data-array]')) && /\(A3, A4\): 3\.5, 4\.5/.test(await page.textContent('[data-wlp]')) && /spread thinly/.test(await page.textContent('main')));
+  check('no centre points offered', await page.locator('input[aria-label="centre points"]').count() === 0);
+  await shot('arrays-L18');
+  await page.click('#create-design'); await settle();
+  const st1 = await page.evaluate(() => JSON.parse(JSON.stringify(window.aikidoe.state.doc)));
+  check('the design created: 18 runs, the catalyst at both levels 9 times', st1.design.kind === 'orthogonal-array' && st1.design.runs.length === 18 && st1.design.runs.filter(r => r.settings.catalyst === 'A').length === 9);
+
   section('no page errors');
   check('no page errors', !errors.length, errors.join('\n'));
 } finally {

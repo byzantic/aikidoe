@@ -86,6 +86,8 @@ Commands
                  | --ccd [--alpha rotatable|orthogonal|spherical|faces|α] [--inscribed] [--cube-runs N]
                  | --bbd | --dsd [--fake n] | --optimal --runs N [--model …] [--criterion D|I|A] [--restarts n])
        [--centre n | --centre cube,axial] [--replicates n] [--blocks n] [--seed S] [--force]
+       factors with more than two levels: --array gives the smallest orthogonal array that fits (L9, L16,
+       L18, L25, L27, L32, L36 …) with the columns of least aberration; --array L36 [--columns 1,4,12,…] a given one
        every factor at three levels (categorical, or continuous with three levels listed): --runs 9|27|81
        gives a minimum-aberration 3^(k−p) fraction, --generators "D=ABC,E=AB²C" (or AB2C) your own
        with hard-to-change factors (!): split-plot for --full, --runs and --optimal

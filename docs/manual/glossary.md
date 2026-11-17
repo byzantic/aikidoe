@@ -107,6 +107,10 @@ centroids of its edges and faces, a design for constrained mixtures. See
 the log-odds of a proportion) with the noise of the data (Poisson, binomial …), fitted by maximum
 likelihood. See [counts and proportions](analysis.md#counts-and-proportions).
 
+**Generalised word-length pattern (GWLP)** — A3, A4, …: how much the main effects of a design are
+tangled with two-factor (A3) and higher interactions; for a regular fraction, the word-length
+pattern. See [orthogonal arrays](designs-factorial.md#orthogonal-arrays).
+
 **Generalised resolution** — for a non-regular design such as a Plackett–Burman, a resolution
 between the whole numbers: 3.67 for 12 runs, where main effects are only partially aliased with
 two-factor interactions (3 would be complete aliasing). See
@@ -170,6 +174,10 @@ machine's range), wider than the experiment's range; a path of steepest ascent s
 **Ordinal score** — a result in ordered categories (poor < fair < good), where the steps between
 categories need not be equal; fitted by a cumulative link model. See
 [ordinal scores](analysis.md#ordinal-scores).
+
+**Orthogonal array (OA)** — a table of runs in which every two columns contain every combination of
+their levels equally often (L9, L18, L36 …), so main effects are estimated independently of each
+other. See [orthogonal arrays](designs-factorial.md#orthogonal-arrays).
 
 **Overdispersion** — counts or proportions varying more than the Poisson or binomial allows
 (Pearson χ²/df well above 1); remedied by the negative binomial or a quasi-likelihood model.

@@ -4215,7 +4215,8 @@
             "full-factorial",
             "sequential",
             "definitive-screening",
-            "fractional-factorial-3"
+            "fractional-factorial-3",
+            "orthogonal-array"
           ]
         },
         "aliasChains": {
@@ -4298,6 +4299,28 @@
             "type": "string"
           },
           "description": "three-level fractions: the letter of each factor in the words (A, B, …) and its id"
+        },
+        "array": {
+          "type": "string",
+          "description": "orthogonal arrays: the array's id"
+        },
+        "name": {
+          "type": "string",
+          "description": "orthogonal arrays: its name, e.g. L18 (2 3^7)"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "orthogonal arrays: the array's columns (from 1) given to the factors, in their order"
+        },
+        "gwlp": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "orthogonal arrays: the generalised word-length pattern A1, A2, …"
         }
       }
     },
